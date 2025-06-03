@@ -1,0 +1,15 @@
+[package]
+name = "creeper"
+version = "0.1.0"
+edition = "2024"
+authors = ["misaka10987 <misaka10987@outlook.com>"]
+description = "Minecraft Package Manager"
+documentation = "https://github.com/misaka10987/creeper"
+homepage = "https://github.com/misaka10987/creeper"
+repository = "https://github.com/misaka10987/creeper"
+readme = "README.md"
+keywords = ["minecraft", "launcher", "mc", "package", "manager"]
+license = "MIT"
+
+
+[dependencies]

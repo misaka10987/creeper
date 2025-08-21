@@ -1,0 +1,180 @@
+use std::{
+    ops::Deref,
+    path::{Path, PathBuf},
+};
+
+use semver::Version;
+use serde::{Deserialize, Serialize};
+use serde_inline_default::serde_inline_default;
+use tokio::fs::read_to_string;
+
+use crate::{Java, User, VERSION, launch::LaunchOption};
+
+/// Given a certain path, retrive the game instance it belongs to.
+pub fn find_inst_dir(curr: impl AsRef<Path>) -> Option<PathBuf> {
+    let curr = curr.as_ref();
+    if curr.join("creeper.toml").exists() {
+        return Some(curr.into());
+    }
+    curr.parent().and_then(find_inst_dir)
+}
+
+pub struct Inst {
+    pub dir: PathBuf,
+    cfg: InstConfig,
+}
+
+impl Inst {
+    pub async fn load(dir: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let dir = dir.as_ref();
+        let toml = read_to_string(dir.join("creeper.toml")).await?;
+        let cfg = toml::from_str(&toml)?;
+        let val = Self {
+            dir: dir.to_owned(),
+            cfg,
+        };
+        Ok(val)
+    }
+}
+
+impl Deref for Inst {
+    type Target = InstConfig;
+
+    fn deref(&self) -> &Self::Target {
+        &self.cfg
+    }
+}
+
+/// Defines a game instance.
+///
+/// This is stored in `creeper.toml`.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InstConfig {
+    /// Name for this instance.
+    ///
+    /// This is used by the `INST_NAME` variable passed to the game.
+    pub name: String,
+
+    pub user: User,
+
+    pub java: Java,
+
+    /// Minecraft configuration.
+    #[serde(rename = "minecraft")]
+    pub mc: MCConfig,
+}
+
+#[serde_inline_default]
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MCConfig {
+    /// The minecraft game version.
+    pub version: Version,
+
+    /// Path to java libraries.
+    pub lib: PathBuf,
+
+    /// Path to LWJGL native libraries.
+    pub lwjgl: PathBuf,
+
+    pub asset: PathBuf,
+
+    /// Additional flags passed to the game.
+    #[serde(rename = "game-flags")]
+    #[serde(default)]
+    pub game_flags: Vec<String>,
+
+    #[serde(rename = "java-libs")]
+    #[serde(default)]
+    pub java_libs: Vec<PathBuf>,
+
+    /// Initial window width.
+    #[serde_inline_default(854)]
+    pub width: i32,
+
+    /// Initial window height.
+    #[serde_inline_default(480)]
+    pub height: i32,
+}
+
+impl LaunchOption for Inst {
+    fn java_flags(&self) -> Vec<String> {
+        let mut flags = vec![];
+
+        // common flags
+        flags.extend([
+            "-Dfile.encoding=UTF-8".into(),
+            "-Dstdout.encoding=UTF-8".into(),
+            "-Dstderr.encoding=UTF-8".into(),
+            "-Duser.home=null".into(),
+            "-Djava.rmi.server.useCodebaseOnly=true".into(),
+            "-Dcom.sun.jndi.rmi.object.trustURLCodebase=false".into(),
+            "-Dcom.sun.jndi.cosnaming.object.trustURLCodebase=false".into(),
+            "-Dlog4j2.formatMsgNoLookups=true".into(),
+        ]);
+
+        flags.extend([
+            format!(
+                "-Dlog4j.configurationFile={}",
+                self.dir.join("log4j2.xml").display()
+            ),
+            format!(
+                "-Dminecraft.client.jar={}",
+                self.dir.join("minecraft.jar").display()
+            ),
+        ]);
+
+        // LWJGL path
+        flags.push(format!("-Djava.library.path={}", self.mc.lwjgl.display()));
+
+        // launcher identifiers for java runtime
+        flags.extend([
+            "-Dminecraft.launcher.brand=creeper".into(),
+            format!("-Dminecraft.launcher.version={}", VERSION),
+        ]);
+
+        // class paths
+        let mut cp = self
+            .mc
+            .java_libs
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>();
+        cp.push(self.dir.join("minecraft.jar").display().to_string());
+        flags.extend(["-cp".into(), cp.join(":")]);
+
+        flags
+    }
+
+    fn game_flags(&self) -> Vec<String> {
+        let mut flags = vec![];
+
+        flags.extend(["--version".into(), self.name.clone()]);
+
+        // launcher identifiers for game
+        flags.extend(["--versionType".into(), format!("creeper {}", VERSION)]);
+
+        // dirs
+        flags.extend([
+            "--gameDir".into(),
+            self.dir.display().to_string(),
+            "--assetsDir".into(),
+            self.mc.asset.display().to_string(),
+            "--assetIndex".into(),
+            format!("{}.{}", self.mc.version.major, self.mc.version.minor),
+        ]);
+
+        // window size
+        flags.extend([
+            "--width".into(),
+            format!("{}", self.mc.width),
+            "--height".into(),
+            format!("{}", self.mc.height),
+        ]);
+
+        flags.extend(self.user.game_flags());
+
+        flags.extend(self.mc.game_flags.clone());
+
+        flags
+    }
+}

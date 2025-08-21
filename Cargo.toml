@@ -13,3 +13,14 @@ license = "MIT"
 
 
 [dependencies]
+anyhow = "1.0.98"
+clap = { version = "4.5.39", features = ["derive"] }
+colored = "3.0.0"
+semver = { version = "1.0.26", features = ["serde"] }
+serde = { version = "1.0.219", features = ["derive"] }
+toml = "0.8.22"
+stop = { path = "../stop" }
+walkdir = "2.5.0"
+serde-inline-default = "0.2.3"
+tokio = { version = "1.47.1", features = ["fs", "rt-multi-thread"] }
+mc-launchermeta = "0.1.1"

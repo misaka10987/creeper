@@ -18,7 +18,7 @@ clap = { version = "4.5.39", features = ["derive"] }
 colored = "3.0.0"
 semver = { version = "1.0.26", features = ["serde"] }
 serde = { version = "1.0.219", features = ["derive"] }
-toml = "0.8.22"
+toml = "0.9.5"
 stop = { path = "../stop" }
 walkdir = "2.5.0"
 serde-inline-default = "0.2.3"
@@ -28,4 +28,4 @@ dirs = "6.0.0"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 serde_json = "1.0.143"
-reqwest = "0.12.23"
+reqwest = { version = "0.12.23", features = ["json"] }

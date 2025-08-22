@@ -1,15 +1,15 @@
 use anyhow::bail;
 use clap::Parser;
 
-use crate::cmd::Execute;
+use crate::{Creeper, cmd::Execute};
 
 /// Launch the current game instance.
 #[derive(Clone, Debug, Parser)]
 pub struct Run {}
 
-impl Execute for Run {
-    async fn execute(creeper: &crate::Creeper, _args: &Self) -> anyhow::Result<()> {
-        let inst = creeper.req_inst().await;
+impl Execute<Run> for Creeper {
+    async fn execute(&self, _cmd: Run) -> anyhow::Result<()> {
+        let inst = self.req_inst().await;
         let mut cmd = inst.launch(&inst.dir);
         println!("{:?}", cmd);
         let status = cmd.spawn()?.wait()?;

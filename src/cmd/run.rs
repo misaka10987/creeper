@@ -5,7 +5,7 @@ use crate::{Creeper, cmd::Execute};
 
 /// Launch the current game instance.
 #[derive(Clone, Debug, Parser)]
-pub struct Run {}
+pub struct Run;
 
 impl Execute<Run> for Creeper {
     async fn execute(&self, _cmd: Run) -> anyhow::Result<()> {

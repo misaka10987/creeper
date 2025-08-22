@@ -1,3 +1,5 @@
+mod tool;
+
 use clap::Parser;
 use creeper::{
     Creeper, CreeperConfig,
@@ -5,6 +7,8 @@ use creeper::{
 };
 use stop::stop;
 use tokio::runtime;
+
+use crate::tool::Tool;
 
 /// Minecraft Package Manager.
 #[derive(Clone, Debug, Parser)]
@@ -17,12 +21,15 @@ struct Args {
 
 #[derive(Clone, Debug, Parser)]
 enum SubCommand {
+    #[command(subcommand)]
+    Tool(Tool),
     Run(Run),
 }
 
 impl Execute<SubCommand> for Creeper {
     async fn execute(&self, cmd: SubCommand) -> anyhow::Result<()> {
         match cmd {
+            SubCommand::Tool(tool) => self.execute(tool).await,
             SubCommand::Run(run) => self.execute(run).await,
         }
     }

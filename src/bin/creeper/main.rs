@@ -9,6 +9,7 @@ use creeper::{
 };
 use stop::stop;
 use tokio::runtime;
+use tracing::Level;
 
 use crate::tool::Tool;
 
@@ -17,6 +18,15 @@ use crate::tool::Tool;
 struct Args {
     #[clap(flatten)]
     cfg: CreeperConfig,
+    /// Set the log filtering level.
+    #[arg(name = "loglevel", long, default_value_t = Level::INFO)]
+    log_level: Level,
+    /// Use verbose output, equivalent to overriding log level to DEBUG.
+    #[arg(short, long)]
+    verbose: bool,
+    /// Use noisy output, equivalent to overriding log level to TRACE.
+    #[arg(short, long)]
+    noisy: bool,
     #[command(subcommand)]
     cmd: SubCommand,
 }
@@ -41,8 +51,24 @@ impl Execute<SubCommand> for Creeper {
 }
 
 fn main() {
-    let Args { cfg, cmd } = Args::parse();
-    tracing_subscriber::fmt().with_writer(stderr).init();
+    let Args {
+        cfg,
+        cmd,
+        log_level,
+        verbose,
+        noisy,
+    } = Args::parse();
+    let log_level = if noisy {
+        Level::TRACE
+    } else if verbose {
+        Level::DEBUG
+    } else {
+        log_level
+    };
+    tracing_subscriber::fmt()
+        .with_writer(stderr)
+        .with_max_level(log_level)
+        .init();
     let creeper = Creeper::new(cfg);
     let run = runtime::Builder::new_multi_thread()
         .enable_all()

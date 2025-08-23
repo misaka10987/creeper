@@ -19,7 +19,6 @@ impl LaunchCommand {
         self.java_flags.extend(opt.java_flags());
         self.game_flags.extend(opt.game_flags());
     }
-    
 }
 
 pub trait LaunchOption {

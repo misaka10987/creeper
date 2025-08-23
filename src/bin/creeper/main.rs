@@ -1,7 +1,5 @@
 mod tool;
 
-use std::io::stderr;
-
 use clap::Parser;
 use creeper::{
     CREEPER_TEXT_ART, Creeper, CreeperConfig,
@@ -9,7 +7,9 @@ use creeper::{
 };
 use stop::stop;
 use tokio::runtime;
-use tracing::Level;
+use tracing::{Level, level_filters::LevelFilter};
+use tracing_indicatif::IndicatifLayer;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::tool::Tool;
 
@@ -65,9 +65,11 @@ fn main() {
     } else {
         log_level
     };
-    tracing_subscriber::fmt()
-        .with_writer(stderr)
-        .with_max_level(log_level)
+    let layer = IndicatifLayer::new();
+    tracing_subscriber::registry()
+        .with(LevelFilter::from_level(log_level))
+        .with(fmt::layer().with_writer(layer.get_stderr_writer()))
+        .with(layer)
         .init();
     let creeper = Creeper::new(cfg);
     let run = runtime::Builder::new_multi_thread()
@@ -75,4 +77,5 @@ fn main() {
         .build()
         .unwrap_or_else(stop!());
     run.block_on(creeper.execute(cmd)).unwrap_or_else(stop!());
+    // drop(span);
 }

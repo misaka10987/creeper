@@ -90,7 +90,6 @@ impl InstConfig {
             "-Dlog4j2.formatMsgNoLookups=true".into(),
         ]);
 
-
         flags.extend([
             format!(
                 "-Dlog4j.configurationFile={}",

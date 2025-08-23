@@ -10,6 +10,7 @@ pub enum Tool {
     LoadInst(LoadInst),
     FetchManifest(FetchManifest),
     FetchMcVersion(FetchMcVersion),
+    DownloadLib(DownloadLib),
 }
 
 impl Execute<Tool> for Creeper {
@@ -18,6 +19,7 @@ impl Execute<Tool> for Creeper {
             Tool::LoadInst(load_inst) => self.execute(load_inst).await,
             Tool::FetchManifest(fetch_manifest) => self.execute(fetch_manifest).await,
             Tool::FetchMcVersion(fetch_mc_version) => self.execute(fetch_mc_version).await,
+            Tool::DownloadLib(download_lib) => self.execute(download_lib).await,
         }
     }
 }
@@ -51,6 +53,7 @@ impl Execute<FetchManifest> for Creeper {
 /// Fetch the specified minecraft version description file according to the version manifest.
 #[derive(Clone, Debug, Parser)]
 pub struct FetchMcVersion {
+    /// The minecraft version to fetch description for.
     #[arg(value_name = "VERSION")]
     version: Version,
 }
@@ -61,5 +64,19 @@ impl Execute<FetchMcVersion> for Creeper {
         let json = serde_json::to_string_pretty(&mc_version)?;
         println!("{json}");
         Ok(())
+    }
+}
+
+/// Download Java libraries for specified minecraft version.
+#[derive(Clone, Debug, Parser)]
+pub struct DownloadLib {
+    /// The minecraft version to download libraries for.
+    #[arg(value_name = "VERSION")]
+    version: Version,
+}
+
+impl Execute<DownloadLib> for Creeper {
+    async fn execute(&self, cmd: DownloadLib) -> anyhow::Result<()> {
+        self.download_mc_lib(cmd.version).await
     }
 }

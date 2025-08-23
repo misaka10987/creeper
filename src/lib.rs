@@ -3,29 +3,27 @@ pub mod cmd;
 pub mod inst;
 pub mod java;
 pub mod launch;
+pub mod mc;
 pub mod pack;
 pub mod prelude;
+pub mod storage;
 pub mod user;
 
 use std::{
     collections::HashMap,
-    env::{
-        consts::{ARCH, OS},
-        current_dir,
-    },
+    env::current_dir,
     fmt::Write,
     ops::Deref,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, LazyLock, OnceLock},
 };
 
 use anyhow::anyhow;
 use clap::Parser;
-use dirs::data_local_dir;
 use indicatif::{FormattedDuration, ProgressState};
 use mc_launchermeta::{
     VERSION_MANIFEST_URL,
-    version::{Version as McVersion, library::Artifact, rule::Os},
+    version::{Version as McVersion, library::Artifact},
     version_manifest::Manifest,
 };
 use reqwest::{Client, IntoUrl, Response};
@@ -34,15 +32,15 @@ use semver::Version;
 
 pub use prelude::*;
 use tokio::{
-    fs::{File, create_dir_all, remove_file},
+    fs::{File, copy, create_dir_all, remove_file, rename},
     io::AsyncWriteExt,
     sync::RwLock,
     task::JoinSet,
 };
-use tracing::{Instrument, Span, debug, info, instrument, trace};
+use tracing::{Instrument, Span, info, instrument, trace};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 
-use crate::checksum::file_sha1;
+use crate::mc::{check_class, check_os};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -140,22 +138,19 @@ impl Creeper {
 
     #[instrument(name = "download-artifact", skip(self, lib), fields(lib.url=lib.url))]
     pub async fn download_lib(&self, lib: &Artifact) -> anyhow::Result<()> {
-        let path = data_local_dir()
-            .ok_or(anyhow!("missing local data directory"))?
-            .join("creeper")
-            .join("lib")
-            .join(&lib.path);
+        let path = creeper_local_data()?.join("lib").join(&lib.path);
 
         if path.exists() {
             trace!("found {}", lib.path);
-            let sha1 = file_sha1(&path).await?;
-            if sha1 == lib.sha1 {
-                debug!("hashes match {sha1}, skipping download");
+
+            if Checksum::sha1(lib.sha1.clone()).check(&path).await? {
+                // debug!("hashes match {sha1}, skipping download");
                 return Ok(());
             } else {
                 trace!(
-                    "hashes mismatch {sha1} (expected {}), removing broken {}",
-                    lib.sha1, lib.path
+                    // "hashes mismatch {sha1} (expected {}), removing broken {}",
+                    lib.sha1,
+                    lib.path
                 );
                 remove_file(&path).await?;
             }
@@ -263,31 +258,6 @@ pub const CREEPER_TEXT_ART: &str = r#"
 🟩🟩⬛🟩🟩⬛🟩🟩
 "#;
 
-fn check_os(os: &Os) -> bool {
-    let name = os.name.as_ref().is_none_or(|x| match x {
-        mc_launchermeta::version::rule::OsName::Windows => OS == "windows",
-        mc_launchermeta::version::rule::OsName::Osx => OS == "macos",
-        mc_launchermeta::version::rule::OsName::Linux => OS == "linux",
-    });
-    let arch = os.arch.as_ref().is_none_or(|x| match x {
-        mc_launchermeta::version::rule::OsArch::X86 => ARCH == "x86" || ARCH == "x86_64",
-    });
-    let version = os
-        .version
-        .as_ref()
-        .is_none_or(|_| todo!("does not support checking OS version"));
-    name && arch && version
-}
-
-fn check_class(class: &str) -> bool {
-    match class {
-        "natives-linux" => OS == "linux",
-        "natives-windows" => OS == "windows",
-        "natives-macos" => OS == "macos",
-        c => todo!("unknown classifier {c}"),
-    }
-}
-
 fn pb_eta(state: &ProgressState, w: &mut dyn Write) {
     write!(w, "{}", FormattedDuration(state.eta())).unwrap()
 }
@@ -298,3 +268,29 @@ static PROGRESS_STYLE_DOWNLOAD: LazyLock<ProgressStyle> = LazyLock::new(|| {
         .with_key("eta", pb_eta)
         .progress_chars("=> ")
 });
+
+async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+    let rename = rename(&src, &dst).await;
+    match rename {
+        Ok(_) => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {}
+        e => e?,
+    }
+    copy(&src, &dst).await?;
+    remove_file(&src).await?;
+    Ok(())
+}
+
+fn creeper_local_data() -> anyhow::Result<PathBuf> {
+    let dir = dirs::data_local_dir()
+        .ok_or(anyhow!("missing local data directory"))?
+        .join("creeper");
+    Ok(dir)
+}
+
+fn creeper_cache() -> anyhow::Result<PathBuf> {
+    let dir = dirs::cache_dir()
+        .ok_or(anyhow!("missing cache directory"))?
+        .join("creeper");
+    Ok(dir)
+}

@@ -1,19 +1,19 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use reqwest::{IntoUrl, Response};
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use sqlx::{query, query_as};
 use tokio::fs::{File, create_dir_all, metadata};
 use tokio::io::{AsyncWriteExt, BufWriter};
-use tracing::{Span, debug, info, instrument, trace};
+use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::checksum::{HashFunc, blake3};
 use crate::{Checksum, PROGRESS_STYLE_DOWNLOAD, creeper_cache, creeper_local_data, mv};
 
-#[derive(Clone, Serialize, Deserialize, FromRow)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, FromRow)]
 pub struct Artifact {
     pub blake3: String,
     pub name: String,
@@ -50,6 +50,14 @@ impl Artifact {
         Self::storage_path(&self.blake3)
     }
 
+    pub fn has_checksum(&self, checksum: HashFunc) -> bool {
+        match checksum {
+            HashFunc::Blake3 => true,
+            HashFunc::Sha1 => self.sha1.is_some(),
+            HashFunc::Sha256 => self.sha256.is_some(),
+        }
+    }
+
     pub fn affix_checksum(&mut self, checksum: Checksum) {
         match checksum.function {
             crate::checksum::HashFunc::Blake3 => {
@@ -62,7 +70,7 @@ impl Artifact {
 
     pub fn storage_path(blake3: &str) -> anyhow::Result<PathBuf> {
         let path = creeper_local_data()?
-            .join("download")
+            .join("storage")
             .join(&blake3[..2])
             .join(blake3);
         Ok(path)
@@ -97,16 +105,29 @@ impl Storage {
         Ok(res)
     }
 
-    async fn find(&self, checksum: &Checksum) -> anyhow::Result<Option<Artifact>> {
-        let found = query_as("SELECT * FROM artifact WHERE ? = ?")
-            .bind(checksum.function.to_string())
+    async fn find_checksum(&self, checksum: &Checksum) -> anyhow::Result<Option<Artifact>> {
+        // column names can not be parameters
+        let query = format!("SELECT * FROM artifact WHERE {} = ?", checksum.function);
+        let found = query_as(&query)
             .bind(&checksum.hex_hash)
             .fetch_optional(&self.index)
             .await?;
         Ok(found)
     }
 
+    async fn find(&self, blake3: &str) -> anyhow::Result<Option<Artifact>> {
+        let found = query_as("SELECT * FROM artifact WHERE blake3 = ?")
+            .bind(blake3)
+            .fetch_optional(&self.index)
+            .await?;
+        Ok(found)
+    }
+
     async fn add(&self, artifact: &Artifact) -> anyhow::Result<()> {
+        if self.find(&artifact.blake3).await?.is_some() {
+            warn!("duplicate add of artifact, this is likely due to an inefficient design");
+            return Ok(());
+        }
         query("INSERT INTO artifact (blake3, name, src, len, sha1, sha256, md5) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(&artifact.blake3)
         .bind(&artifact.name)
@@ -120,6 +141,46 @@ impl Storage {
         Ok(())
     }
 
+    async fn affix_checksum(
+        &self,
+        blake3: &str,
+        checksum: impl IntoIterator<Item = Checksum>,
+    ) -> anyhow::Result<Artifact> {
+        let mut art = self
+            .find(blake3)
+            .await?
+            .ok_or(anyhow!("affix checksum to nonexistent artifact"))?;
+
+        let file = art.path()?;
+
+        let mut added = false;
+
+        for checksum in checksum {
+            if art.has_checksum(checksum.function) {
+                continue;
+            }
+            if !checksum.check(&file).await? {
+                bail!("incorrect new checksum {checksum} for {file:?}");
+            }
+            art.affix_checksum(checksum);
+            added = true;
+        }
+
+        if !added {
+            debug!("no changes to checksum");
+            return Ok(art);
+        }
+
+        query("UPDATE artifact SET sha1 = ?, sha256 = ?, md5 = ? WHERE blake3 = ?")
+            .bind(&art.sha1)
+            .bind(&art.sha256)
+            .bind(&art.md5)
+            .bind(blake3)
+            .execute(&self.index)
+            .await?;
+        Ok(art)
+    }
+
     #[instrument(skip(self, name, src, checksum), fields(file = file.as_ref().display().to_string()))]
     pub async fn store(
         &self,
@@ -129,6 +190,11 @@ impl Storage {
         checksum: impl IntoIterator<Item = Checksum>,
     ) -> anyhow::Result<Artifact> {
         let blake3 = blake3(&file).await?;
+
+        if self.find(&blake3).await?.is_some() {
+            return self.affix_checksum(&blake3, checksum).await;
+        }
+
         let len = metadata(&file).await?.len();
         let mut art = Artifact::new(blake3.clone(), name, src, len);
         for checksum in checksum {
@@ -151,7 +217,7 @@ impl Storage {
     #[instrument(skip(self, artifact), fields(artifact.name = &artifact.name))]
     pub async fn retrieve(&self, artifact: &Artifact) -> anyhow::Result<PathBuf> {
         let blake3 = Checksum::blake3(artifact.blake3.clone());
-        if let Some(found) = self.find(&blake3).await? {
+        if let Some(found) = self.find_checksum(&blake3).await? {
             let path = found.path()?;
             trace!("found at {path:?}, checking file integrity");
             if blake3.check(&path).await? {
@@ -182,6 +248,24 @@ impl Storage {
         len: Option<u64>,
         checksum: impl IntoIterator<Item = Checksum>,
     ) -> anyhow::Result<Artifact> {
+        let checksums = checksum.into_iter().collect::<Vec<_>>();
+
+        for checksum in &checksums {
+            if let Some(art) = self.find_checksum(checksum).await? {
+                debug!("fingerprint found in local storage");
+                let art = self.affix_checksum(&art.blake3, checksums).await?;
+                info!("verified file integrity, skipping download");
+                return Ok(art);
+            }
+        }
+
+        // if !checksum.is_empty() {
+        //     let mut valid = true;
+        //     for checksum in checksum {
+        //         if self.find(&checksum).await
+        //     };
+        // }
+
         let path = creeper_cache()?.join(blake3::hash(src.as_bytes()).to_hex().to_string());
 
         trace!("download caching to {path:?}");
@@ -206,9 +290,11 @@ impl Storage {
             span.pb_inc(chunk.len() as u64);
         }
 
+        writer.shutdown().await?;
+
         info!("download finished");
 
-        let art = self.store(&path, name, src, checksum).await?;
+        let art = self.store(&path, name, src, checksums).await?;
 
         Ok(art)
     }

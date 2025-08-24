@@ -71,11 +71,10 @@ fn main() {
         .with(fmt::layer().with_writer(layer.get_stderr_writer()))
         .with(layer)
         .init();
-    let creeper = Creeper::new(cfg);
     let run = runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap_or_else(stop!());
+    let creeper = run.block_on(Creeper::new(cfg)).unwrap_or_else(stop!());
     run.block_on(creeper.execute(cmd)).unwrap_or_else(stop!());
-    // drop(span);
 }

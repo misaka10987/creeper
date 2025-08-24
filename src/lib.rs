@@ -22,9 +22,7 @@ use anyhow::anyhow;
 use clap::Parser;
 use indicatif::{FormattedDuration, ProgressState};
 use mc_launchermeta::{
-    VERSION_MANIFEST_URL,
-    version::{Version as McVersion, library::Artifact},
-    version_manifest::Manifest,
+    VERSION_MANIFEST_URL, version::Version as McVersion, version_manifest::Manifest,
 };
 use reqwest::{Client, IntoUrl, Response};
 
@@ -33,19 +31,22 @@ use semver::Version;
 pub use prelude::*;
 use tokio::{
     fs::{File, copy, create_dir_all, remove_file, rename},
-    io::AsyncWriteExt,
     sync::RwLock,
     task::JoinSet,
 };
-use tracing::{Instrument, Span, info, instrument, trace};
-use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
+use tracing::{Instrument, info};
+use tracing_indicatif::style::ProgressStyle;
 
-use crate::mc::{check_class, check_os};
+use crate::{
+    mc::{check_class, check_os},
+    storage::Storage,
+};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct CreeperInner {
     pub args: CreeperConfig,
+    pub storage: Storage,
     http: Client,
     inst: OnceLock<Inst>,
     manifest: OnceLock<Manifest>,
@@ -64,15 +65,16 @@ impl Deref for Creeper {
 }
 
 impl Creeper {
-    pub fn new(args: CreeperConfig) -> Self {
+    pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
         let val = CreeperInner {
             args,
+            storage: Storage::new().await?,
             http: Default::default(),
             inst: OnceLock::new(),
             manifest: OnceLock::new(),
             mc_version: RwLock::new(HashMap::new()),
         };
-        Self(Arc::new(val))
+        Ok(Self(Arc::new(val)))
     }
 
     async fn http_get(&self, url: impl IntoUrl) -> anyhow::Result<Response> {
@@ -136,48 +138,6 @@ impl Creeper {
         self.fetch_mc_version(version).await
     }
 
-    #[instrument(name = "download-artifact", skip(self, lib), fields(lib.url=lib.url))]
-    pub async fn download_lib(&self, lib: &Artifact) -> anyhow::Result<()> {
-        let path = creeper_local_data()?.join("lib").join(&lib.path);
-
-        if path.exists() {
-            trace!("found {}", lib.path);
-
-            if Checksum::sha1(lib.sha1.clone()).check(&path).await? {
-                // debug!("hashes match {sha1}, skipping download");
-                return Ok(());
-            } else {
-                trace!(
-                    // "hashes mismatch {sha1} (expected {}), removing broken {}",
-                    lib.sha1,
-                    lib.path
-                );
-                remove_file(&path).await?;
-            }
-        }
-
-        if let Some(parent) = path.parent() {
-            create_dir_all(parent).await?;
-        }
-
-        let mut file = File::create_new(&path).await.unwrap();
-
-        let mut res = self.http_get(&lib.url).await?;
-
-        let span = Span::current();
-        span.pb_set_message(&format!("#{}", &lib.sha1[..6]));
-        span.pb_set_length(lib.size);
-        span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
-
-        while let Some(chunk) = res.chunk().await? {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            file.write_all(&chunk).await?;
-            span.pb_inc(chunk.len() as u64);
-        }
-
-        Ok(())
-    }
-
     pub async fn download_mc_lib(&self, version: Version) -> anyhow::Result<()> {
         let mc_version = self.mc_version(version).await?;
 
@@ -221,16 +181,21 @@ impl Creeper {
         for art in arts.into_values() {
             let creeper = self.clone();
             let fut = async move {
-                let res = creeper.download_lib(&art).await;
-                res
+                creeper
+                    .storage
+                    .download(
+                        art.path,
+                        art.url,
+                        Some(art.size),
+                        Some(art.sha1).map(Checksum::sha1),
+                    )
+                    .await
             };
             set.spawn(fut.in_current_span());
         }
 
-        let res = set.join_all().await;
-
-        for res in res {
-            res?
+        while let Some(res) = set.join_next().await {
+            res??;
         }
 
         Ok(())
@@ -270,6 +235,11 @@ static PROGRESS_STYLE_DOWNLOAD: LazyLock<ProgressStyle> = LazyLock::new(|| {
 });
 
 async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+    if let Some(parent) = dst.as_ref().parent() {
+        create_dir_all(parent).await?;
+    }
+    File::create(&dst).await?;
+
     let rename = rename(&src, &dst).await;
     match rename {
         Ok(_) => return Ok(()),

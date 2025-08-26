@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use clap::Parser;
-use creeper::{Creeper, cmd::Execute};
+use creeper::{Creeper, cmd::Execute, vanilla::VanillaManage};
 use semver::Version;
 
 /// Collection of CLI tools basically for development use.
@@ -43,7 +43,7 @@ pub struct FetchManifest;
 
 impl Execute<FetchManifest> for Creeper {
     async fn execute(&self, _cmd: FetchManifest) -> anyhow::Result<()> {
-        let manifest = self.manifest().await?;
+        let manifest = self.vanilla_manifest().await?;
         let json = serde_json::to_string_pretty(manifest)?;
         println!("{json}");
         Ok(())
@@ -60,7 +60,7 @@ pub struct FetchMcVersion {
 
 impl Execute<FetchMcVersion> for Creeper {
     async fn execute(&self, cmd: FetchMcVersion) -> anyhow::Result<()> {
-        let mc_version = self.mc_version(cmd.version).await?;
+        let mc_version = self.vanilla_version(cmd.version).await?;
         let json = serde_json::to_string_pretty(&mc_version)?;
         println!("{json}");
         Ok(())
@@ -77,6 +77,7 @@ pub struct DownloadLib {
 
 impl Execute<DownloadLib> for Creeper {
     async fn execute(&self, cmd: DownloadLib) -> anyhow::Result<()> {
-        self.download_mc_lib(cmd.version).await
+        self.vanilla_lib(cmd.version).await?;
+        Ok(())
     }
 }

@@ -1,5 +1,6 @@
 pub mod checksum;
 pub mod cmd;
+pub mod http;
 pub mod inst;
 pub mod java;
 pub mod launch;
@@ -12,7 +13,6 @@ pub mod user;
 pub mod vanilla;
 
 use std::{
-    collections::HashMap,
     env::current_dir,
     fmt::Write,
     ops::Deref,
@@ -23,29 +23,22 @@ use std::{
 use anyhow::anyhow;
 use clap::Parser;
 use indicatif::{FormattedDuration, ProgressState};
-use mc_launchermeta::{version::Version as McVersion, version_manifest::Manifest};
-use reqwest::{Client, IntoUrl, Response};
-
-use semver::Version;
+use reqwest::Client;
 
 pub use prelude::*;
-use tokio::{
-    fs::{File, copy, create_dir_all, remove_file, rename},
-    sync::RwLock,
-};
+use tokio::fs::{File, copy, create_dir_all, remove_file, rename};
 use tracing_indicatif::style::ProgressStyle;
 
-use crate::storage::Storage;
+use crate::{storage::StorageManager, vanilla::VanillaManager};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct CreeperInner {
     pub args: CreeperConfig,
-    pub storage: Storage,
+    storage: StorageManager,
+    vanilla: VanillaManager,
     http: Client,
     inst: OnceLock<Inst>,
-    manifest: OnceLock<Manifest>,
-    mc_version: RwLock<HashMap<Version, McVersion>>,
 }
 
 #[derive(Clone)]
@@ -63,19 +56,12 @@ impl Creeper {
     pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
         let val = CreeperInner {
             args,
-            storage: Storage::new().await?,
+            storage: StorageManager::new().await?,
+            vanilla: VanillaManager::new(),
             http: Default::default(),
             inst: OnceLock::new(),
-            manifest: OnceLock::new(),
-            mc_version: RwLock::new(HashMap::new()),
         };
         Ok(Self(Arc::new(val)))
-    }
-
-    async fn http_get(&self, url: impl IntoUrl) -> anyhow::Result<Response> {
-        let req = self.http.get(url).build()?;
-        let res = self.http.execute(req).await?;
-        Ok(res)
     }
 
     async fn load_inst(&self) -> anyhow::Result<&Inst> {
@@ -95,6 +81,24 @@ impl Creeper {
             return Ok(inst);
         }
         self.load_inst().await
+    }
+}
+
+impl AsRef<Client> for Creeper {
+    fn as_ref(&self) -> &Client {
+        &self.http
+    }
+}
+
+impl AsRef<StorageManager> for Creeper {
+    fn as_ref(&self) -> &StorageManager {
+        &self.storage
+    }
+}
+
+impl AsRef<VanillaManager> for Creeper {
+    fn as_ref(&self) -> &VanillaManager {
+        &self.vanilla
     }
 }
 

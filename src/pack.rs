@@ -1,7 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
+
+use crate::Artifact;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -20,3 +22,5 @@ pub struct Install {
 }
 
 pub trait Pack {}
+
+pub type FileMap = HashMap<PathBuf, Artifact>;

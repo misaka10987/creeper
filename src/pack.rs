@@ -16,9 +16,25 @@ pub struct Package {
     pub deps: HashMap<String, Version>,
 }
 
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Install {
-    pub java_flags: Option<Vec<String>>,
-    pub mod_file: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "FileMap::is_empty")]
+    pub java_lib: FileMap,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub java_main_class: Option<String>,
+    #[serde(default, skip_serializing_if = "FileMap::is_empty")]
+    pub native: FileMap,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub java_flag: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mc_jar: Option<Artifact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mc_flag: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mc_asset_index: Option<Artifact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mc_mod: Vec<Artifact>,
 }
 
 pub trait Pack {}

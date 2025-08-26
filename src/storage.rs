@@ -18,14 +18,18 @@ use crate::{
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, FromRow)]
+#[serde(deny_unknown_fields)]
 pub struct Artifact {
     pub blake3: String,
     pub name: String,
     pub src: String,
     pub len: u64,
     // other checksums
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha1: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub md5: Option<String>,
 }
 
@@ -213,21 +217,23 @@ impl StorageManager {
     }
 }
 
-#[allow(async_fn_in_trait)]
 pub trait StorageManage {
-    async fn retrieve(&self, artifact: &Artifact) -> anyhow::Result<PathBuf>;
-    async fn download(
+    fn retrieve(
+        &self,
+        artifact: &Artifact,
+    ) -> impl std::future::Future<Output = anyhow::Result<PathBuf>> + Send;
+    fn download(
         &self,
         name: String,
         src: String,
         len: Option<u64>,
-        checksum: impl IntoIterator<Item = Checksum>,
-    ) -> anyhow::Result<Artifact>;
+        checksum: impl IntoIterator<Item = Checksum> + Send,
+    ) -> impl std::future::Future<Output = anyhow::Result<Artifact>> + Send;
 }
 
 impl<T> StorageManage for T
 where
-    T: AsRef<StorageManager> + HttpRequest,
+    T: AsRef<StorageManager> + HttpRequest + Sync,
 {
     #[instrument(skip(self, artifact), fields(artifact.name = &artifact.name))]
     async fn retrieve(&self, artifact: &Artifact) -> anyhow::Result<PathBuf> {
@@ -263,7 +269,7 @@ where
         name: String,
         src: String,
         len: Option<u64>,
-        checksum: impl IntoIterator<Item = Checksum>,
+        checksum: impl IntoIterator<Item = Checksum> + Send,
     ) -> anyhow::Result<Artifact> {
         let storage: &StorageManager = self.as_ref();
 

@@ -10,7 +10,7 @@ pub enum Tool {
     LoadInst(LoadInst),
     FetchManifest(FetchManifest),
     FetchMcVersion(FetchMcVersion),
-    DownloadLib(DownloadLib),
+    VanillaInstall(VanillaInstall),
 }
 
 impl Execute<Tool> for Creeper {
@@ -19,7 +19,7 @@ impl Execute<Tool> for Creeper {
             Tool::LoadInst(load_inst) => self.execute(load_inst).await,
             Tool::FetchManifest(fetch_manifest) => self.execute(fetch_manifest).await,
             Tool::FetchMcVersion(fetch_mc_version) => self.execute(fetch_mc_version).await,
-            Tool::DownloadLib(download_lib) => self.execute(download_lib).await,
+            Tool::VanillaInstall(vanilla_install) => self.execute(vanilla_install).await,
         }
     }
 }
@@ -67,17 +67,19 @@ impl Execute<FetchMcVersion> for Creeper {
     }
 }
 
-/// Download Java libraries for specified minecraft version.
+/// Install and retrieve metadata of specific minecraft version.
 #[derive(Clone, Debug, Parser)]
-pub struct DownloadLib {
-    /// The minecraft version to download libraries for.
+pub struct VanillaInstall {
+    /// The version of installation.
     #[arg(value_name = "VERSION")]
     version: Version,
 }
 
-impl Execute<DownloadLib> for Creeper {
-    async fn execute(&self, cmd: DownloadLib) -> anyhow::Result<()> {
-        self.vanilla_lib(cmd.version).await?;
+impl Execute<VanillaInstall> for Creeper {
+    async fn execute(&self, cmd: VanillaInstall) -> anyhow::Result<()> {
+        let install = self.vanilla_install(cmd.version).await?;
+        let toml = serde_json::to_string_pretty(&install)?;
+        println!("{toml}");
         Ok(())
     }
 }

@@ -3,6 +3,7 @@ pub mod cmd;
 pub mod inst;
 pub mod java;
 pub mod launch;
+pub mod lock;
 pub mod mc;
 pub mod pack;
 pub mod prelude;

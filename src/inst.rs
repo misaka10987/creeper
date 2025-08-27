@@ -1,29 +1,16 @@
 use std::path::{Path, PathBuf};
 
-use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use tokio::fs::read_to_string;
 
 use crate::{Java, User};
 
-// pub struct Inst {
-//     pub dir: PathBuf,
-//     cfg: InstConfig,
-// }
-
-// impl Deref for Inst {
-//     type Target = InstConfig;
-
-//     fn deref(&self) -> &Self::Target {
-//         &self.cfg
-//     }
-// }
-
 /// Defines a game instance.
 ///
 /// This is stored in `creeper.toml`.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Inst {
     /// Name for this instance.
     ///
@@ -58,27 +45,12 @@ impl Inst {
 }
 
 #[serde_inline_default]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct MCConfig {
-    /// The minecraft game version.
-    pub version: Version,
-
-    /// Path to java libraries.
-    pub lib: PathBuf,
-
-    /// Path to LWJGL native libraries.
-    pub lwjgl: PathBuf,
-
-    pub asset: PathBuf,
-
     /// Additional flags passed to the game.
-    #[serde(rename = "game-flags")]
     #[serde(default)]
     pub game_flags: Vec<String>,
-
-    #[serde(rename = "java-libs")]
-    #[serde(default)]
-    pub java_libs: Vec<PathBuf>,
 
     /// Initial window width.
     #[serde_inline_default(854)]
@@ -152,8 +124,6 @@ pub struct MCConfig {
 //             self.dir.display().to_string(),
 //             "--assetsDir".into(),
 //             self.mc.asset.display().to_string(),
-//             "--assetIndex".into(),
-//             format!("{}.{}", self.mc.version.major, self.mc.version.minor),
 //         ]);
 
 //         // window size

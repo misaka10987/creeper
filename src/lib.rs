@@ -168,3 +168,8 @@ fn creeper_cache() -> anyhow::Result<PathBuf> {
         .join("creeper");
     Ok(dir)
 }
+
+fn creeper_minecraft() -> anyhow::Result<PathBuf> {
+    let dir = creeper_local_data()?.join("minecraft");
+    Ok(dir)
+}

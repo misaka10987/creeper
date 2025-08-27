@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::launch::LaunchOption;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub enum UserType {
-    #[serde(rename = "msa")]
     MSA,
 }
 
@@ -19,7 +19,8 @@ impl Display for UserType {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct User {
     pub name: String,
     pub uuid: String,

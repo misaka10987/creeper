@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use clap::Parser;
 use creeper::{Creeper, cmd::Execute, vanilla::VanillaManage};
 use semver::Version;
@@ -31,7 +29,7 @@ pub struct LoadInst;
 impl Execute<LoadInst> for Creeper {
     async fn execute(&self, _cmd: LoadInst) -> anyhow::Result<()> {
         let inst = self.inst().await?;
-        let toml = toml::to_string_pretty(inst.deref())?;
+        let toml = toml::to_string_pretty(inst)?;
         println!("{toml}");
         Ok(())
     }

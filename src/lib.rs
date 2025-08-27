@@ -38,6 +38,7 @@ pub struct CreeperInner {
     storage: StorageManager,
     vanilla: VanillaManager,
     http: Client,
+    inst_dir: OnceLock<PathBuf>,
     inst: OnceLock<Inst>,
 }
 
@@ -59,28 +60,31 @@ impl Creeper {
             storage: StorageManager::new().await?,
             vanilla: VanillaManager::new(),
             http: Default::default(),
+            inst_dir: OnceLock::new(),
             inst: OnceLock::new(),
         };
         Ok(Self(Arc::new(val)))
     }
 
-    async fn load_inst(&self) -> anyhow::Result<&Inst> {
-        let dir = current_dir()?;
-        let dir = self
-            .args
-            .working_dir
-            .to_owned()
-            .or(find_inst_dir(dir))
-            .ok_or(anyhow!("not in any game instance"))?;
-        let inst = Inst::load(dir).await?;
-        Ok(self.inst.get_or_init(|| inst))
+    pub fn working_dir(&self) -> anyhow::Result<PathBuf> {
+        Ok(self.args.working_dir.clone().unwrap_or(current_dir()?))
+    }
+
+    pub fn inst_dir(&self) -> anyhow::Result<&PathBuf> {
+        if let Some(dir) = self.inst_dir.get() {
+            return Ok(dir);
+        }
+        let wd = self.working_dir()?;
+        let found = Inst::find_dir(wd).ok_or(anyhow!("not in any game instance"))?;
+        Ok(self.inst_dir.get_or_init(|| found))
     }
 
     pub async fn inst(&self) -> anyhow::Result<&Inst> {
         if let Some(inst) = self.inst.get() {
             return Ok(inst);
         }
-        self.load_inst().await
+        let inst = Inst::load(self.inst_dir()?).await?;
+        Ok(self.inst.get_or_init(|| inst))
     }
 }
 

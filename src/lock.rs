@@ -4,7 +4,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::Artifact;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Lock {
+    #[serde(rename = "deployment")]
+    pub deploy: Vec<Deployment>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Deployment {
     pub path: PathBuf,

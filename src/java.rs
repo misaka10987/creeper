@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 
 use stop::stop;
 
-use crate::{InstConfig, VERSION, launch::LaunchOption};
+use crate::{Inst, VERSION, launch::LaunchOption};
 
 #[serde_inline_default]
 #[derive(Clone, Serialize, Deserialize)]
@@ -49,7 +49,7 @@ impl Java {
     }
 }
 
-impl InstConfig {
+impl Inst {
     pub fn java_class_path(&self) -> Vec<String> {
         let lib = WalkDir::new(&self.mc.lib);
         lib.into_iter()

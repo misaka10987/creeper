@@ -10,7 +10,7 @@ pub struct Run;
 impl Execute<Run> for Creeper {
     async fn execute(&self, _cmd: Run) -> anyhow::Result<()> {
         let inst = self.inst().await?;
-        let mut cmd = inst.launch(&inst.dir);
+        let mut cmd = inst.launch(self.inst_dir()?);
         println!("{:?}", cmd);
         let status = cmd.spawn()?.wait()?;
         if !status.success() {

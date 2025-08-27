@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -19,12 +19,12 @@ pub struct Package {
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Install {
-    #[serde(default, skip_serializing_if = "FileMap::is_empty")]
-    pub java_lib: FileMap,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub java_lib: Vec<Artifact>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub java_main_class: Option<String>,
-    #[serde(default, skip_serializing_if = "FileMap::is_empty")]
-    pub native: FileMap,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub native: Vec<Artifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub java_flag: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -36,7 +36,3 @@ pub struct Install {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mc_mod: Vec<Artifact>,
 }
-
-pub trait Pack {}
-
-pub type FileMap = HashMap<PathBuf, Artifact>;

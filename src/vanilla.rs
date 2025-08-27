@@ -1,17 +1,19 @@
 use std::{collections::HashMap, sync::OnceLock};
 
 use crate::{
-    Checksum, Install,
+    Artifact, Checksum, Install,
     http::HttpRequest,
     mc::{check_class, check_os},
-    pack::FileMap,
     storage::StorageManage,
 };
 
 use anyhow::anyhow;
 use mc_launchermeta::{
     VERSION_MANIFEST_URL,
-    version::{Download, Version as McVersion, library::Library},
+    version::{
+        Version as McVersion,
+        library::{Artifact as McArtifact, Library},
+    },
     version_manifest::Manifest,
 };
 
@@ -52,44 +54,42 @@ trait VanillaManageImpl {
     fn vanilla_lib(
         &self,
         lib: Vec<Library>,
-    ) -> impl std::future::Future<Output = anyhow::Result<FileMap>> + Send;
+    ) -> impl std::future::Future<Output = anyhow::Result<Vec<Artifact>>> + Send;
 }
 
 impl<T> VanillaManageImpl for T
 where
     T: StorageManage + Clone + Send + Sync + 'static,
 {
-    async fn vanilla_lib(&self, lib: Vec<Library>) -> anyhow::Result<FileMap> {
+    async fn vanilla_lib(&self, lib: Vec<Library>) -> anyhow::Result<Vec<Artifact>> {
         let arts = filter_lib(lib);
 
         info!("downloading {} library artifacts", arts.len());
 
         let mut set = JoinSet::new();
 
-        for (path, down) in arts {
+        for art in arts {
             let creeper = self.clone();
             let fut = async move {
                 creeper
                     .download(
-                        path.clone(),
-                        down.url,
-                        Some(down.size),
-                        Some(down.sha1).map(Checksum::sha1),
+                        art.path,
+                        art.url,
+                        Some(art.size),
+                        Some(Checksum::sha1(art.sha1)),
                     )
                     .await
-                    .map(|x| (path, x))
             };
             set.spawn(fut.in_current_span());
         }
 
-        let mut map = FileMap::new();
+        let mut lib = vec![];
 
         while let Some(res) = set.join_next().await {
-            let (path, art) = res??;
-            map.insert(path.into(), art);
+            lib.push(res??);
         }
 
-        Ok(map)
+        Ok(lib)
     }
 }
 
@@ -158,21 +158,19 @@ where
     }
 }
 
-fn filter_lib(lib: Vec<Library>) -> HashMap<String, Download> {
+fn filter_lib(lib: Vec<Library>) -> Vec<McArtifact> {
     lib.into_iter()
         // apply the rules
         .filter(|x| {
-            x.rules.as_ref().is_none_or(|x| {
-                x.iter().all(|x| {
-                    if !x.features.is_empty() {
-                        todo!("does not support rules with features")
-                    }
-                    let os = x.os.as_ref().is_none_or(check_os);
-                    match x.action {
-                        mc_launchermeta::version::rule::RuleAction::Allow => os,
-                        mc_launchermeta::version::rule::RuleAction::Disallow => !os,
-                    }
-                })
+            x.rules.iter().flatten().all(|x| {
+                if !x.features.is_empty() {
+                    todo!("does not support rules with features")
+                }
+                let apply = x.os.as_ref().is_none_or(check_os);
+                match x.action {
+                    mc_launchermeta::version::rule::RuleAction::Allow => apply,
+                    mc_launchermeta::version::rule::RuleAction::Disallow => !apply,
+                }
             })
         })
         // entries with artifacts to download
@@ -180,21 +178,15 @@ fn filter_lib(lib: Vec<Library>) -> HashMap<String, Download> {
         // flatten list of artifacts
         .flat_map(|x| {
             x.classifiers
-                .unwrap_or_default()
                 .into_iter()
-                .filter_map(|(class, art)| if check_class(&class) { Some(art) } else { None })
-                .chain(x.artifact.into_iter())
+                .flatten()
+                .filter_map(|(class, art)| check_class(&class).then_some(art))
+                .chain(x.artifact)
         })
-        // remove duplication
-        .map(|x| {
-            (
-                x.path,
-                Download {
-                    sha1: x.sha1,
-                    size: x.size,
-                    url: x.url,
-                },
-            )
-        })
+        // deduplication
+        .map(|x| (x.sha1.clone(), x))
+        .collect::<HashMap<_, _>>()
+        .into_iter()
+        .map(|(_k, v)| v)
         .collect()
 }

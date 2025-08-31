@@ -8,6 +8,7 @@ pub mod lock;
 pub mod mc;
 pub mod pack;
 pub mod prelude;
+pub mod registry;
 pub mod storage;
 pub mod user;
 pub mod vanilla;

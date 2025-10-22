@@ -1,5 +1,5 @@
 use clap::Parser;
-use creeper::{Creeper, cmd::Execute, vanilla::VanillaManage};
+use creeper::{Creeper, cmd::Execute};
 use semver::Version;
 
 /// Collection of CLI tools basically for development use.

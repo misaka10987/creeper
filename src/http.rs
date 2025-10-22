@@ -1,19 +1,11 @@
-use reqwest::{Client, IntoUrl, Response};
+use reqwest::{IntoUrl, Response};
 
-pub trait HttpRequest {
-    fn http_get(
-        &self,
-        url: impl IntoUrl + Send,
-    ) -> impl std::future::Future<Output = anyhow::Result<Response>> + Send;
-}
+use crate::Creeper;
 
-impl<T> HttpRequest for T
-where
-    T: AsRef<Client> + Sync,
-{
-    async fn http_get(&self, url: impl IntoUrl + Send) -> anyhow::Result<Response> {
-        let req = self.as_ref().get(url).build()?;
-        let res = self.as_ref().execute(req).await?;
+impl Creeper {
+    pub(crate) async fn http_get(&self, url: impl IntoUrl + Send) -> anyhow::Result<Response> {
+        let req = self.http.get(url).build()?;
+        let res = self.http.execute(req).await?;
         Ok(res)
     }
 }

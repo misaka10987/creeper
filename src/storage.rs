@@ -10,11 +10,9 @@ use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
-    Checksum, PROGRESS_STYLE_DOWNLOAD,
+    Checksum, Creeper, PROGRESS_STYLE_DOWNLOAD,
     checksum::{HashFunc, blake3},
-    creeper_cache, creeper_local_data,
-    http::HttpRequest,
-    mv,
+    creeper_cache, creeper_local_data, mv,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, FromRow)]
@@ -217,30 +215,11 @@ impl StorageManager {
     }
 }
 
-pub trait StorageManage {
-    fn retrieve(
-        &self,
-        artifact: &Artifact,
-    ) -> impl std::future::Future<Output = anyhow::Result<PathBuf>> + Send;
-    fn download(
-        &self,
-        name: String,
-        src: String,
-        len: Option<u64>,
-        checksum: impl IntoIterator<Item = Checksum> + Send,
-    ) -> impl std::future::Future<Output = anyhow::Result<Artifact>> + Send;
-}
-
-impl<T> StorageManage for T
-where
-    T: AsRef<StorageManager> + HttpRequest + Sync,
-{
+impl Creeper {
     #[instrument(skip(self, artifact), fields(artifact.name = &artifact.name))]
-    async fn retrieve(&self, artifact: &Artifact) -> anyhow::Result<PathBuf> {
-        let storage: &StorageManager = self.as_ref();
-
+    pub async fn retrieve(&self, artifact: &Artifact) -> anyhow::Result<PathBuf> {
         let blake3 = Checksum::blake3(artifact.blake3.clone());
-        if let Some(found) = storage.find_checksum(&blake3).await? {
+        if let Some(found) = self.storage.find_checksum(&blake3).await? {
             let path = found.path()?;
             trace!("found at {path:?}, checking file integrity");
             if blake3.check(&path).await? {
@@ -264,21 +243,19 @@ where
     }
 
     #[instrument(skip(self, name, len, checksum))]
-    async fn download(
+    pub async fn download(
         &self,
         name: String,
         src: String,
         len: Option<u64>,
         checksum: impl IntoIterator<Item = Checksum> + Send,
     ) -> anyhow::Result<Artifact> {
-        let storage: &StorageManager = self.as_ref();
-
         let checksums = checksum.into_iter().collect::<Vec<_>>();
 
         for checksum in &checksums {
-            if let Some(art) = storage.find_checksum(checksum).await? {
+            if let Some(art) = self.storage.find_checksum(checksum).await? {
                 debug!("fingerprint found in local storage");
-                let art = storage.affix_checksum(&art.blake3, checksums).await?;
+                let art = self.storage.affix_checksum(&art.blake3, checksums).await?;
                 info!("verified file integrity, skipping download");
                 return Ok(art);
             }
@@ -312,7 +289,7 @@ where
 
         info!("download finished");
 
-        let art = storage.store(&path, name, src, checksums).await?;
+        let art = self.storage.store(&path, name, src, checksums).await?;
 
         Ok(art)
     }

@@ -88,24 +88,6 @@ impl Creeper {
     }
 }
 
-impl AsRef<Client> for Creeper {
-    fn as_ref(&self) -> &Client {
-        &self.http
-    }
-}
-
-impl AsRef<StorageManager> for Creeper {
-    fn as_ref(&self) -> &StorageManager {
-        &self.storage
-    }
-}
-
-impl AsRef<VanillaManager> for Creeper {
-    fn as_ref(&self) -> &VanillaManager {
-        &self.vanilla
-    }
-}
-
 #[derive(Clone, Debug, Parser)]
 #[command(version)]
 pub struct CreeperConfig {

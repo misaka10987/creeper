@@ -1,10 +1,8 @@
 use std::{collections::HashMap, sync::OnceLock};
 
 use crate::{
-    Artifact, Checksum, Install,
-    http::HttpRequest,
+    Artifact, Checksum, Creeper, Install,
     mc::{check_class, check_os},
-    storage::StorageManage,
 };
 
 use anyhow::anyhow;
@@ -36,31 +34,7 @@ impl VanillaManager {
     }
 }
 
-pub trait VanillaManage {
-    fn vanilla_manifest(
-        &self,
-    ) -> impl std::future::Future<Output = anyhow::Result<&Manifest>> + Send;
-    fn vanilla_version(
-        &self,
-        version: Version,
-    ) -> impl std::future::Future<Output = anyhow::Result<McVersion>> + Send;
-    fn vanilla_install(
-        &self,
-        version: Version,
-    ) -> impl std::future::Future<Output = anyhow::Result<Install>> + Send;
-}
-
-trait VanillaManageImpl {
-    fn vanilla_lib(
-        &self,
-        lib: Vec<Library>,
-    ) -> impl std::future::Future<Output = anyhow::Result<Vec<Artifact>>> + Send;
-}
-
-impl<T> VanillaManageImpl for T
-where
-    T: StorageManage + Clone + Send + Sync + 'static,
-{
+impl Creeper {
     async fn vanilla_lib(&self, lib: Vec<Library>) -> anyhow::Result<Vec<Artifact>> {
         let arts = filter_lib(lib);
 
@@ -91,23 +65,18 @@ where
 
         Ok(lib)
     }
-}
 
-impl<T> VanillaManage for T
-where
-    T: AsRef<VanillaManager> + HttpRequest + StorageManage + Clone + Send + Sync + 'static,
-{
-    async fn vanilla_manifest(&self) -> anyhow::Result<&Manifest> {
-        if let Some(manifest) = self.as_ref().manifest.get() {
+    pub async fn vanilla_manifest(&self) -> anyhow::Result<&Manifest> {
+        if let Some(manifest) = self.vanilla.manifest.get() {
             return Ok(manifest);
         }
         info!("synchronizing minecraft version manifest");
         let manifest = self.http_get(VERSION_MANIFEST_URL).await?.json().await?;
-        Ok(self.as_ref().manifest.get_or_init(|| manifest))
+        Ok(self.vanilla.manifest.get_or_init(|| manifest))
     }
 
-    async fn vanilla_version(&self, version: Version) -> anyhow::Result<McVersion> {
-        if let Some(mc_version) = self.as_ref().version.read().await.get(&version) {
+    pub async fn vanilla_version(&self, version: Version) -> anyhow::Result<McVersion> {
+        if let Some(mc_version) = self.vanilla.version.read().await.get(&version) {
             return Ok(mc_version.clone());
         }
         info!("synchronizing minecraft {version} version metadata");
@@ -118,7 +87,7 @@ where
             .url
             .to_owned();
         let mc_version = self.http_get(url).await?.json::<McVersion>().await?;
-        self.as_ref()
+        self.vanilla
             .version
             .write()
             .await
@@ -126,7 +95,7 @@ where
         Ok(mc_version)
     }
 
-    async fn vanilla_install(&self, version: Version) -> anyhow::Result<Install> {
+    pub async fn vanilla_install(&self, version: Version) -> anyhow::Result<Install> {
         let version = self.vanilla_version(version).await?;
         let client = version.downloads.client;
         let client = self

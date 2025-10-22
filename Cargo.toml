@@ -19,7 +19,7 @@ colored = "3.0.0"
 semver = { version = "1.0.26", features = ["serde"] }
 serde = { version = "1.0.219", features = ["derive"] }
 toml = "0.9.5"
-stop = { path = "../stop" }
+stop = "0.1.0"
 walkdir = "2.5.0"
 serde-inline-default = "0.2.3"
 tokio = { version = "1.47.1", features = ["fs", "rt-multi-thread", "tracing"] }

@@ -2124,6 +2124,8 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "stop"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c69b788f15d857fbd61b6efe3cd4c77ad8a956b610fe9ab8e3a36e8d03f10455"
 dependencies = [
  "colored",
 ]

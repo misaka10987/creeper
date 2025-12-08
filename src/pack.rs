@@ -1,19 +1,103 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap, fmt::Display, iter::repeat, ops::Deref, path::PathBuf, str::FromStr,
+};
 
-use semver::Version;
+use anyhow::{anyhow, bail};
+use semver::VersionReq;
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 use crate::Artifact;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
+pub struct Id(String);
+
+impl Id {
+    pub fn path(&self) -> PathBuf {
+        let head4 = self
+            .chars()
+            .filter(char::is_ascii_lowercase)
+            .chain(repeat('x'))
+            .take(4)
+            .collect::<String>();
+        let path = format!("./{}/{}/{self}", &head4[0..2], &head4[2..4]);
+        path.into()
+    }
+
+    pub fn minecraft() -> Self {
+        "minecraft".parse().unwrap()
+    }
+
+    pub fn vanilla() -> Self {
+        "vanilla".parse().unwrap()
+    }
+
+    pub fn forge() -> Self {
+        "forge".parse().unwrap()
+    }
+
+    pub fn neoforge() -> Self {
+        "neoforge".parse().unwrap()
+    }
+
+    pub fn fabric() -> Self {
+        "fabric".parse().unwrap()
+    }
+}
+
+impl Deref for Id {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FromStr for Id {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut chars = s.chars();
+
+        // non-empty
+        let first = chars.next().ok_or(anyhow!("must not be empty"))?;
+
+        // start with lowercase letter
+        if !first.is_ascii_lowercase() {
+            bail!("must start with lowercase letter");
+        }
+
+        // consist of valid characters
+        for c in chars {
+            if !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_') {
+                bail!("invalid character {c}");
+            }
+        }
+
+        Ok(Id(s.to_string()))
+    }
+}
+
+impl Display for Id {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Package {
+    pub version: HashMap<Id, PackageVersion>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct PackageVersion {
     pub name: String,
-    pub version: Version,
     #[serde(rename = "description")]
     pub desc: String,
     #[serde(rename = "dependencies")]
-    pub deps: HashMap<String, Version>,
+    pub deps: HashMap<Id, VersionReq>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]

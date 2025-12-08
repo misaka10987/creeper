@@ -1,6 +1,7 @@
 pub mod checksum;
 pub mod cmd;
 pub mod http;
+pub mod id;
 pub mod inst;
 pub mod java;
 pub mod launch;

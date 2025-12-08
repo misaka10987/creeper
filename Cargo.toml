@@ -35,3 +35,4 @@ tracing-indicatif = "0.3.13"
 indicatif = "0.18.0"
 blake3 = "1.8.2"
 sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
+serde_with = "3.16.1"

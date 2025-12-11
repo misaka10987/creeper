@@ -385,6 +385,7 @@ dependencies = [
  "serde-inline-default",
  "serde_json",
  "serde_with",
+ "spdx",
  "sqlx",
  "stop",
  "tokio",
@@ -2125,6 +2126,15 @@ checksum = "233504af464074f9d066d7b5416c5f9b894a5862a6506e306f7b816cdd6f1807"
 dependencies = [
  "libc",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "spdx"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35107b1c818f4e9cb9e6c4444ca560ba03b4ee1288dcecc6d7830c2023a7609e"
+dependencies = [
+ "smallvec",
 ]
 
 [[package]]

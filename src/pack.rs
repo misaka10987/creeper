@@ -2,18 +2,29 @@ use std::{collections::HashMap, path::PathBuf};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use serde_with::{DisplayFromStr, serde_as};
+use spdx::Expression;
 
-use crate::Artifact;
+use crate::{Artifact, Id};
 
+/// Package metadata of a specific version of a specific package.
+#[serde_as]
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Package {
+    /// Display name of the package. Does not need to follow the specifications of package IDs.
     pub name: String,
-    pub version: Version,
-    #[serde(rename = "description")]
+    /// Authors of the package.
+    #[serde(default)]
+    pub authors: Vec<String>,
+    /// A short description of this package.
+    #[serde(default, rename = "description")]
     pub desc: String,
-    #[serde(rename = "dependencies")]
-    pub deps: HashMap<String, Version>,
+    /// Dependencies of this package.
+    #[serde(default, rename = "dependencies")]
+    pub deps: HashMap<Id, Version>,
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub license: Option<Expression>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]

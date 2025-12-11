@@ -8,6 +8,7 @@ pub mod launch;
 pub mod lock;
 pub mod mc;
 pub mod pack;
+pub mod path;
 pub mod prelude;
 pub mod storage;
 pub mod user;
@@ -30,7 +31,7 @@ pub use prelude::*;
 use tokio::fs::{File, copy, create_dir_all, remove_file, rename};
 use tracing_indicatif::style::ProgressStyle;
 
-use crate::{storage::StorageManager, vanilla::VanillaManager};
+use crate::{path::init_creeper_dirs, storage::StorageManager, vanilla::VanillaManager};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -56,6 +57,7 @@ impl Deref for Creeper {
 
 impl Creeper {
     pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
+        init_creeper_dirs().await?;
         let val = CreeperInner {
             args,
             storage: StorageManager::new().await?,
@@ -136,23 +138,4 @@ async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> 
     copy(&src, &dst).await?;
     remove_file(&src).await?;
     Ok(())
-}
-
-fn creeper_local_data() -> anyhow::Result<PathBuf> {
-    let dir = dirs::data_local_dir()
-        .ok_or(anyhow!("missing local data directory"))?
-        .join("creeper");
-    Ok(dir)
-}
-
-fn creeper_cache() -> anyhow::Result<PathBuf> {
-    let dir = dirs::cache_dir()
-        .ok_or(anyhow!("missing cache directory"))?
-        .join("creeper");
-    Ok(dir)
-}
-
-fn creeper_minecraft() -> anyhow::Result<PathBuf> {
-    let dir = creeper_local_data()?.join("minecraft");
-    Ok(dir)
 }

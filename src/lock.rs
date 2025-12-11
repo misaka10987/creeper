@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 
-use crate::{Artifact, Inst, Install, creeper_minecraft};
+use crate::{Artifact, Inst, Install, path::creeper_mc_dir};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -74,7 +74,7 @@ impl LockBuilder {
         mc_flag.extend(vec!["--assetIndex".into(), mc_asset_index.blake3.clone()]);
         deploy.push(
             (
-                creeper_minecraft()?
+                creeper_mc_dir()?
                     .join("assets")
                     .join("indexes")
                     .join(mc_asset_index.blake3.clone()),

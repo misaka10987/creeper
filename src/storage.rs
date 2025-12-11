@@ -9,10 +9,11 @@ use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
+use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::{
     Checksum, Creeper, PROGRESS_STYLE_DOWNLOAD,
     checksum::{HashFunc, blake3},
-    creeper_cache, creeper_local_data, mv,
+    mv,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, FromRow)]
@@ -75,7 +76,7 @@ impl Artifact {
     }
 
     pub fn storage_path(blake3: &str) -> anyhow::Result<PathBuf> {
-        let path = creeper_local_data()?
+        let path = creeper_data_dir()?
             .join("storage")
             .join(&blake3[..2])
             .join(blake3);
@@ -91,7 +92,7 @@ pub struct StorageManager {
 
 impl StorageManager {
     pub async fn new() -> anyhow::Result<Self> {
-        let path = creeper_local_data()?.join("storage-index.db");
+        let path = creeper_data_dir()?.join("storage-index.db");
         let opt = SqliteConnectOptions::default()
             .filename(path)
             .create_if_missing(true);
@@ -261,7 +262,7 @@ impl Creeper {
             }
         }
 
-        let path = creeper_cache()?.join(blake3::hash(src.as_bytes()).to_hex().to_string());
+        let path = creeper_cache_dir()?.join(blake3::hash(src.as_bytes()).to_hex().to_string());
 
         trace!("download caching to {path:?}");
 

@@ -40,11 +40,11 @@ enum SubCommand {
     AwwMan,
 }
 
-impl Execute<SubCommand> for Creeper {
-    async fn execute(&self, cmd: SubCommand) -> anyhow::Result<()> {
+impl Execute for SubCommand {
+    async fn execute(lib: &Creeper, cmd: SubCommand) -> anyhow::Result<()> {
         match cmd {
-            SubCommand::Tool(tool) => self.execute(tool).await,
-            SubCommand::Run(run) => self.execute(run).await,
+            SubCommand::Tool(tool) => lib.execute(tool).await,
+            SubCommand::Run(run) => lib.execute(run).await,
             SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
         }
     }

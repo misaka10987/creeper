@@ -7,10 +7,10 @@ use crate::{Creeper, cmd::Execute};
 #[derive(Clone, Debug, Parser)]
 pub struct Run;
 
-impl Execute<Run> for Creeper {
-    async fn execute(&self, _cmd: Run) -> anyhow::Result<()> {
-        let inst = self.inst().await?;
-        let mut cmd = inst.launch(self.inst_dir()?);
+impl Execute for Run {
+    async fn execute(lib: &Creeper, _cmd: Self) -> anyhow::Result<()> {
+        let inst = lib.inst().await?;
+        let mut cmd = inst.launch(lib.inst_dir()?);
         println!("{:?}", cmd);
         let status = cmd.spawn()?.wait()?;
         if !status.success() {

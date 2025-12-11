@@ -11,13 +11,13 @@ pub enum Tool {
     VanillaInstall(VanillaInstall),
 }
 
-impl Execute<Tool> for Creeper {
-    async fn execute(&self, cmd: Tool) -> anyhow::Result<()> {
+impl Execute for Tool {
+    async fn execute(lib: &Creeper, cmd: Self) -> anyhow::Result<()> {
         match cmd {
-            Tool::LoadInst(load_inst) => self.execute(load_inst).await,
-            Tool::FetchManifest(fetch_manifest) => self.execute(fetch_manifest).await,
-            Tool::FetchMcVersion(fetch_mc_version) => self.execute(fetch_mc_version).await,
-            Tool::VanillaInstall(vanilla_install) => self.execute(vanilla_install).await,
+            Tool::LoadInst(load_inst) => lib.execute(load_inst).await,
+            Tool::FetchManifest(fetch_manifest) => lib.execute(fetch_manifest).await,
+            Tool::FetchMcVersion(fetch_mc_version) => lib.execute(fetch_mc_version).await,
+            Tool::VanillaInstall(vanilla_install) => lib.execute(vanilla_install).await,
         }
     }
 }
@@ -26,9 +26,9 @@ impl Execute<Tool> for Creeper {
 #[derive(Clone, Debug, Parser)]
 pub struct LoadInst;
 
-impl Execute<LoadInst> for Creeper {
-    async fn execute(&self, _cmd: LoadInst) -> anyhow::Result<()> {
-        let inst = self.inst().await?;
+impl Execute for LoadInst {
+    async fn execute(lib: &Creeper, _cmd: Self) -> anyhow::Result<()> {
+        let inst = lib.inst().await?;
         let toml = toml::to_string_pretty(inst)?;
         println!("{toml}");
         Ok(())
@@ -39,9 +39,9 @@ impl Execute<LoadInst> for Creeper {
 #[derive(Clone, Debug, Parser)]
 pub struct FetchManifest;
 
-impl Execute<FetchManifest> for Creeper {
-    async fn execute(&self, _cmd: FetchManifest) -> anyhow::Result<()> {
-        let manifest = self.vanilla_manifest().await?;
+impl Execute for FetchManifest {
+    async fn execute(lib: &Creeper, _cmd: Self) -> anyhow::Result<()> {
+        let manifest = lib.vanilla_manifest().await?;
         let json = serde_json::to_string_pretty(manifest)?;
         println!("{json}");
         Ok(())
@@ -56,9 +56,9 @@ pub struct FetchMcVersion {
     version: Version,
 }
 
-impl Execute<FetchMcVersion> for Creeper {
-    async fn execute(&self, cmd: FetchMcVersion) -> anyhow::Result<()> {
-        let mc_version = self.vanilla_version(cmd.version).await?;
+impl Execute for FetchMcVersion {
+    async fn execute(lib: &Creeper, cmd: Self) -> anyhow::Result<()> {
+        let mc_version = lib.vanilla_version(cmd.version).await?;
         let json = serde_json::to_string_pretty(&mc_version)?;
         println!("{json}");
         Ok(())
@@ -73,9 +73,9 @@ pub struct VanillaInstall {
     version: Version,
 }
 
-impl Execute<VanillaInstall> for Creeper {
-    async fn execute(&self, cmd: VanillaInstall) -> anyhow::Result<()> {
-        let install = self.vanilla_install(cmd.version).await?;
+impl Execute for VanillaInstall {
+    async fn execute(lib: &Creeper, cmd: Self) -> anyhow::Result<()> {
+        let install = lib.vanilla_install(cmd.version).await?;
         let toml = serde_json::to_string_pretty(&install)?;
         println!("{toml}");
         Ok(())

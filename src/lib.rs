@@ -31,7 +31,9 @@ pub use prelude::*;
 use tokio::fs::{File, copy, create_dir_all, remove_file, rename};
 use tracing_indicatif::style::ProgressStyle;
 
-use crate::{path::init_creeper_dirs, storage::StorageManager, vanilla::VanillaManager};
+use crate::{
+    cmd::Execute, path::init_creeper_dirs, storage::StorageManager, vanilla::VanillaManager,
+};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -88,6 +90,10 @@ impl Creeper {
         }
         let inst = Inst::load(self.inst_dir()?).await?;
         Ok(self.inst.get_or_init(|| inst))
+    }
+
+    pub async fn execute(&self, cmd: impl Execute) -> anyhow::Result<()> {
+        Execute::execute(self, cmd).await
     }
 }
 

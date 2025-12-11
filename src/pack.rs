@@ -15,15 +15,25 @@ pub struct Package {
     /// Display name of the package. Does not need to follow the specifications of package IDs.
     pub name: String,
     /// Authors of the package.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authors: Vec<String>,
     /// A short description of this package.
-    #[serde(default, rename = "description")]
+    #[serde(
+        default,
+        rename = "description",
+        skip_serializing_if = "String::is_empty"
+    )]
     pub desc: String,
     /// Dependencies of this package.
-    #[serde(default, rename = "dependencies")]
+    #[serde(
+        default,
+        rename = "dependencies",
+        skip_serializing_if = "HashMap::is_empty"
+    )]
     pub deps: HashMap<Id, Version>,
+    /// License of this package in [SPDX expression](https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/) format.
     #[serde_as(as = "Option<DisplayFromStr>")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<Expression>,
 }
 

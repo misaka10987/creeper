@@ -5,7 +5,7 @@ use creeper::{
     CREEPER_TEXT_ART, Creeper, CreeperConfig,
     cmd::{Execute, run::Run},
 };
-use stop::stop;
+use stop::fatal;
 use tokio::runtime;
 use tracing::{Level, level_filters::LevelFilter};
 use tracing_indicatif::IndicatifLayer;
@@ -74,7 +74,7 @@ fn main() {
     let run = runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
-        .unwrap_or_else(stop!());
-    let creeper = run.block_on(Creeper::new(cfg)).unwrap_or_else(stop!());
-    run.block_on(creeper.execute(cmd)).unwrap_or_else(stop!());
+        .unwrap_or_else(fatal!());
+    let creeper = run.block_on(Creeper::new(cfg)).unwrap_or_else(fatal!());
+    run.block_on(creeper.execute(cmd)).unwrap_or_else(fatal!());
 }

@@ -9,29 +9,27 @@ mod lock;
 mod mc;
 mod pack;
 mod path;
+mod pbar;
 mod prelude;
 mod storage;
 mod tool;
 mod user;
+mod util;
 mod vanilla;
 
 use anyhow::anyhow;
 use clap::Parser;
-use indicatif::{FormattedDuration, ProgressState};
 use reqwest::Client;
 use std::{
     env::current_dir,
-    fmt::Write,
     ops::Deref,
-    path::{Path, PathBuf},
-    sync::{Arc, LazyLock, OnceLock},
+    path::PathBuf,
+    sync::{Arc, OnceLock},
 };
 use stop::fatal;
-use tokio::fs::{File, copy, create_dir_all, remove_file, rename};
 use tokio::runtime;
 use tracing::{Level, level_filters::LevelFilter};
 use tracing_indicatif::IndicatifLayer;
-use tracing_indicatif::style::ProgressStyle;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
@@ -126,34 +124,6 @@ pub const CREEPER_TEXT_ART: &str = r#"
 ⬜🟩⬛⬛⬛⬛🟩🟩
 🟩🟩⬛🟩🟩⬛🟩🟩
 "#;
-
-fn pb_eta(state: &ProgressState, w: &mut dyn Write) {
-    write!(w, "{}", FormattedDuration(state.eta())).unwrap()
-}
-
-static PROGRESS_STYLE_DOWNLOAD: LazyLock<ProgressStyle> = LazyLock::new(|| {
-    ProgressStyle::with_template("{spinner:.green} {msg} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes:>11}/{total_bytes:<11} ETA {eta:<8}")
-        .unwrap()
-        .with_key("eta", pb_eta)
-        .progress_chars("=> ")
-});
-
-async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
-    if let Some(parent) = dst.as_ref().parent() {
-        create_dir_all(parent).await?;
-    }
-    File::create(&dst).await?;
-
-    let rename = rename(&src, &dst).await;
-    match rename {
-        Ok(_) => return Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {}
-        e => e?,
-    }
-    copy(&src, &dst).await?;
-    remove_file(&src).await?;
-    Ok(())
-}
 
 /// Minecraft Package Manager.
 #[derive(Clone, Debug, Parser)]

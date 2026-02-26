@@ -10,10 +10,11 @@ use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::path::{creeper_cache_dir, creeper_data_dir};
+use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
+use crate::util::mv;
 use crate::{
-    Checksum, Creeper, PROGRESS_STYLE_DOWNLOAD,
+    Checksum, Creeper,
     checksum::{HashFunc, blake3},
-    mv,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, FromRow)]

@@ -1,25 +1,24 @@
-pub mod checksum;
-pub mod cmd;
-pub mod http;
-pub mod id;
-pub mod inst;
-pub mod java;
-pub mod launch;
-pub mod lock;
-pub mod mc;
-pub mod pack;
-pub mod path;
-pub mod prelude;
-pub mod storage;
-pub mod user;
-pub mod vanilla;
+mod checksum;
+mod cmd;
+mod http;
+mod id;
+mod inst;
+mod java;
+mod launch;
+mod lock;
+mod mc;
+mod pack;
+mod path;
+mod prelude;
+mod storage;
+mod tool;
+mod user;
+mod vanilla;
 
-use stop::fatal;
-use tokio::runtime;
-use tracing::{Level, level_filters::LevelFilter};
-use tracing_indicatif::IndicatifLayer;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
-
+use anyhow::anyhow;
+use clap::Parser;
+use indicatif::{FormattedDuration, ProgressState};
+use reqwest::Client;
 use std::{
     env::current_dir,
     fmt::Write,
@@ -27,22 +26,23 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, LazyLock, OnceLock},
 };
-
-use anyhow::anyhow;
-use clap::Parser;
-use indicatif::{FormattedDuration, ProgressState};
-use reqwest::Client;
-
-pub use prelude::*;
+use stop::fatal;
 use tokio::fs::{File, copy, create_dir_all, remove_file, rename};
+use tokio::runtime;
+use tracing::{Level, level_filters::LevelFilter};
+use tracing_indicatif::IndicatifLayer;
 use tracing_indicatif::style::ProgressStyle;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{
     cmd::{Execute, run::Run},
     path::init_creeper_dirs,
     storage::StorageManager,
+    tool::Tool,
     vanilla::VanillaManager,
 };
+
+pub use prelude::*;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -154,10 +154,6 @@ async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> 
     remove_file(&src).await?;
     Ok(())
 }
-
-mod tool;
-
-use crate::tool::Tool;
 
 /// Minecraft Package Manager.
 #[derive(Clone, Debug, Parser)]

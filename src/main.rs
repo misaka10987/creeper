@@ -14,6 +14,12 @@ pub mod storage;
 pub mod user;
 pub mod vanilla;
 
+use stop::fatal;
+use tokio::runtime;
+use tracing::{Level, level_filters::LevelFilter};
+use tracing_indicatif::IndicatifLayer;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
+
 use std::{
     env::current_dir,
     fmt::Write,
@@ -32,7 +38,10 @@ use tokio::fs::{File, copy, create_dir_all, remove_file, rename};
 use tracing_indicatif::style::ProgressStyle;
 
 use crate::{
-    cmd::Execute, path::init_creeper_dirs, storage::StorageManager, vanilla::VanillaManager,
+    cmd::{Execute, run::Run},
+    path::init_creeper_dirs,
+    storage::StorageManager,
+    vanilla::VanillaManager,
 };
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -144,4 +153,74 @@ async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> 
     copy(&src, &dst).await?;
     remove_file(&src).await?;
     Ok(())
+}
+
+mod tool;
+
+use crate::tool::Tool;
+
+/// Minecraft Package Manager.
+#[derive(Clone, Debug, Parser)]
+struct Args {
+    #[clap(flatten)]
+    cfg: CreeperConfig,
+    /// Set the log filtering level.
+    #[arg(name = "loglevel", long, default_value_t = Level::INFO)]
+    log_level: Level,
+    /// Use verbose output, equivalent to overriding log level to DEBUG.
+    #[arg(short, long)]
+    verbose: bool,
+    /// Use noisy output, equivalent to overriding log level to TRACE.
+    #[arg(short, long)]
+    noisy: bool,
+    #[command(subcommand)]
+    cmd: SubCommand,
+}
+
+#[derive(Clone, Debug, Parser)]
+enum SubCommand {
+    #[command(subcommand)]
+    Tool(Tool),
+    Run(Run),
+    #[clap(hide = true)]
+    AwwMan,
+}
+
+impl Execute for SubCommand {
+    async fn execute(lib: &Creeper, cmd: SubCommand) -> anyhow::Result<()> {
+        match cmd {
+            SubCommand::Tool(tool) => lib.execute(tool).await,
+            SubCommand::Run(run) => lib.execute(run).await,
+            SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
+        }
+    }
+}
+
+fn main() {
+    let Args {
+        cfg,
+        cmd,
+        log_level,
+        verbose,
+        noisy,
+    } = Args::parse();
+    let log_level = if noisy {
+        Level::TRACE
+    } else if verbose {
+        Level::DEBUG
+    } else {
+        log_level
+    };
+    let layer = IndicatifLayer::new();
+    tracing_subscriber::registry()
+        .with(LevelFilter::from_level(log_level))
+        .with(fmt::layer().with_writer(layer.get_stderr_writer()))
+        .with(layer)
+        .init();
+    let run = runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap_or_else(fatal!());
+    let creeper = run.block_on(Creeper::new(cfg)).unwrap_or_else(fatal!());
+    run.block_on(creeper.execute(cmd)).unwrap_or_else(fatal!());
 }

@@ -8,10 +8,11 @@ use spdx::Expression;
 
 use crate::{Artifact, Id};
 
+/// The package node in the dependency graph, containing only metadata needed for dependency resolution.
 #[serde_inline_default]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Package {
+pub struct PackNode {
     /// Unique package identifier.
     /// See [`Id`] for specifications.
     pub id: Id,
@@ -19,15 +20,30 @@ pub struct Package {
     pub version: Version,
     /// Revision number of this version of the package.
     #[serde_inline_default(0)]
+    #[serde(skip_serializing_if = "is_zero")]
     pub rev: u32,
-    #[serde(rename = "package")]
-    pub meta: PackMeta,
+    /// Dependencies.
     #[serde(
         default,
         rename = "dependencies",
-        skip_serializing_if = "Deps::is_empty"
+        skip_serializing_if = "HashMap::is_empty"
     )]
-    pub deps: Deps,
+    pub deps: HashMap<Id, VersionReq>,
+}
+
+#[allow(unused)] // used by `#[serde(skip_serializing_if = "is_zero")]`
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+/// A package definition.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Package {
+    #[serde(flatten)]
+    pub node: PackNode,
+    #[serde(rename = "package")]
+    pub meta: PackMeta,
     pub install: Install,
 }
 
@@ -53,9 +69,6 @@ pub struct PackMeta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<Expression>,
 }
-
-/// Dependencies of a package.
-pub type Deps = HashMap<Id, VersionReq>;
 
 /// Things installed to the game instance by a package.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]

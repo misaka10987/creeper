@@ -9,9 +9,9 @@ use crate::{Artifact, Id};
 
 /// Package metadata of a specific version of a specific package.
 #[serde_as]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Package {
+pub struct PackMeta {
     /// Display name of the package. Does not need to follow the specifications of package IDs.
     pub name: String,
     /// Authors of the package.

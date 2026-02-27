@@ -22,7 +22,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 pub struct Id(String);
 
 impl Id {
-    /// Initial letter indexed storage path of the package, relative to the storage root.
+    /// **Relative** storage path of this package to the storage root,
+    /// sparsely indexed by the initial characters.
     pub fn indexed_path(&self) -> impl AsRef<Path> {
         let head4 = self
             .chars()

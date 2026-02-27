@@ -1,11 +1,35 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use semver::Version;
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+use serde_inline_default::serde_inline_default;
 use serde_with::{DisplayFromStr, serde_as};
 use spdx::Expression;
 
 use crate::{Artifact, Id};
+
+#[serde_inline_default]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Package {
+    /// Unique package identifier.
+    /// See [`Id`] for specifications.
+    pub id: Id,
+    /// Version of the package.
+    pub version: Version,
+    /// Revision number of this version of the package.
+    #[serde_inline_default(0)]
+    pub rev: u32,
+    #[serde(rename = "package")]
+    pub meta: PackMeta,
+    #[serde(
+        default,
+        rename = "dependencies",
+        skip_serializing_if = "Deps::is_empty"
+    )]
+    pub deps: Deps,
+    pub install: Install,
+}
 
 /// Package metadata of a specific version of a specific package.
 #[serde_as]
@@ -24,36 +48,41 @@ pub struct PackMeta {
         skip_serializing_if = "String::is_empty"
     )]
     pub desc: String,
-    /// Dependencies of this package.
-    #[serde(
-        default,
-        rename = "dependencies",
-        skip_serializing_if = "HashMap::is_empty"
-    )]
-    pub deps: HashMap<Id, Version>,
     /// License of this package in [SPDX expression](https://spdx.github.io/spdx-spec/v2.3/SPDX-license-expressions/) format.
     #[serde_as(as = "Option<DisplayFromStr>")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<Expression>,
 }
 
+/// Dependencies of a package.
+pub type Deps = HashMap<Id, VersionReq>;
+
+/// Things installed to the game instance by a package.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Install {
+    /// Additional java libraries, prepended to the classpath when launching the game.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub java_lib: Vec<Artifact>,
+    /// Java main class override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub java_main_class: Option<String>,
+    /// Native libraries to be added.
     #[serde(default, skip_serializing_if = "FileMap::is_empty")]
     pub native: FileMap,
+    /// Extra java command line options.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub java_flag: Vec<String>,
+    /// Minecraft client `.jar` file override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mc_jar: Option<Artifact>,
+    /// Command line options passed to the Minecraft game program.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mc_flag: Vec<String>,
+    /// Minecraft asset index JSON file override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mc_asset_index: Option<Artifact>,
+    /// Minecraft mod files to be added to the `mods` folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mc_mod: Vec<Artifact>,
 }

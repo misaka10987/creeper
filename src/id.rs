@@ -23,7 +23,7 @@ pub struct Id(String);
 
 impl Id {
     /// Initial letter indexed storage path of the package, relative to the storage root.
-    pub fn sto_path(&self) -> impl AsRef<Path> {
+    pub fn indexed_path(&self) -> impl AsRef<Path> {
         let head4 = self
             .chars()
             .filter(char::is_ascii_lowercase)

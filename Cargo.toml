@@ -38,3 +38,4 @@ sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
 serde_with = "3.16.1"
 spdx = "0.13.2"
 url = { version = "2.5.8", features = ["serde"] }
+pubgrub = "0.3.0"

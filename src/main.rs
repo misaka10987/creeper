@@ -11,6 +11,7 @@ mod pack;
 mod path;
 mod pbar;
 mod prelude;
+mod pubgrub;
 mod registry;
 mod storage;
 mod tool;

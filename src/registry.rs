@@ -1,12 +1,11 @@
-use std::{cmp::Reverse, iter::Rev, path::PathBuf};
+use std::{cmp::Reverse, collections::BTreeSet, fs::read_to_string, path::PathBuf};
 
 use anyhow::{anyhow, bail};
 use pubgrub::{Dependencies, DependencyProvider, Ranges};
 use semver::Version;
 use stop::fatal;
-use tokio::fs::read_to_string;
+use tracing::error;
 use url::Url;
-use walkdir::WalkDir;
 
 use crate::{Id, pack::PackNode, pubgrub::ranges_for};
 
@@ -23,26 +22,40 @@ impl Registry {
         Ok(Self { url, path })
     }
 
-    pub async fn get(&self, package: &Id) -> anyhow::Result<Vec<PackNode>> {
-        let path = self.path.join(package.indexed_path());
-        let mut res = vec![];
-        for i in WalkDir::new(path) {
-            let entry = i?;
-            let content = read_to_string(entry.path()).await?;
-            let node = toml::from_str(&content)?;
-            res.push(node);
-        }
-        Ok(res)
+    pub fn get(&self, package: &Id, version: &Version, rev: u32) -> anyhow::Result<PackNode> {
+        let path = self
+            .path
+            .join(package.indexed_path())
+            .join(version.to_string())
+            .join(rev.to_string())
+            .with_extension("toml");
+        let content = read_to_string(path)?;
+        let node = toml::from_str(&content)?;
+        Ok(node)
     }
 
-    pub fn blocking_get(&self, package: &Id) -> anyhow::Result<Vec<PackNode>> {
+    pub fn get_version(&self, package: &Id) -> anyhow::Result<BTreeSet<Version>> {
         let path = self.path.join(package.indexed_path());
-        let mut res = vec![];
-        for i in WalkDir::new(path) {
+        let mut res = BTreeSet::new();
+        for i in path.read_dir()? {
             let entry = i?;
-            let content = std::fs::read_to_string(entry.path())?;
-            let node = toml::from_str(&content)?;
-            res.push(node);
+            if !entry.file_type()?.is_dir() {
+                bail!(
+                    "invalid package registry item {}, expected a directory",
+                    entry.path().display()
+                );
+            }
+            let name = entry.file_name().into_string().map_err(|s| {
+                anyhow!("invalid package registry item {s:?}, expected valid UTF-8 file name")
+            })?;
+            if let Ok(version) = name.parse() {
+                res.insert(version);
+            } else {
+                bail!(
+                    "invalid package registry item {}, expected a semver version",
+                    entry.path().display()
+                );
+            }
         }
         Ok(res)
     }
@@ -69,12 +82,13 @@ impl DependencyProvider for Registry {
         // changed for a package?
         _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
     ) -> Self::Priority {
-        let available = self
-            .blocking_get(package)
-            .unwrap_or_else(fatal!())
-            .into_iter()
-            .filter(|v| range.contains(&v.version));
-        Reverse(available.count())
+        let candidates = self.get_version(package).unwrap_or_else(|e| {
+            error!("failed to prioritize package {package}: {e}");
+            error!("package resolution will continue with no available versions for this package");
+            BTreeSet::new()
+        });
+        let available = candidates.iter().filter(|v| range.contains(v)).count();
+        Reverse(available)
     }
 
     fn choose_version(
@@ -82,14 +96,13 @@ impl DependencyProvider for Registry {
         package: &Self::P,
         range: &Self::VS,
     ) -> Result<Option<Self::V>, Self::Err> {
-        let mut available = self
-            .blocking_get(package)
-            .unwrap_or_else(fatal!())
+        let candidates = self.get_version(package)?;
+        let available = candidates
             .into_iter()
-            .filter(|v| range.contains(&v.version))
-            .collect::<Vec<_>>();
-        available.sort_by(|a, b| a.version.cmp(&b.version));
-        Ok(available.last().map(|v| v.version.clone()))
+            .filter(|v| range.contains(v))
+            .collect::<BTreeSet<_>>();
+        let highest = available.last();
+        Ok(highest.cloned())
     }
 
     fn get_dependencies(
@@ -97,18 +110,13 @@ impl DependencyProvider for Registry {
         package: &Self::P,
         version: &Self::V,
     ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
-        let chosen = self
-            .blocking_get(package)
-            .unwrap_or_else(fatal!())
+        // TODO: support revision number instead of defaulting to 0
+        let node = self.get(package, version, 0)?;
+        let dep = node
+            .dep
             .into_iter()
-            .find(|v| v.version == *version)
-            .expect("version chosen by pubgrub is missing");
-        Ok(Dependencies::Available(
-            chosen
-                .deps
-                .into_iter()
-                .map(|(k, v)| (k, ranges_for(v).unwrap_or_else(fatal!())))
-                .collect(),
-        ))
+            .map(|(k, v)| (k, ranges_for(v).unwrap_or_else(fatal!())))
+            .collect();
+        Ok(Dependencies::Available(dep))
     }
 }

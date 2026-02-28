@@ -9,10 +9,28 @@ use spdx::Expression;
 use crate::{Artifact, Id};
 
 /// The package node in the dependency graph, containing only metadata needed for dependency resolution.
-#[serde_inline_default]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct PackNode {
+    /// Dependencies.
+    #[serde(
+        default,
+        rename = "dependencies",
+        skip_serializing_if = "HashMap::is_empty"
+    )]
+    pub dep: HashMap<Id, VersionReq>,
+}
+
+#[allow(unused)] // used by `#[serde(skip_serializing_if = "is_zero")]`
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+/// A package definition.
+#[serde_inline_default]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Package {
     /// Unique package identifier.
     /// See [`Id`] for specifications.
     pub id: Id,
@@ -22,24 +40,6 @@ pub struct PackNode {
     #[serde_inline_default(0)]
     #[serde(skip_serializing_if = "is_zero")]
     pub rev: u32,
-    /// Dependencies.
-    #[serde(
-        default,
-        rename = "dependencies",
-        skip_serializing_if = "HashMap::is_empty"
-    )]
-    pub deps: HashMap<Id, VersionReq>,
-}
-
-#[allow(unused)] // used by `#[serde(skip_serializing_if = "is_zero")]`
-fn is_zero(n: &u32) -> bool {
-    *n == 0
-}
-
-/// A package definition.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Package {
     #[serde(flatten)]
     pub node: PackNode,
     #[serde(rename = "package")]

@@ -33,10 +33,12 @@ use tokio::runtime;
 use tracing::{Level, level_filters::LevelFilter};
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use url::Url;
 
 use crate::{
     cmd::{Execute, run::Run},
     path::init_creeper_dirs,
+    registry::Registry,
     storage::StorageManager,
     tool::Tool,
     vanilla::VanillaManager,
@@ -51,6 +53,7 @@ pub struct CreeperInner {
     storage: StorageManager,
     vanilla: VanillaManager,
     http: Client,
+    registry: Registry,
     inst_dir: OnceLock<PathBuf>,
     inst: OnceLock<Inst>,
 }
@@ -69,11 +72,13 @@ impl Deref for Creeper {
 impl Creeper {
     pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
         init_creeper_dirs().await?;
+        let registry = Registry::new(args.registry.clone()).await?;
         let val = CreeperInner {
             args,
             storage: StorageManager::new().await?,
             vanilla: VanillaManager::new(),
             http: Default::default(),
+            registry,
             inst_dir: OnceLock::new(),
             inst: OnceLock::new(),
         };
@@ -114,6 +119,11 @@ pub struct CreeperConfig {
     /// If not specified, would recursively look up parent directory from current directory until a `creeper.toml` is found.
     #[arg(name = "dir", short, long)]
     pub working_dir: Option<PathBuf>,
+    /// URL to the package registry.
+    ///
+    /// Note that only `file://` URLs are supported for now.
+    #[arg(long)]
+    pub registry: Url,
 }
 
 pub const CREEPER_TEXT_ART: &str = r#"

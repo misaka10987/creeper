@@ -1,9 +1,14 @@
-use std::{cmp::Reverse, collections::BTreeSet, fs::read_to_string, path::PathBuf};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeSet, HashMap},
+    fs::read_to_string,
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, bail};
 use creeper_semver_pubgrub::SemverPubgrub;
 use pubgrub::{Dependencies, DependencyProvider};
-use semver::Version;
+use semver::{Version, VersionReq};
 use tracing::error;
 use url::Url;
 
@@ -58,6 +63,80 @@ impl Registry {
             }
         }
         Ok(res)
+    }
+
+    pub fn resolve(&self, req: HashMap<Id, VersionReq>) -> anyhow::Result<HashMap<Id, Version>> {
+        struct Resolve<'a> {
+            registry: &'a Registry,
+            req: HashMap<Id, VersionReq>,
+        }
+
+        impl<'a> DependencyProvider for Resolve<'a> {
+            type P = Id;
+
+            type V = Version;
+
+            type VS = SemverPubgrub<Version>;
+
+            type Priority = Reverse<usize>;
+
+            type M = String;
+
+            type Err = crate::pubgrub::Error;
+
+            fn prioritize(
+                &self,
+                package: &Self::P,
+                range: &Self::VS,
+                // TODO(konsti): Are we always refreshing the priorities when `PackageResolutionStatistics`
+                // changed for a package?
+                _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
+            ) -> Self::Priority {
+                if *package == Id::root() {
+                    return Reverse(usize::MAX);
+                }
+                self.registry
+                    .prioritize(package, range, _package_conflicts_counts)
+            }
+
+            fn choose_version(
+                &self,
+                package: &Self::P,
+                range: &Self::VS,
+            ) -> Result<Option<Self::V>, Self::Err> {
+                if *package == Id::root() {
+                    return Ok(Some(Version::new(0, 0, 0)));
+                }
+                self.registry.choose_version(package, range)
+            }
+
+            fn get_dependencies(
+                &self,
+                package: &Self::P,
+                version: &Self::V,
+            ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
+                if *package == Id::root() {
+                    return Ok(Dependencies::Available(
+                        self.req
+                            .iter()
+                            .map(|(k, v)| (k.clone(), SemverPubgrub::from(v)))
+                            .collect(),
+                    ));
+                }
+                self.registry.get_dependencies(package, version)
+            }
+        }
+
+        let resolve = Resolve {
+            registry: self,
+            req,
+        };
+        let sol = pubgrub::resolve(&resolve, Id::root(), Version::new(0, 0, 0));
+        // PubGrub's error holds internal references, thus we convert that to string to avoid lifetime issues
+        let sol = sol.map_err(|e| anyhow!("resolution error: {e}"))?;
+        // PubGrub uses non-default hasher, convert to standard before returning
+        let sol = sol.into_iter().collect();
+        Ok(sol)
     }
 }
 

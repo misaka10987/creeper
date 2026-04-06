@@ -81,10 +81,8 @@ impl FromStr for Id {
         }
 
         // consist of valid characters
-        for c in chars {
-            if !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_') {
-                bail!("invalid character {c}");
-            }
+        if !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_') {
+            bail!("must consist only of lowercase letters, digits, hyphens, and underscores");
         }
 
         Ok(Id(s.to_string()))

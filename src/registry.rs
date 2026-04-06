@@ -1,13 +1,13 @@
 use std::{cmp::Reverse, collections::BTreeSet, fs::read_to_string, path::PathBuf};
 
 use anyhow::{anyhow, bail};
-use pubgrub::{Dependencies, DependencyProvider, Ranges};
+use creeper_semver_pubgrub::SemverPubgrub;
+use pubgrub::{Dependencies, DependencyProvider};
 use semver::Version;
-use stop::fatal;
 use tracing::error;
 use url::Url;
 
-use crate::{Id, pack::PackNode, pubgrub::ranges_for};
+use crate::{Id, pack::PackNode};
 
 pub struct Registry {
     pub url: Url,
@@ -66,7 +66,7 @@ impl DependencyProvider for Registry {
 
     type V = Version;
 
-    type VS = Ranges<Version>;
+    type VS = SemverPubgrub<Version>;
 
     type Priority = Reverse<usize>;
 
@@ -115,7 +115,7 @@ impl DependencyProvider for Registry {
         let dep = node
             .dep
             .into_iter()
-            .map(|(k, v)| (k, ranges_for(v).unwrap_or_else(fatal!())))
+            .map(|(k, v)| (k, SemverPubgrub::from(&v)))
             .collect();
         Ok(Dependencies::Available(dep))
     }

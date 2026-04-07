@@ -1,6 +1,9 @@
 use crate::{Creeper, cmd::Execute};
 use clap::Parser;
+use colored::Colorize;
+use inquire::Editor;
 use semver::Version;
+use tracing::trace;
 
 /// Collection of CLI tools basically for development use.
 #[derive(Clone, Debug, Parser)]
@@ -9,6 +12,7 @@ pub enum Tool {
     FetchManifest(FetchManifest),
     FetchMcVersion(FetchMcVersion),
     VanillaInstall(VanillaInstall),
+    InteractiveResolve(InteractiveResolve),
 }
 
 impl Execute for Tool {
@@ -18,6 +22,7 @@ impl Execute for Tool {
             Tool::FetchManifest(fetch_manifest) => lib.execute(fetch_manifest).await,
             Tool::FetchMcVersion(fetch_mc_version) => lib.execute(fetch_mc_version).await,
             Tool::VanillaInstall(vanilla_install) => lib.execute(vanilla_install).await,
+            Tool::InteractiveResolve(interactive_resolve) => lib.execute(interactive_resolve).await,
         }
     }
 }
@@ -78,6 +83,30 @@ impl Execute for VanillaInstall {
         let install = lib.vanilla_install(cmd.version).await?;
         let toml = serde_json::to_string_pretty(&install)?;
         println!("{toml}");
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Parser)]
+pub struct InteractiveResolve;
+
+impl Execute for InteractiveResolve {
+    async fn execute(lib: &Creeper, _cmd: Self) -> anyhow::Result<()> {
+        let toml = Editor::new(&format!(
+            "Input dependencies in TOML format, e.g. {}",
+            "minecraft = \"1.16.5\"".bold()
+        ))
+        .prompt()?;
+        let dep = toml::from_str(&toml)?;
+        let sol = match lib.registry.resolve(dep) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Dependency resolution failed: {e}");
+                return Ok(());
+            }
+        };
+        println!("Resolved {} packages:", sol.len());
+        println!("{}", toml::to_string_pretty(&sol)?);
         Ok(())
     }
 }

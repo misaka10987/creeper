@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail};
 use creeper_semver_pubgrub::SemverPubgrub;
 use pubgrub::{Dependencies, DependencyProvider};
 use semver::{Version, VersionReq};
-use tracing::error;
+use tracing::{debug, error, trace};
 use url::Url;
 
 use crate::{Id, pack::PackNode};
@@ -40,6 +40,7 @@ impl Registry {
     }
 
     pub fn get_version(&self, package: &Id) -> anyhow::Result<BTreeSet<Version>> {
+        trace!("retrieving versions for package {package}");
         let path = self.path.join(package.indexed_path());
         let mut res = BTreeSet::new();
         for i in path.read_dir()? {
@@ -127,6 +128,8 @@ impl Registry {
             }
         }
 
+        debug!("resolving {} required packages", req.len());
+
         let resolve = Resolve {
             registry: self,
             req,
@@ -161,6 +164,7 @@ impl DependencyProvider for Registry {
         // changed for a package?
         _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
     ) -> Self::Priority {
+        trace!("determining priority for package {package}");
         let candidates = self.get_version(package).unwrap_or_else(|e| {
             error!("failed to prioritize package {package}: {e}");
             error!("package resolution will continue with no available versions for this package");
@@ -181,6 +185,7 @@ impl DependencyProvider for Registry {
             .filter(|v| range.contains(v))
             .collect::<BTreeSet<_>>();
         let highest = available.last();
+        trace!("selected version {highest:?} for package {package}");
         Ok(highest.cloned())
     }
 

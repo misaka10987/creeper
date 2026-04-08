@@ -66,6 +66,15 @@ impl Creeper {
         Ok(lib)
     }
 
+    pub async fn list_vanilla_version(&self) -> anyhow::Result<Vec<Version>> {
+        let manifest = self.vanilla_manifest().await?;
+        let mut list = vec![];
+        for v in &manifest.versions {
+            list.push(v.id.parse()?);
+        }
+        Ok(list)
+    }
+
     pub async fn vanilla_manifest(&self) -> anyhow::Result<&Manifest> {
         if let Some(manifest) = self.vanilla.manifest.get() {
             return Ok(manifest);

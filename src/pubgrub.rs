@@ -2,11 +2,14 @@ use std::{
     cmp::Reverse,
     collections::{BTreeSet, HashMap},
     fmt::{Debug, Display},
+    iter::empty,
 };
 
 use anyhow::anyhow;
 use creeper_semver_pubgrub::SemverPubgrub;
-use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
+use pubgrub::{
+    DefaultStringReporter, Dependencies, DependencyConstraints, DependencyProvider, Reporter,
+};
 use semver::{Version, VersionReq};
 use tracing::{debug, error, trace};
 
@@ -157,12 +160,19 @@ impl DependencyProvider for Creeper {
         _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
     ) -> Self::Priority {
         trace!("determining priority for package {package}");
+
+        if package == &Id::vanilla() {
+            // determine minecraft version first
+            return Reverse(0);
+        }
+
         let candidates = self.registry.get_version(package).unwrap_or_else(|e| {
             error!("failed to prioritize package {package}: {e}");
             error!("package resolution will continue with no available versions for this package");
             BTreeSet::new()
         });
         let available = candidates.iter().filter(|v| range.contains(v)).count();
+        trace!("priority for {package} is {available} (smaller is higher)");
         Reverse(available)
     }
 
@@ -171,6 +181,18 @@ impl DependencyProvider for Creeper {
         package: &Self::P,
         range: &Self::VS,
     ) -> Result<Option<Self::V>, Self::Err> {
+        if package == &Id::vanilla() {
+            let version =
+                match range.as_singleton() {
+                    Some(x) => x,
+                    None => return Err(anyhow!(
+                        "minecraft version must be explicitly specified, package manager refusing to choose version"
+                    )
+                    .into()),
+                };
+            return Ok(Some(version.clone()));
+        }
+
         let candidates = self.registry.get_version(package)?;
         let available = candidates
             .into_iter()
@@ -186,6 +208,11 @@ impl DependencyProvider for Creeper {
         package: &Self::P,
         version: &Self::V,
     ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
+        if package == &Id::vanilla() {
+            // `HashMap::new()` is only available with the default hasher
+            return Ok(Dependencies::Available(empty().collect()));
+        }
+
         // TODO: support revision number instead of defaulting to 0
         let node = self.registry.get(package, version, 0)?;
         let dep = node

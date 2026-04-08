@@ -122,7 +122,7 @@ pub struct CreeperConfig {
     /// URL to the package registry.
     ///
     /// Note that only `file://` URLs are supported for now.
-    #[arg(long)]
+    #[arg(long, default_value = "file:///")]
     pub registry: Url,
 }
 

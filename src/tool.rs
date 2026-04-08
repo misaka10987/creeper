@@ -3,6 +3,7 @@ use clap::Parser;
 use colored::Colorize;
 use inquire::Editor;
 use semver::Version;
+use stop::fatal;
 
 /// Collection of CLI tools basically for development use.
 #[derive(Clone, Debug, Parser)]
@@ -100,11 +101,10 @@ impl Execute for InteractiveResolve {
         let sol = match lib.registry.resolve(dep) {
             Ok(x) => x,
             Err(e) => {
-                println!("Dependency resolution failed: {e}");
-                return Ok(());
+                fatal!("Dependency resolution failed: {}", e);
             }
         };
-        println!("Resolved {} packages:", sol.len());
+        eprintln!("Resolved {} packages:", sol.len());
         println!("{}", toml::to_string_pretty(&sol)?);
         Ok(())
     }

@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{anyhow, bail};
 use creeper_semver_pubgrub::SemverPubgrub;
-use pubgrub::{Dependencies, DependencyProvider};
+use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
 use semver::{Version, VersionReq};
 use tracing::{debug, error, trace};
 use url::Url;
@@ -134,9 +134,28 @@ impl Registry {
             registry: self,
             req,
         };
-        let sol = pubgrub::resolve(&resolve, Id::root(), Version::new(0, 0, 0));
-        // PubGrub's error holds internal references, thus we convert that to string to avoid lifetime issues
-        let sol = sol.map_err(|e| anyhow!("resolution error: {e}"))?;
+        let res = pubgrub::resolve(&resolve, Id::root(), Version::new(0, 0, 0));
+
+        let sol = res.map_err(|e| match e {
+            pubgrub::PubGrubError::NoSolution(derivation_tree) => {
+                let report = DefaultStringReporter::report(&derivation_tree);
+                anyhow!("no solution:\n{report}")
+            }
+            pubgrub::PubGrubError::ErrorRetrievingDependencies {
+                package,
+                version,
+                source,
+            } => anyhow!(
+                "failed to retrieve dependencies for package {package} version {version}: {source}"
+            ),
+            pubgrub::PubGrubError::ErrorChoosingVersion { package, source } => {
+                anyhow!("failed to choose version for package {package}: {source}")
+            }
+            pubgrub::PubGrubError::ErrorInShouldCancel(_) => {
+                anyhow!("package resolution cancelled")
+            }
+        })?;
+
         // PubGrub uses non-default hasher, convert to standard before returning
         let sol = sol.into_iter().collect();
         Ok(sol)

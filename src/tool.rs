@@ -3,7 +3,6 @@ use clap::Parser;
 use colored::Colorize;
 use inquire::Editor;
 use semver::Version;
-use tracing::trace;
 
 /// Collection of CLI tools basically for development use.
 #[derive(Clone, Debug, Parser)]
@@ -16,8 +15,8 @@ pub enum Tool {
 }
 
 impl Execute for Tool {
-    async fn execute(lib: &Creeper, cmd: Self) -> anyhow::Result<()> {
-        match cmd {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        match self {
             Tool::LoadInst(load_inst) => lib.execute(load_inst).await,
             Tool::FetchManifest(fetch_manifest) => lib.execute(fetch_manifest).await,
             Tool::FetchMcVersion(fetch_mc_version) => lib.execute(fetch_mc_version).await,
@@ -32,7 +31,7 @@ impl Execute for Tool {
 pub struct LoadInst;
 
 impl Execute for LoadInst {
-    async fn execute(lib: &Creeper, _cmd: Self) -> anyhow::Result<()> {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let inst = lib.inst().await?;
         let toml = toml::to_string_pretty(inst)?;
         println!("{toml}");
@@ -45,7 +44,7 @@ impl Execute for LoadInst {
 pub struct FetchManifest;
 
 impl Execute for FetchManifest {
-    async fn execute(lib: &Creeper, _cmd: Self) -> anyhow::Result<()> {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let manifest = lib.vanilla_manifest().await?;
         let json = serde_json::to_string_pretty(manifest)?;
         println!("{json}");
@@ -62,8 +61,8 @@ pub struct FetchMcVersion {
 }
 
 impl Execute for FetchMcVersion {
-    async fn execute(lib: &Creeper, cmd: Self) -> anyhow::Result<()> {
-        let mc_version = lib.vanilla_version(cmd.version).await?;
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let mc_version = lib.vanilla_version(self.version).await?;
         let json = serde_json::to_string_pretty(&mc_version)?;
         println!("{json}");
         Ok(())
@@ -79,8 +78,8 @@ pub struct VanillaInstall {
 }
 
 impl Execute for VanillaInstall {
-    async fn execute(lib: &Creeper, cmd: Self) -> anyhow::Result<()> {
-        let install = lib.vanilla_install(cmd.version).await?;
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let install = lib.vanilla_install(self.version).await?;
         let toml = serde_json::to_string_pretty(&install)?;
         println!("{toml}");
         Ok(())
@@ -91,7 +90,7 @@ impl Execute for VanillaInstall {
 pub struct InteractiveResolve;
 
 impl Execute for InteractiveResolve {
-    async fn execute(lib: &Creeper, _cmd: Self) -> anyhow::Result<()> {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let toml = Editor::new(&format!(
             "Input dependencies in TOML format, e.g. {}",
             "minecraft = \"1.16.5\"".bold()

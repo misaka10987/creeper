@@ -8,7 +8,7 @@ use crate::{Creeper, cmd::Execute};
 pub struct Run;
 
 impl Execute for Run {
-    async fn execute(lib: &Creeper, _cmd: Self) -> anyhow::Result<()> {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let inst = lib.inst().await?;
         let mut cmd = inst.launch(lib.inst_dir()?);
         println!("{:?}", cmd);

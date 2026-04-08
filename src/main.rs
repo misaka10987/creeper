@@ -107,7 +107,7 @@ impl Creeper {
     }
 
     pub async fn execute(&self, cmd: impl Execute) -> anyhow::Result<()> {
-        Execute::execute(self, cmd).await
+        cmd.execute(self).await
     }
 }
 
@@ -165,8 +165,8 @@ enum SubCommand {
 }
 
 impl Execute for SubCommand {
-    async fn execute(lib: &Creeper, cmd: SubCommand) -> anyhow::Result<()> {
-        match cmd {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        match self {
             SubCommand::Tool(tool) => lib.execute(tool).await,
             SubCommand::Run(run) => lib.execute(run).await,
             SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),

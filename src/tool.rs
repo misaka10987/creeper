@@ -1,7 +1,7 @@
+use std::collections::HashMap;
+
 use crate::{Creeper, cmd::Execute};
 use clap::Parser;
-use colored::Colorize;
-use inquire::Editor;
 use semver::Version;
 use stop::fatal;
 
@@ -12,7 +12,7 @@ pub enum Tool {
     FetchManifest(FetchManifest),
     FetchMcVersion(FetchMcVersion),
     VanillaInstall(VanillaInstall),
-    InteractiveResolve(InteractiveResolve),
+    Resolve(Resolve),
 }
 
 impl Execute for Tool {
@@ -22,7 +22,7 @@ impl Execute for Tool {
             Tool::FetchManifest(fetch_manifest) => lib.execute(fetch_manifest).await,
             Tool::FetchMcVersion(fetch_mc_version) => lib.execute(fetch_mc_version).await,
             Tool::VanillaInstall(vanilla_install) => lib.execute(vanilla_install).await,
-            Tool::InteractiveResolve(interactive_resolve) => lib.execute(interactive_resolve).await,
+            Tool::Resolve(resolve) => lib.execute(resolve).await,
         }
     }
 }
@@ -88,17 +88,22 @@ impl Execute for VanillaInstall {
 }
 
 #[derive(Clone, Debug, Parser)]
-pub struct InteractiveResolve;
+pub struct Resolve {
+    #[arg(long)]
+    pub req: Vec<String>,
+}
 
-impl Execute for InteractiveResolve {
+impl Execute for Resolve {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let toml = Editor::new(&format!(
-            "Input dependencies in TOML format, e.g. {}",
-            "minecraft = \"1.16.5\"".bold()
-        ))
-        .prompt()?;
-        let dep = toml::from_str(&toml)?;
-        let sol = match lib.registry.resolve(dep) {
+        let mut req = HashMap::new();
+        for s in self.req {
+            let parts = s.split("@").collect::<Vec<_>>();
+            if parts.len() != 2 {
+                fatal!("invalid requirement {}, expected <package>@<version-req>", s);
+            }
+            req.insert(parts[0].parse()?, parts[1].parse()?);
+        }
+        let sol = match lib.registry.resolve(req) {
             Ok(x) => x,
             Err(e) => {
                 fatal!("Dependency resolution failed: {}", e);

@@ -1,4 +1,16 @@
-use std::fmt::{Debug, Display};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeSet, HashMap},
+    fmt::{Debug, Display},
+};
+
+use anyhow::anyhow;
+use creeper_semver_pubgrub::SemverPubgrub;
+use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
+use semver::{Version, VersionReq};
+use tracing::{debug, error, trace};
+
+use crate::{Creeper, Id};
 
 pub struct Error(anyhow::Error);
 
@@ -23,5 +35,164 @@ impl Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.0.source()
+    }
+}
+
+impl Creeper {
+    pub fn resolve(&self, req: HashMap<Id, VersionReq>) -> anyhow::Result<HashMap<Id, Version>> {
+        struct Resolve {
+            registry: Creeper,
+            req: HashMap<Id, VersionReq>,
+        }
+
+        impl DependencyProvider for Resolve {
+            type P = Id;
+
+            type V = Version;
+
+            type VS = SemverPubgrub<Version>;
+
+            type Priority = Reverse<usize>;
+
+            type M = String;
+
+            type Err = crate::pubgrub::Error;
+
+            fn prioritize(
+                &self,
+                package: &Self::P,
+                range: &Self::VS,
+                // TODO(konsti): Are we always refreshing the priorities when `PackageResolutionStatistics`
+                // changed for a package?
+                _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
+            ) -> Self::Priority {
+                if *package == Id::root() {
+                    return Reverse(usize::MAX);
+                }
+                self.registry
+                    .prioritize(package, range, _package_conflicts_counts)
+            }
+
+            fn choose_version(
+                &self,
+                package: &Self::P,
+                range: &Self::VS,
+            ) -> Result<Option<Self::V>, Self::Err> {
+                if *package == Id::root() {
+                    return Ok(Some(Version::new(0, 0, 0)));
+                }
+                self.registry.choose_version(package, range)
+            }
+
+            fn get_dependencies(
+                &self,
+                package: &Self::P,
+                version: &Self::V,
+            ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
+                if *package == Id::root() {
+                    return Ok(Dependencies::Available(
+                        self.req
+                            .iter()
+                            .map(|(k, v)| (k.clone(), SemverPubgrub::from(v)))
+                            .collect(),
+                    ));
+                }
+                self.registry.get_dependencies(package, version)
+            }
+        }
+
+        debug!("resolving {} required packages", req.len());
+
+        let resolve = Resolve {
+            registry: self.clone(),
+            req,
+        };
+        let res = pubgrub::resolve(&resolve, Id::root(), Version::new(0, 0, 0));
+
+        let sol = res.map_err(|e| match e {
+            pubgrub::PubGrubError::NoSolution(derivation_tree) => {
+                let report = DefaultStringReporter::report(&derivation_tree);
+                anyhow!("no solution:\n{report}")
+            }
+            pubgrub::PubGrubError::ErrorRetrievingDependencies {
+                package,
+                version,
+                source,
+            } => anyhow!(
+                "failed to retrieve dependencies for package {package} version {version}: {source}"
+            ),
+            pubgrub::PubGrubError::ErrorChoosingVersion { package, source } => {
+                anyhow!("failed to choose version for package {package}: {source}")
+            }
+            pubgrub::PubGrubError::ErrorInShouldCancel(_) => {
+                anyhow!("package resolution cancelled")
+            }
+        })?;
+
+        // PubGrub uses non-default hasher, convert to standard before returning
+        let sol = sol.into_iter().collect();
+        Ok(sol)
+    }
+}
+
+impl DependencyProvider for Creeper {
+    type P = Id;
+
+    type V = Version;
+
+    type VS = SemverPubgrub<Version>;
+
+    type Priority = Reverse<usize>;
+
+    type M = String;
+
+    type Err = Error;
+
+    fn prioritize(
+        &self,
+        package: &Self::P,
+        range: &Self::VS,
+        // TODO(konsti): Are we always refreshing the priorities when `PackageResolutionStatistics`
+        // changed for a package?
+        _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
+    ) -> Self::Priority {
+        trace!("determining priority for package {package}");
+        let candidates = self.registry.get_version(package).unwrap_or_else(|e| {
+            error!("failed to prioritize package {package}: {e}");
+            error!("package resolution will continue with no available versions for this package");
+            BTreeSet::new()
+        });
+        let available = candidates.iter().filter(|v| range.contains(v)).count();
+        Reverse(available)
+    }
+
+    fn choose_version(
+        &self,
+        package: &Self::P,
+        range: &Self::VS,
+    ) -> Result<Option<Self::V>, Self::Err> {
+        let candidates = self.registry.get_version(package)?;
+        let available = candidates
+            .into_iter()
+            .filter(|v| range.contains(v))
+            .collect::<BTreeSet<_>>();
+        let highest = available.last();
+        trace!("selected version {highest:?} for package {package}");
+        Ok(highest.cloned())
+    }
+
+    fn get_dependencies(
+        &self,
+        package: &Self::P,
+        version: &Self::V,
+    ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
+        // TODO: support revision number instead of defaulting to 0
+        let node = self.registry.get(package, version, 0)?;
+        let dep = node
+            .dep
+            .into_iter()
+            .map(|(k, v)| (k, SemverPubgrub::from(&v)))
+            .collect();
+        Ok(Dependencies::Available(dep))
     }
 }

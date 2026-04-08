@@ -99,11 +99,14 @@ impl Execute for Resolve {
         for s in self.req {
             let parts = s.split("@").collect::<Vec<_>>();
             if parts.len() != 2 {
-                fatal!("invalid requirement {}, expected <package>@<version-req>", s);
+                fatal!(
+                    "invalid requirement {}, expected <package>@<version-req>",
+                    s
+                );
             }
             req.insert(parts[0].parse()?, parts[1].parse()?);
         }
-        let sol = match lib.registry.resolve(req) {
+        let sol = match lib.resolve(req) {
             Ok(x) => x,
             Err(e) => {
                 fatal!("Dependency resolution failed: {}", e);

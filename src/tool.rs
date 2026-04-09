@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::{Creeper, cmd::Execute};
 use clap::Parser;
+use colored::Colorize;
 use semver::Version;
 use stop::fatal;
 
@@ -109,10 +110,10 @@ impl Execute for Resolve {
         let sol = match lib.resolve(req) {
             Ok(x) => x,
             Err(e) => {
-                fatal!("Dependency resolution failed: {}", e);
+                fatal!("dependency resolution failed: {}", e);
             }
         };
-        eprintln!("Resolved {} packages:", sol.len());
+        eprintln!("{} {} packages", "Resolved".bold().green(), sol.len());
         println!("{}", toml::to_string_pretty(&sol)?);
         Ok(())
     }

@@ -1,11 +1,13 @@
 use std::{collections::BTreeSet, fs::read_to_string, path::PathBuf};
 
 use anyhow::{anyhow, bail};
+use base64::{Engine, prelude::BASE64_URL_SAFE};
 use semver::Version;
-use tracing::trace;
+use tokio::{fs::try_exists, process::Command};
+use tracing::{debug, trace};
 use url::Url;
 
-use crate::{Id, pack::PackNode};
+use crate::{Id, pack::PackNode, path::creeper_cache_dir};
 
 pub struct Registry {
     pub url: Url,
@@ -13,10 +15,58 @@ pub struct Registry {
 }
 
 impl Registry {
+    pub fn cache_path(url: &Url) -> anyhow::Result<PathBuf> {
+        let path = creeper_cache_dir()?
+            .join("registry")
+            // URL contains invalid characters for filesystem
+            .join(BASE64_URL_SAFE.encode(url.as_str()));
+        Ok(path)
+    }
+
     pub async fn new(url: Url) -> anyhow::Result<Self> {
-        let path = url
-            .to_file_path()
-            .expect("TODO: only file:// URLs are supported for now");
+        let path = match url.scheme() {
+            "file" => {
+                let path = url
+                    .to_file_path()
+                    .map_err(|_| anyhow!("invalid file URL: {url}"))?;
+                debug!("using local registry at {}", path.display());
+                path
+            }
+            // TODO: lazy network initialization
+            "git+https" => {
+                let path = Self::cache_path(&url)?;
+                if try_exists(&path).await? {
+                    debug!("updating registry: {url}");
+                    let status = Command::new("git")
+                        .current_dir(&path)
+                        .arg("pull")
+                        .spawn()?
+                        .wait()
+                        .await?;
+                    if !status.success() {
+                        bail!("unable to update registry, command run failed");
+                    }
+                    path
+                } else {
+                    let url = url.as_str().strip_prefix("git+").unwrap().parse::<Url>()?;
+                    debug!("downloading registry: {url}");
+                    let status = Command::new("git")
+                        .arg("clone")
+                        .arg("--depth")
+                        .arg("1")
+                        .arg(url.as_str())
+                        .arg(&path)
+                        .spawn()?
+                        .wait()
+                        .await?;
+                    if !status.success() {
+                        bail!("unable to download registry, command run failed");
+                    }
+                    path
+                }
+            }
+            s => bail!("unsupported registry URL scheme: {s}"),
+        };
         Ok(Self { url, path })
     }
 

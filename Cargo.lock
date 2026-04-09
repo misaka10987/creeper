@@ -425,6 +425,7 @@ name = "creeper"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "blake3",
  "clap",
  "colored",
@@ -2820,6 +2821,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tracing",
  "windows-sys 0.61.2",

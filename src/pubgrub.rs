@@ -110,7 +110,7 @@ impl Creeper {
         };
         let res = pubgrub::resolve(&resolve, Id::root(), Version::new(0, 0, 0));
 
-        let sol = res.map_err(|e| match e {
+        let mut sol = res.map_err(|e| match e {
             pubgrub::PubGrubError::NoSolution(derivation_tree) => {
                 let report = DefaultStringReporter::report(&derivation_tree);
                 anyhow!("no solution:\n{report}")
@@ -129,6 +129,7 @@ impl Creeper {
                 anyhow!("package resolution cancelled")
             }
         })?;
+        sol.remove(&Id::root());
 
         // PubGrub uses non-default hasher, convert to standard before returning
         let sol = sol.into_iter().collect();

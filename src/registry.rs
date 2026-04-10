@@ -70,42 +70,38 @@ impl Registry {
         Ok(Self { url, path })
     }
 
-    pub fn get(&self, package: &Id, version: &Version, rev: u32) -> anyhow::Result<PackNode> {
+    pub fn get(&self, package: &Id, version: &Version, _rev: u32) -> anyhow::Result<PackNode> {
         let path = self
             .path
             .join(package.indexed_path())
-            .join(version.to_string())
-            .join(rev.to_string())
-            .with_extension("toml");
+            .join(format!("{version}.toml"));
+        trace!("loading {package} {version} from {}", path.display());
         let content = read_to_string(path)?;
         let node = toml::from_str(&content)?;
         Ok(node)
     }
 
     pub fn get_version(&self, package: &Id) -> anyhow::Result<BTreeSet<Version>> {
-        trace!("retrieving versions for package {package}");
+        trace!("retrieving versions for {package}");
         let path = self.path.join(package.indexed_path());
         let mut res = BTreeSet::new();
         for i in path.read_dir()? {
             let entry = i?;
-            if !entry.file_type()?.is_dir() {
+            let path = entry.path();
+            if !entry.file_type()?.is_file() || path.extension().is_none_or(|s| s != "toml") {
                 bail!(
-                    "invalid package registry item {}, expected a directory",
-                    entry.path().display()
+                    "invalid package registry item {}, expected TOML file",
+                    path.display()
                 );
             }
-            let name = entry.file_name().into_string().map_err(|s| {
-                anyhow!("invalid package registry item {s:?}, expected valid UTF-8 file name")
-            })?;
-            if let Ok(version) = name.parse() {
-                res.insert(version);
-            } else {
-                bail!(
-                    "invalid package registry item {}, expected a semver version",
-                    entry.path().display()
-                );
-            }
+            let name = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .ok_or(anyhow!("failed to retrieve version from filename"))?;
+
+            res.insert(name.parse()?);
         }
+        trace!("found {} version(s) for {}", res.len(), package);
         Ok(res)
     }
 }

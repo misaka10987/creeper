@@ -7,9 +7,7 @@ use std::{
 
 use anyhow::anyhow;
 use creeper_semver_pubgrub::SemverPubgrub;
-use pubgrub::{
-    DefaultStringReporter, Dependencies, DependencyConstraints, DependencyProvider, Reporter,
-};
+use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
 use semver::{Version, VersionReq};
 use tracing::{debug, error, trace};
 
@@ -159,7 +157,7 @@ impl DependencyProvider for Creeper {
         // changed for a package?
         _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
     ) -> Self::Priority {
-        trace!("determining priority for package {package}");
+        trace!("determining priority for {package}");
 
         if package == &Id::vanilla() {
             // determine minecraft version first
@@ -199,7 +197,11 @@ impl DependencyProvider for Creeper {
             .filter(|v| range.contains(v))
             .collect::<BTreeSet<_>>();
         let highest = available.last();
-        trace!("selected version {highest:?} for package {package}");
+        if let Some(version) = highest {
+            trace!("selected {package} {version}",);
+        } else {
+            trace!("no available version for {package} in {range}");
+        };
         Ok(highest.cloned())
     }
 

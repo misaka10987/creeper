@@ -166,6 +166,7 @@ impl Creeper {
         })?;
         let order = order
             .into_iter()
+            .rev()
             .map(|node| (node_to_id[&node].clone(), dep[node_to_id[&node]].clone()))
             .collect();
         Ok(order)

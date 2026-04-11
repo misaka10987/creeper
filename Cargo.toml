@@ -21,7 +21,12 @@ toml = "1.1.2"
 stop = "0.2.0"
 walkdir = "2.5.0"
 serde-inline-default = "1.0.1"
-tokio = { version = "1.51.0", features = ["fs", "rt-multi-thread", "tracing", "process"] }
+tokio = { version = "1.51.0", features = [
+    "fs",
+    "rt-multi-thread",
+    "tracing",
+    "process",
+] }
 mc-launchermeta = "0.1.1"
 dirs = "6.0.0"
 tracing = "0.1.44"
@@ -42,3 +47,4 @@ creeper-semver-pubgrub = "0.2.0"
 inquire = { version = "0.9.4", features = ["editor"] }
 base64 = "0.22.1"
 petgraph = "0.8.3"
+indexmap = { version = "2.14.0", features = ["serde"] }

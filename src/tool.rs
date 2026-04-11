@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::{Creeper, cmd::Execute};
 use clap::Parser;
 use colored::Colorize;
+use indexmap::IndexMap;
 use semver::Version;
 use stop::fatal;
 
@@ -92,6 +93,8 @@ impl Execute for VanillaInstall {
 pub struct Resolve {
     #[arg(long)]
     pub req: Vec<String>,
+    #[arg(long)]
+    pub sort: bool,
 }
 
 impl Execute for Resolve {
@@ -114,6 +117,18 @@ impl Execute for Resolve {
             }
         };
         eprintln!("{} {} packages", "Resolved".bold().green(), sol.len());
+
+        if self.sort {
+            let sorted = lib.sort_dependency(sol)?;
+            let mut map = IndexMap::new();
+            for (k, v) in sorted {
+                map.insert(k, v);
+            }
+            eprintln!("{} {} packages (from dependencies to dependents)", "Sorted".bold().green(), map.len());
+            println!("{}", toml::to_string_pretty(&map)?);
+            return Ok(());
+        };
+
         println!("{}", toml::to_string_pretty(&sol)?);
         Ok(())
     }

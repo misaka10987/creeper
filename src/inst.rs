@@ -1,64 +1,61 @@
-use std::path::{Path, PathBuf};
+use std::{
+    env::current_dir,
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
-use serde::{Deserialize, Serialize};
-use serde_inline_default::serde_inline_default;
-use tokio::fs::read_to_string;
+use anyhow::anyhow;
+use tokio::fs::{read_to_string, try_exists};
 
-use crate::{Java, User};
+use crate::Package;
 
-/// Defines a game instance.
-///
-/// This is stored in `creeper.toml`.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct Inst {
-    /// Name for this instance.
-    ///
-    /// This is used by the `INST_NAME` variable passed to the game.
-    pub name: String,
-
-    pub user: User,
-
-    pub java: Java,
-
-    /// Minecraft configuration.
-    #[serde(rename = "minecraft")]
-    pub mc: MCConfig,
+pub struct InstManager {
+    dir: OnceLock<PathBuf>,
+    pack: OnceLock<Package>,
 }
 
-impl Inst {
-    pub async fn load(dir: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let dir = dir.as_ref();
-        let toml = read_to_string(dir.join("creeper.toml")).await?;
-        let val = toml::from_str(&toml)?;
-        Ok(val)
-    }
-
-    /// Given a certain path, retrive the game instance it belongs to.
-    pub fn find_dir(start: impl AsRef<Path>) -> Option<PathBuf> {
-        let curr = start.as_ref();
-        if curr.join("creeper.toml").exists() {
-            return Some(curr.into());
+impl InstManager {
+    pub fn new(dir: Option<PathBuf>) -> Self {
+        let d = OnceLock::new();
+        if let Some(dir) = dir {
+            d.set(dir).unwrap();
         }
-        curr.parent().and_then(Self::find_dir)
+        Self {
+            dir: d,
+            pack: OnceLock::new(),
+        }
     }
-}
 
-#[serde_inline_default]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct MCConfig {
-    /// Additional flags passed to the game.
-    #[serde(default)]
-    pub game_flags: Vec<String>,
+    async fn find_dir(start: impl AsRef<Path>) -> anyhow::Result<PathBuf> {
+        let mut curr = start.as_ref().to_path_buf();
+        loop {
+            if try_exists(curr.join("creeper.toml")).await? {
+                break Ok(curr);
+            }
+            let parent = curr.parent().ok_or(anyhow!("not in any game instance"))?;
+            curr = parent.into();
+        }
+    }
 
-    /// Initial window width.
-    #[serde_inline_default(854)]
-    pub width: i32,
+    pub async fn dir(&self) -> anyhow::Result<&PathBuf> {
+        if let Some(dir) = self.dir.get() {
+            return Ok(dir);
+        }
 
-    /// Initial window height.
-    #[serde_inline_default(480)]
-    pub height: i32,
+        let found = Self::find_dir(current_dir()?).await?;
+        Ok(self.dir.get_or_init(|| found))
+    }
+
+    pub async fn pack(&self) -> anyhow::Result<&Package> {
+        if let Some(pack) = self.pack.get() {
+            return Ok(pack);
+        }
+
+        let path = self.dir().await?.join("creeper.toml");
+        let toml = read_to_string(path).await?;
+        let pack = toml::from_str(&toml)?;
+        Ok(self.pack.get_or_init(|| pack))
+    }
 }
 
 // impl LaunchOption for InstConfig {

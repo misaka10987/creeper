@@ -1,4 +1,3 @@
-use anyhow::bail;
 use clap::Parser;
 
 use crate::{Creeper, cmd::Execute};
@@ -8,14 +7,15 @@ use crate::{Creeper, cmd::Execute};
 pub struct Run;
 
 impl Execute for Run {
-    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let inst = lib.inst().await?;
-        let mut cmd = inst.launch(lib.inst_dir()?);
-        println!("{:?}", cmd);
-        let status = cmd.spawn()?.wait()?;
-        if !status.success() {
-            bail!("minecraft crashed: {status}")
-        }
-        Ok(())
+    async fn execute(self, _lib: &Creeper) -> anyhow::Result<()> {
+        todo!()
+        // let inst = lib.inst().await?;
+        // let mut cmd = inst.launch(lib.inst_dir()?);
+        // println!("{:?}", cmd);
+        // let status = cmd.spawn()?.wait()?;
+        // if !status.success() {
+        //     bail!("minecraft crashed: {status}")
+        // }
+        // Ok(())
     }
 }

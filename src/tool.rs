@@ -35,7 +35,7 @@ pub struct LoadInst;
 
 impl Execute for LoadInst {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let inst = lib.inst().await?;
+        let inst = lib.inst.pack().await?;
         let toml = toml::to_string_pretty(inst)?;
         println!("{toml}");
         Ok(())
@@ -124,7 +124,11 @@ impl Execute for Resolve {
             for (k, v) in sorted {
                 map.insert(k, v);
             }
-            eprintln!("{} {} packages (from dependencies to dependents)", "Sorted".bold().green(), map.len());
+            eprintln!(
+                "{} {} packages (from dependencies to dependents)",
+                "Sorted".bold().green(),
+                map.len()
+            );
             println!("{}", toml::to_string_pretty(&map)?);
             return Ok(());
         };

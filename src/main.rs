@@ -5,7 +5,7 @@ mod id;
 mod inst;
 mod java;
 mod launch;
-mod lock;
+// mod lock;
 mod mc;
 mod pack;
 mod path;
@@ -19,15 +19,9 @@ mod user;
 mod util;
 mod vanilla;
 
-use anyhow::anyhow;
 use clap::Parser;
 use reqwest::Client;
-use std::{
-    env::current_dir,
-    ops::Deref,
-    path::PathBuf,
-    sync::{Arc, OnceLock},
-};
+use std::{ops::Deref, path::PathBuf, sync::Arc};
 use stop::fatal;
 use tokio::runtime;
 use tracing::{Level, level_filters::LevelFilter};
@@ -37,6 +31,7 @@ use url::Url;
 
 use crate::{
     cmd::{Execute, run::Run},
+    inst::InstManager,
     path::init_creeper_dirs,
     registry::Registry,
     storage::StorageManager,
@@ -54,8 +49,7 @@ pub struct CreeperInner {
     vanilla: VanillaManager,
     http: Client,
     registry: Registry,
-    inst_dir: OnceLock<PathBuf>,
-    inst: OnceLock<Inst>,
+    inst: InstManager,
 }
 
 #[derive(Clone)]
@@ -73,37 +67,16 @@ impl Creeper {
     pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
         init_creeper_dirs().await?;
         let registry = Registry::new(args.registry.clone()).await?;
+        let inst = InstManager::new(args.working_dir.clone());
         let val = CreeperInner {
             args,
             storage: StorageManager::new().await?,
             vanilla: VanillaManager::new(),
             http: Default::default(),
             registry,
-            inst_dir: OnceLock::new(),
-            inst: OnceLock::new(),
+            inst,
         };
         Ok(Self(Arc::new(val)))
-    }
-
-    pub fn working_dir(&self) -> anyhow::Result<PathBuf> {
-        Ok(self.args.working_dir.clone().unwrap_or(current_dir()?))
-    }
-
-    pub fn inst_dir(&self) -> anyhow::Result<&PathBuf> {
-        if let Some(dir) = self.inst_dir.get() {
-            return Ok(dir);
-        }
-        let wd = self.working_dir()?;
-        let found = Inst::find_dir(wd).ok_or(anyhow!("not in any game instance"))?;
-        Ok(self.inst_dir.get_or_init(|| found))
-    }
-
-    pub async fn inst(&self) -> anyhow::Result<&Inst> {
-        if let Some(inst) = self.inst.get() {
-            return Ok(inst);
-        }
-        let inst = Inst::load(self.inst_dir()?).await?;
-        Ok(self.inst.get_or_init(|| inst))
     }
 
     pub async fn execute(&self, cmd: impl Execute) -> anyhow::Result<()> {

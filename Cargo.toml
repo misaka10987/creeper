@@ -41,3 +41,4 @@ pubgrub = "0.3.0"
 creeper-semver-pubgrub = "0.2.0"
 inquire = { version = "0.9.4", features = ["editor"] }
 base64 = "0.22.1"
+petgraph = "0.8.3"

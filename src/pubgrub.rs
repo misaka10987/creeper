@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::anyhow;
 use creeper_semver_pubgrub::SemverPubgrub;
+use petgraph::{algo::toposort, graph::DiGraph};
 use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
 use semver::{Version, VersionReq};
 use tracing::{debug, error, trace};
@@ -134,6 +135,40 @@ impl Creeper {
         // PubGrub uses non-default hasher, convert to standard before returning
         let sol = sol.into_iter().collect();
         Ok(sol)
+    }
+
+    pub fn sort_dependency(&self, dep: HashMap<Id, Version>) -> anyhow::Result<Vec<(Id, Version)>> {
+        let mut graph = DiGraph::<&Id, ()>::new();
+        let mut id_to_node = HashMap::new();
+        let mut node_to_id = HashMap::new();
+        for (package, _) in &dep {
+            let node = graph.add_node(package);
+            id_to_node.insert(package, node);
+            node_to_id.insert(node, package);
+        }
+        for (package, version) in &dep {
+            if !package.is_regular() {
+                todo!()
+            }
+            let dep = self.registry.get(package, version, 0)?.dep;
+            for (d, _) in dep {
+                let node_package = id_to_node[package];
+                let node_dep = id_to_node
+                    .get(&d)
+                    .ok_or(anyhow!("broken solution: dependency {d} not recorded"))?;
+                graph.add_edge(node_package, *node_dep, ());
+            }
+        }
+        let order = toposort(&graph, None).map_err(|e| {
+            let package = graph[e.node_id()];
+            error!("cycle detected around package {package}");
+            anyhow!("cycle in dependency DAG")
+        })?;
+        let order = order
+            .into_iter()
+            .map(|node| (node_to_id[&node].clone(), dep[node_to_id[&node]].clone()))
+            .collect();
+        Ok(order)
     }
 }
 

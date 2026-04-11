@@ -63,6 +63,19 @@ impl Id {
     pub fn fabric() -> Self {
         "fabric".parse().unwrap()
     }
+
+    /// Whether this is a regular package or a package to be specially handled by package manager.
+    pub fn is_regular(&self) -> bool {
+        const SPECIAL: [&str; 6] = [
+            "root",
+            "minecraft",
+            "vanilla",
+            "forge",
+            "neoforge",
+            "fabric",
+        ];
+        !SPECIAL.contains(&self.as_str())
+    }
 }
 
 impl Deref for Id {

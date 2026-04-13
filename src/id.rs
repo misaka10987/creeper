@@ -15,9 +15,11 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 ///
 /// A valid package identifier is a non-empty ascii string that
 ///
-/// - starts with a lowercase letter `a-z` ; and
+/// - starts with a lowercase letter `a-z`; and
 ///
-/// - consists only of lowercase letters `a-z` , digits `0-9` , hyphens `-` , and underscores `_` .
+/// - consists only of lowercase letters `a-z`, digits `0-9`, hyphens `-`, and underscores `_`; and
+///
+/// - does not end with a hyphen `-` or underscore `_`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct Id(String);
 
@@ -103,6 +105,11 @@ impl FromStr for Id {
         // consist of valid characters
         if !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_') {
             bail!("must consist only of lowercase letters, digits, hyphens, and underscores");
+        }
+
+        // does not end with hyphen or underscore
+        if s.ends_with('-') || s.ends_with('_') {
+            bail!("must not end with hyphen or underscore");
         }
 
         Ok(Id(s.to_string()))

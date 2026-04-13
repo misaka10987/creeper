@@ -276,7 +276,8 @@ impl Creeper {
         span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
         span.pb_set_length(len.unwrap_or(0));
 
-        let mut res = self.http_get(&src).await?;
+        let req = self.http.get(&src).build()?;
+        let mut res = self.http.execute(req).await?;
 
         if len.is_none() {
             span.pb_set_length(res.content_length().unwrap_or(0));

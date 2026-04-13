@@ -1,7 +1,6 @@
 mod checksum;
 mod cmd;
 mod game;
-mod http;
 mod id;
 mod java;
 mod launch;

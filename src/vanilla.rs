@@ -80,7 +80,12 @@ impl Creeper {
             return Ok(manifest);
         }
         info!("synchronizing minecraft version manifest");
-        let manifest = self.http_get(VERSION_MANIFEST_URL).await?.json().await?;
+
+        let req = self.http.get(VERSION_MANIFEST_URL).build()?;
+        let res = self.http.execute(req).await?;
+
+        let manifest = res.json().await?;
+
         Ok(self.vanilla.manifest.get_or_init(|| manifest))
     }
 
@@ -95,7 +100,11 @@ impl Creeper {
             .ok_or(anyhow!("minecraft version {version} not found in manifest"))?
             .url
             .to_owned();
-        let mc_version = self.http_get(url).await?.json::<McVersion>().await?;
+
+        let req = self.http.get(url).build()?;
+        let res = self.http.execute(req).await?;
+        let mc_version = res.json::<McVersion>().await?;
+
         self.vanilla
             .version
             .write()

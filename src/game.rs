@@ -9,12 +9,12 @@ use tokio::fs::{read_to_string, try_exists};
 
 use crate::Package;
 
-pub struct InstManager {
+pub struct GameManager {
     dir: OnceLock<PathBuf>,
     pack: OnceLock<Package>,
 }
 
-impl InstManager {
+impl GameManager {
     pub fn new(dir: Option<PathBuf>) -> Self {
         let d = OnceLock::new();
         if let Some(dir) = dir {

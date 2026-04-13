@@ -1,8 +1,8 @@
 mod checksum;
 mod cmd;
+mod game;
 mod http;
 mod id;
-mod inst;
 mod java;
 mod launch;
 // mod lock;
@@ -31,7 +31,7 @@ use url::Url;
 
 use crate::{
     cmd::{Execute, run::Run},
-    inst::InstManager,
+    game::GameManager,
     path::init_creeper_dirs,
     registry::Registry,
     storage::StorageManager,
@@ -49,7 +49,7 @@ pub struct CreeperInner {
     vanilla: VanillaManager,
     http: Client,
     registry: Registry,
-    inst: InstManager,
+    game: GameManager,
 }
 
 #[derive(Clone)]
@@ -67,14 +67,14 @@ impl Creeper {
     pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
         init_creeper_dirs().await?;
         let registry = Registry::new(args.registry.clone()).await?;
-        let inst = InstManager::new(args.working_dir.clone());
+        let inst = GameManager::new(args.working_dir.clone());
         let val = CreeperInner {
             args,
             storage: StorageManager::new().await?,
             vanilla: VanillaManager::new(),
             http: Default::default(),
             registry,
-            inst,
+            game: inst,
         };
         Ok(Self(Arc::new(val)))
     }

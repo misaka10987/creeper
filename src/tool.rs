@@ -35,7 +35,7 @@ pub struct LoadInst;
 
 impl Execute for LoadInst {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let inst = lib.inst.pack().await?;
+        let inst = lib.game.pack().await?;
         let toml = toml::to_string_pretty(inst)?;
         println!("{toml}");
         Ok(())

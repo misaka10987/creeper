@@ -66,7 +66,7 @@ impl Deref for Creeper {
 impl Creeper {
     pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
         init_creeper_dirs().await?;
-        let registry = Registry::new(args.registry.clone()).await?;
+        let registry = Registry::new(args.registry.clone())?;
         let inst = GameManager::new(args.working_dir.clone());
         let val = CreeperInner {
             args,

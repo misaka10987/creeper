@@ -7,7 +7,7 @@ use tokio::{fs::try_exists, process::Command};
 use tracing::{debug, trace};
 use url::Url;
 
-use crate::{Id, pack::PackNode, path::creeper_cache_dir};
+use crate::{Creeper, Id, pack::PackNode, path::creeper_cache_dir};
 
 pub struct Registry {
     pub url: Url,
@@ -23,7 +23,7 @@ impl Registry {
         Ok(path)
     }
 
-    pub async fn new(url: Url) -> anyhow::Result<Self> {
+    pub fn new(url: Url) -> anyhow::Result<Self> {
         let path = match url.scheme() {
             "file" => {
                 let path = url
@@ -32,42 +32,52 @@ impl Registry {
                 debug!("using local registry at {}", path.display());
                 path
             }
-            // TODO: lazy network initialization
+            "git+https" => Self::cache_path(&url)?,
+            s => bail!("unsupported registry URL scheme: {s}"),
+        };
+        Ok(Self { path, url })
+    }
+
+    async fn update(&self) -> anyhow::Result<()> {
+        match self.url.scheme() {
+            "file" => return Ok(()),
             "git+https" => {
-                let path = Self::cache_path(&url)?;
-                if try_exists(&path).await? {
-                    debug!("updating registry: {url}");
-                    let status = Command::new("git")
-                        .current_dir(&path)
-                        .arg("pull")
-                        .spawn()?
-                        .wait()
-                        .await?;
-                    if !status.success() {
-                        bail!("unable to update registry, command run failed");
-                    }
-                    path
-                } else {
-                    let url = url.as_str().strip_prefix("git+").unwrap().parse::<Url>()?;
+                if !try_exists(&self.path).await? {
+                    let url = self
+                        .url
+                        .as_str()
+                        .strip_prefix("git+")
+                        .unwrap()
+                        .parse::<Url>()?;
                     debug!("downloading registry: {url}");
                     let status = Command::new("git")
                         .arg("clone")
                         .arg("--depth")
                         .arg("1")
                         .arg(url.as_str())
-                        .arg(&path)
+                        .arg(&self.path)
                         .spawn()?
                         .wait()
                         .await?;
                     if !status.success() {
                         bail!("unable to download registry, command run failed");
                     }
-                    path
+                    return Ok(());
                 }
+                debug!("updating registry {}", self.url);
+                let status = Command::new("git")
+                    .current_dir(&self.path)
+                    .arg("pull")
+                    .spawn()?
+                    .wait()
+                    .await?;
+                if !status.success() {
+                    bail!("unable to update registry, command run failed");
+                }
+                Ok(())
             }
-            s => bail!("unsupported registry URL scheme: {s}"),
-        };
-        Ok(Self { url, path })
+            s => panic!("unsupported registry URL scheme: {s}"),
+        }
     }
 
     pub fn get(&self, package: &Id, version: &Version, _rev: u32) -> anyhow::Result<PackNode> {
@@ -103,5 +113,11 @@ impl Registry {
         }
         trace!("found {} version(s) for {}", res.len(), package);
         Ok(res)
+    }
+}
+
+impl Creeper {
+    pub async fn update_registry(&self) -> anyhow::Result<()> {
+        self.registry.update().await
     }
 }

@@ -110,6 +110,9 @@ impl Execute for Resolve {
             }
             req.insert(parts[0].parse()?, parts[1].parse()?);
         }
+
+        lib.update_registry().await?;
+
         let sol = match lib.resolve(req) {
             Ok(x) => x,
             Err(e) => {

@@ -6,6 +6,7 @@ mod id;
 mod java;
 mod launch;
 // mod lock;
+mod install;
 mod mc;
 mod pack;
 mod path;

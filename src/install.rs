@@ -1,0 +1,70 @@
+use std::{collections::HashMap, path::PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::Artifact;
+
+/// Things installed to the game instance by a package.
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Install {
+    /// Additional java libraries, prepended to the classpath when launching the game.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub java_lib: Vec<Artifact>,
+    /// Java main class override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub java_main_class: Option<String>,
+    /// Native libraries to be added.
+    #[serde(default, skip_serializing_if = "FileMap::is_empty")]
+    pub native: FileMap,
+    /// Extra java command line options.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub java_flag: Vec<String>,
+    /// Minecraft client `.jar` file override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mc_jar: Option<Artifact>,
+    /// Command line options passed to the Minecraft game program.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mc_flag: Vec<String>,
+    /// Minecraft asset index JSON file override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mc_asset_index: Option<Artifact>,
+    /// Minecraft mod files to be added to the `mods` folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mc_mod: Vec<Artifact>,
+}
+
+impl Install {
+    pub fn merge(self, next: Self) -> Self {
+        let mut new = self;
+        new.extend(Some(next));
+        new
+    }
+}
+
+impl Extend<Self> for Install {
+    fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
+        for next in iter {
+            let Self {
+                java_lib,
+                java_main_class,
+                native,
+                java_flag,
+                mc_jar,
+                mc_flag,
+                mc_asset_index,
+                mc_mod,
+            } = next;
+            self.java_lib.extend(java_lib);
+            self.java_main_class = self.java_main_class.take().or(java_main_class);
+            self.native.extend(native);
+            self.java_flag.extend(java_flag);
+            self.mc_jar = self.mc_jar.take().or(mc_jar);
+            self.mc_flag.extend(mc_flag);
+            self.mc_asset_index = self.mc_asset_index.take().or(mc_asset_index);
+            self.mc_mod.extend(mc_mod);
+        }
+    }
+}
+
+pub type FileMap = HashMap<PathBuf, Artifact>;

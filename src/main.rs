@@ -66,13 +66,14 @@ impl Deref for Creeper {
 impl Creeper {
     pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
         init_creeper_dirs().await?;
-        let registry = Registry::new(args.registry.clone())?;
+        let http = Client::default();
+        let registry = Registry::new(args.registry.clone(), http.clone())?;
         let inst = GameManager::new(args.working_dir.clone());
         let val = CreeperInner {
             args,
             storage: StorageManager::new().await?,
             vanilla: VanillaManager::new(),
-            http: Default::default(),
+            http,
             registry,
             game: inst,
         };
@@ -95,10 +96,7 @@ pub struct CreeperConfig {
     /// URL to the package registry.
     ///
     /// Note that only `file://` URLs are supported for now.
-    #[arg(
-        long,
-        default_value = "git+https://github.com/misaka10987/creeper-index.git"
-    )]
+    #[arg(long, default_value = "https://creeper-registry.pages.dev/")]
     pub registry: Url,
 }
 

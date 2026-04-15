@@ -30,7 +30,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 use crate::{
-    cmd::{Execute, run::Run},
+    cmd::{Execute, build_index::BuildIndex, run::Run},
     game::GameManager,
     path::init_creeper_dirs,
     registry::Registry,
@@ -134,6 +134,7 @@ enum SubCommand {
     #[command(subcommand)]
     Tool(Tool),
     Run(Run),
+    BuildIndex(BuildIndex),
     #[clap(hide = true)]
     AwwMan,
 }
@@ -144,6 +145,7 @@ impl Execute for SubCommand {
             SubCommand::Tool(tool) => lib.execute(tool).await,
             SubCommand::Run(run) => lib.execute(run).await,
             SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
+            SubCommand::BuildIndex(build_index) => lib.execute(build_index).await,
         }
     }
 }

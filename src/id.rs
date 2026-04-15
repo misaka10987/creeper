@@ -78,6 +78,35 @@ impl Id {
         ];
         !SPECIAL.contains(&self.as_str())
     }
+
+    pub fn is_valid_index_lv1(name: &str) -> bool {
+        if name.len() != 2 {
+            return false;
+        }
+        let mut chars = name.chars();
+        if !chars.next().unwrap().is_ascii_lowercase() {
+            return false;
+        }
+        chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+    }
+
+    pub fn is_valid_index_lv2(name: &str) -> bool {
+        if name.len() != 2 {
+            return false;
+        }
+        name.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+    }
+
+    pub fn is_of_index(&self, lv1: &str, lv2: &str) -> bool {
+        let head4 = self
+            .chars()
+            .filter(char::is_ascii_lowercase)
+            .chain(repeat('x'))
+            .take(4)
+            .collect::<String>();
+        &head4[0..2] == lv1 && &head4[2..4] == lv2
+    }
 }
 
 impl Deref for Id {

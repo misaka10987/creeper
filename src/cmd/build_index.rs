@@ -3,14 +3,13 @@ use std::{collections::BTreeMap, path::PathBuf, str::FromStr};
 use anyhow::{anyhow, bail};
 use clap::Parser;
 use semver::Version;
-use serde::{Deserialize, Serialize};
 use tokio::{
     fs::{File, create_dir_all, read_dir, read_to_string},
     io::{AsyncWriteExt, BufWriter},
 };
 use tracing::info;
 
-use crate::{Id, Package, cmd::Execute, pack::PackNode};
+use crate::{Id, Package, cmd::Execute, registry::IndexLine};
 
 /// Build the lookup index for a package registry.
 #[derive(Clone, Debug, Parser)]
@@ -137,13 +136,4 @@ impl Ord for VersionRev {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.partial_cmp(other).unwrap()
     }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-struct IndexLine {
-    id: Id,
-    version: Version,
-    rev: u32,
-    #[serde(flatten)]
-    node: PackNode,
 }

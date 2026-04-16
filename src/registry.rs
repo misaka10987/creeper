@@ -4,6 +4,7 @@ use anyhow::{anyhow, bail};
 use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use semver::Version;
+use serde::{Deserialize, Serialize};
 use tokio::{
     fs::{File, create_dir_all, read_to_string as async_read_to_string, try_exists},
     io::AsyncWriteExt,
@@ -105,39 +106,40 @@ impl Registry {
         }
     }
 
-    pub fn get(&self, package: &Id, version: &Version, _rev: u32) -> anyhow::Result<PackNode> {
+    pub fn get(&self, package: &Id, version: &Version, rev: u32) -> anyhow::Result<PackNode> {
         let path = self
             .index_cache_path()?
+            .join("index")
             .join(package.indexed_path())
-            .join(format!("{version}.toml"));
-        trace!("loading {package} {version} from {}", path.display());
-        let content = read_to_string(path)?;
-        let node = toml::from_str(&content)?;
-        Ok(node)
+            .with_added_extension("jsonl");
+        let jsonl = read_to_string(path)?;
+        let mut lines = vec![];
+        for line in jsonl.lines() {
+            let line = serde_json::from_str::<IndexLine>(line)?;
+            lines.push(line);
+        }
+        let line = lines
+            .into_iter()
+            .find(|line| &line.version == version && line.rev == rev)
+            .ok_or(anyhow!("no {} rev {} for {}", version, rev, package))?;
+        Ok(line.node)
     }
 
-    pub fn get_version(&self, package: &Id) -> anyhow::Result<BTreeSet<Version>> {
+    pub fn get_versions(&self, package: &Id) -> anyhow::Result<BTreeSet<Version>> {
         trace!("retrieving versions for {package}");
-        let path = self.index_cache_path()?.join(package.indexed_path());
-        let mut res = BTreeSet::new();
-        for i in path.read_dir()? {
-            let entry = i?;
-            let path = entry.path();
-            if !entry.file_type()?.is_file() || path.extension().is_none_or(|s| s != "toml") {
-                bail!(
-                    "invalid package registry item {}, expected TOML file",
-                    path.display()
-                );
-            }
-            let name = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .ok_or(anyhow!("failed to retrieve version from filename"))?;
-
-            res.insert(name.parse()?);
+        let path = self
+            .index_cache_path()?
+            .join("index")
+            .join(package.indexed_path())
+            .with_added_extension("jsonl");
+        let jsonl = read_to_string(path)?;
+        let mut versions = BTreeSet::new();
+        for line in jsonl.lines() {
+            let line = serde_json::from_str::<IndexLine>(line)?;
+            versions.insert(line.version);
         }
-        trace!("found {} version(s) for {}", res.len(), package);
-        Ok(res)
+        trace!("found {} version(s) for {}", versions.len(), package);
+        Ok(versions)
     }
 }
 
@@ -145,4 +147,13 @@ impl Creeper {
     pub async fn update_registry(&self) -> anyhow::Result<()> {
         self.registry.update().await
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct IndexLine {
+    pub id: Id,
+    pub version: Version,
+    pub rev: u32,
+    #[serde(flatten)]
+    pub node: PackNode,
 }

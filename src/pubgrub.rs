@@ -201,7 +201,7 @@ impl DependencyProvider for Creeper {
             return Reverse(0);
         }
 
-        let candidates = self.registry.get_version(package).unwrap_or_else(|e| {
+        let candidates = self.registry.get_versions(package).unwrap_or_else(|e| {
             error!("failed to prioritize package {package}: {e}");
             error!("package resolution will continue with no available versions for this package");
             BTreeSet::new()
@@ -228,7 +228,7 @@ impl DependencyProvider for Creeper {
             return Ok(Some(version.clone()));
         }
 
-        let candidates = self.registry.get_version(package)?;
+        let candidates = self.registry.get_versions(package)?;
         let available = candidates
             .into_iter()
             .filter(|v| range.contains(v))

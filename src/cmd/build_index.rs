@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr};
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use clap::Parser;
 use semver::Version;
 use tokio::{
@@ -94,8 +94,17 @@ impl Execute for BuildIndex {
 
                             let version_rev = VersionRev(version.clone(), rev);
 
-                            let toml = read_to_string(path).await?;
+                            let toml = read_to_string(&path).await?;
                             let p: Package = toml::from_str(&toml)?;
+
+                            ensure!(p.id == id, "inconsistent id in {}", path.display());
+                            ensure!(
+                                p.version == version,
+                                "inconsistent version in {}",
+                                path.display()
+                            );
+                            ensure!(p.rev == rev, "inconsistent revision in {}", path.display());
+
                             let node = p.node;
 
                             let line = IndexLine {

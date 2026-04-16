@@ -18,7 +18,7 @@ use tokio::{
 use tracing::{debug, trace};
 use url::Url;
 
-use crate::{Creeper, Id, pack::PackNode, path::creeper_cache_dir};
+use crate::{Creeper, Id, Package, pack::PackNode, path::creeper_cache_dir};
 
 pub struct Registry {
     pub url: Url,
@@ -163,6 +163,31 @@ impl Registry {
 impl Creeper {
     pub async fn update_registry(&self) -> anyhow::Result<()> {
         self.registry.update().await
+    }
+
+    pub async fn get_package(
+        &self,
+        id: &Id,
+        version: &Version,
+        rev: u32,
+    ) -> anyhow::Result<Package> {
+        let url = self
+            .registry
+            .url
+            .join("package/")?
+            .join(&format!(
+                "{}/",
+                id.indexed_path().as_ref().to_str().unwrap()
+            ))?
+            .join(&format!("{version}/"))?
+            .join(&format!("{rev}.json"))?;
+
+        let req = self.http.get(url).build()?;
+        let res = self.http.execute(req).await?;
+
+        let pack = res.json().await?;
+
+        Ok(pack)
     }
 }
 

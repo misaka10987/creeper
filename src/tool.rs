@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{Creeper, cmd::Execute};
+use anyhow::ensure;
 use clap::Parser;
 use colored::Colorize;
 use indexmap::IndexMap;
@@ -15,6 +16,7 @@ pub enum Tool {
     FetchMcVersion(FetchMcVersion),
     VanillaInstall(VanillaInstall),
     Resolve(Resolve),
+    GetPackage(GetPackage),
 }
 
 impl Execute for Tool {
@@ -25,6 +27,7 @@ impl Execute for Tool {
             Tool::FetchMcVersion(fetch_mc_version) => lib.execute(fetch_mc_version).await,
             Tool::VanillaInstall(vanilla_install) => lib.execute(vanilla_install).await,
             Tool::Resolve(resolve) => lib.execute(resolve).await,
+            Tool::GetPackage(get_package) => lib.execute(get_package).await,
         }
     }
 }
@@ -137,6 +140,33 @@ impl Execute for Resolve {
         };
 
         println!("{}", toml::to_string_pretty(&sol)?);
+        Ok(())
+    }
+}
+
+/// Query the package registry for a specific package version, printing its metadata.
+#[derive(Clone, Debug, Parser)]
+pub struct GetPackage {
+    /// The package in the `<id>@<version>` format.
+    #[arg(value_name = "PACKAGE")]
+    pub package: String,
+    /// The revision number of this version, defaults to 0.
+    #[arg(long, default_value_t = 0)]
+    pub rev: u32,
+}
+
+impl Execute for GetPackage {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let pieces = self.package.split('@').collect::<Vec<_>>();
+        ensure!(
+            pieces.len() == 2,
+            "invalid package version {}, expected <id>@<version>",
+            self.package
+        );
+        let (id, version) = (pieces[0].parse()?, pieces[1].parse()?);
+        let package = lib.get_package(&id, &version, self.rev).await?;
+        let toml = toml::to_string_pretty(&package)?;
+        println!("{toml}");
         Ok(())
     }
 }

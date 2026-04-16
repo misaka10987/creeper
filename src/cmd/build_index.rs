@@ -9,7 +9,11 @@ use tokio::{
 };
 use tracing::info;
 
-use crate::{Id, Package, cmd::Execute, registry::IndexLine};
+use crate::{
+    Id, Package,
+    cmd::Execute,
+    registry::{IndexLine, VersionRev},
+};
 
 /// Build the lookup index for a package registry.
 #[derive(Clone, Debug, Parser)]
@@ -122,18 +126,5 @@ impl Execute for BuildIndex {
             }
         }
         Ok(())
-    }
-}
-
-#[derive(Clone, PartialEq, Eq)]
-struct VersionRev(Version, u32);
-impl PartialOrd for VersionRev {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.0.cmp(&other.0).then(self.1.cmp(&other.1)))
-    }
-}
-impl Ord for VersionRev {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
     }
 }

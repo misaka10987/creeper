@@ -1,4 +1,9 @@
-use std::{collections::BTreeSet, fs::read_to_string, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    fs::read_to_string,
+    path::PathBuf,
+    sync::RwLock,
+};
 
 use anyhow::{anyhow, bail};
 use base64::{Engine, prelude::BASE64_URL_SAFE};
@@ -18,6 +23,7 @@ use crate::{Creeper, Id, pack::PackNode, path::creeper_cache_dir};
 pub struct Registry {
     pub url: Url,
     http: Client,
+    index_cache: RwLock<HashMap<Id, BTreeMap<VersionRev, PackNode>>>,
 }
 
 impl Registry {
@@ -39,7 +45,11 @@ impl Registry {
             "https" => debug!("using remote registry at {url}"),
             s => bail!("unsupported registry URL scheme: {s}"),
         }
-        Ok(Self { url, http })
+        Ok(Self {
+            url,
+            http,
+            index_cache: RwLock::new(HashMap::new()),
+        })
     }
 
     async fn index_url(&self) -> anyhow::Result<Url> {
@@ -106,39 +116,46 @@ impl Registry {
         }
     }
 
-    pub fn get(&self, package: &Id, version: &Version, rev: u32) -> anyhow::Result<PackNode> {
+    pub fn get_index(&self, package: &Id) -> anyhow::Result<BTreeMap<VersionRev, PackNode>> {
+        if let Some(pack) = self.index_cache.read().unwrap().get(package) {
+            return Ok(pack.clone());
+        }
         let path = self
             .index_cache_path()?
             .join("index")
             .join(package.indexed_path())
             .with_added_extension("jsonl");
         let jsonl = read_to_string(path)?;
-        let mut lines = vec![];
+        let mut pack = BTreeMap::new();
         for line in jsonl.lines() {
             let line = serde_json::from_str::<IndexLine>(line)?;
-            lines.push(line);
+            pack.insert(VersionRev(line.version, line.rev), line.node);
         }
-        let line = lines
-            .into_iter()
-            .find(|line| &line.version == version && line.rev == rev)
-            .ok_or(anyhow!("no {} rev {} for {}", version, rev, package))?;
-        Ok(line.node)
+        self.index_cache
+            .write()
+            .unwrap()
+            .insert(package.clone(), pack.clone());
+        Ok(pack)
+    }
+
+    pub fn get_node(&self, package: &Id, version: &Version, rev: u32) -> anyhow::Result<PackNode> {
+        let pack = self.get_index(package)?;
+        let node = pack.get(&VersionRev(version.clone(), rev)).ok_or(anyhow!(
+            "no {} rev {} for {}",
+            version,
+            rev,
+            package
+        ))?;
+        Ok(node.clone())
     }
 
     pub fn get_versions(&self, package: &Id) -> anyhow::Result<BTreeSet<Version>> {
-        trace!("retrieving versions for {package}");
-        let path = self
-            .index_cache_path()?
-            .join("index")
-            .join(package.indexed_path())
-            .with_added_extension("jsonl");
-        let jsonl = read_to_string(path)?;
-        let mut versions = BTreeSet::new();
-        for line in jsonl.lines() {
-            let line = serde_json::from_str::<IndexLine>(line)?;
-            versions.insert(line.version);
-        }
-        trace!("found {} version(s) for {}", versions.len(), package);
+        let pack = self.get_index(package)?;
+        trace!("found {} version(s) for {}", pack.len(), package);
+        let versions = pack
+            .keys()
+            .map(|VersionRev(version, _rev)| version.clone())
+            .collect();
         Ok(versions)
     }
 }
@@ -156,4 +173,17 @@ pub struct IndexLine {
     pub rev: u32,
     #[serde(flatten)]
     pub node: PackNode,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct VersionRev(pub Version, pub u32);
+impl PartialOrd for VersionRev {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.0.cmp(&other.0).then(self.1.cmp(&other.1)))
+    }
+}
+impl Ord for VersionRev {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }

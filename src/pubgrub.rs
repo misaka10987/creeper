@@ -150,7 +150,7 @@ impl Creeper {
             if !package.is_regular() {
                 todo!()
             }
-            let dep = self.registry.get(package, version, 0)?.dep;
+            let dep = self.registry.get_node(package, version, 0)?.dep;
             for (d, _) in dep {
                 let node_package = id_to_node[package];
                 let node_dep = id_to_node
@@ -253,7 +253,7 @@ impl DependencyProvider for Creeper {
         }
 
         // TODO: support revision number instead of defaulting to 0
-        let node = self.registry.get(package, version, 0)?;
+        let node = self.registry.get_node(package, version, 0)?;
         let dep = node
             .dep
             .into_iter()

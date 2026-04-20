@@ -17,6 +17,7 @@ pub enum Tool {
     VanillaInstall(VanillaInstall),
     Resolve(Resolve),
     GetPackage(GetPackage),
+    ListNeoforgeVersion(ListNeoforgeVersion),
 }
 
 impl Execute for Tool {
@@ -28,6 +29,9 @@ impl Execute for Tool {
             Tool::VanillaInstall(vanilla_install) => lib.execute(vanilla_install).await,
             Tool::Resolve(resolve) => lib.execute(resolve).await,
             Tool::GetPackage(get_package) => lib.execute(get_package).await,
+            Tool::ListNeoforgeVersion(list_neoforge_version) => {
+                lib.execute(list_neoforge_version).await
+            }
         }
     }
 }
@@ -167,6 +171,18 @@ impl Execute for GetPackage {
         let package = lib.get_package(&id, &version, self.rev).await?;
         let toml = toml::to_string_pretty(&package)?;
         println!("{toml}");
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Parser)]
+pub struct ListNeoforgeVersion;
+
+impl Execute for ListNeoforgeVersion {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let versions = lib.list_neoforge_version().await?;
+        let json = serde_json::to_string(versions)?;
+        println!("{json}");
         Ok(())
     }
 }

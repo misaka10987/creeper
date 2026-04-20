@@ -7,6 +7,7 @@ mod launch;
 // mod lock;
 mod install;
 mod mc;
+mod neoforge;
 mod pack;
 mod path;
 mod pbar;
@@ -32,6 +33,7 @@ use url::Url;
 use crate::{
     cmd::{Execute, build_index::BuildIndex, run::Run},
     game::GameManager,
+    neoforge::NeoforgeManager,
     path::init_creeper_dirs,
     registry::Registry,
     storage::StorageManager,
@@ -50,6 +52,7 @@ pub struct CreeperInner {
     http: Client,
     registry: Registry,
     game: GameManager,
+    neoforge: NeoforgeManager,
 }
 
 #[derive(Clone)]
@@ -69,12 +72,14 @@ impl Creeper {
         let http = Client::default();
         let registry = Registry::new(args.registry.clone(), http.clone())?;
         let inst = GameManager::new(args.working_dir.clone());
+        let neoforge = NeoforgeManager::new(http.clone());
         let val = CreeperInner {
             args,
             storage: StorageManager::new().await?,
             vanilla: VanillaManager::new(),
             http,
             registry,
+            neoforge,
             game: inst,
         };
         Ok(Self(Arc::new(val)))

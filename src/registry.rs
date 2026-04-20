@@ -23,6 +23,7 @@ use crate::{Creeper, Id, Package, pack::PackNode, path::creeper_cache_dir};
 pub struct Registry {
     pub url: Url,
     http: Client,
+    cache: RwLock<HashMap<Id, BTreeMap<VersionRev, Package>>>,
     index_cache: RwLock<HashMap<Id, BTreeMap<VersionRev, PackNode>>>,
 }
 
@@ -48,6 +49,7 @@ impl Registry {
         Ok(Self {
             url,
             http,
+            cache: RwLock::new(HashMap::new()),
             index_cache: RwLock::new(HashMap::new()),
         })
     }
@@ -158,6 +160,37 @@ impl Registry {
             .collect();
         Ok(versions)
     }
+
+    pub async fn get(&self, id: &Id, version: &Version, rev: u32) -> anyhow::Result<Package> {
+        if let Some(pack) = self.cache.read().unwrap().get(id) {
+            if let Some(pack) = pack.get(&VersionRev(version.clone(), rev)) {
+                return Ok(pack.clone());
+            }
+        }
+
+        let url = self
+            .url
+            .join("package/")?
+            .join(&format!(
+                "{}/",
+                id.indexed_path().as_ref().to_str().unwrap()
+            ))?
+            .join(&format!("{version}/"))?
+            .join(&format!("{rev}.json"))?;
+
+        let req = self.http.get(url).build()?;
+        let res = self.http.execute(req).await?;
+
+        let pack = res.json::<Package>().await?;
+
+        self.cache
+            .write()
+            .unwrap()
+            .entry(id.clone())
+            .or_default()
+            .insert(VersionRev(version.clone(), rev), pack.clone());
+        Ok(pack)
+    }
 }
 
 impl Creeper {
@@ -171,23 +204,7 @@ impl Creeper {
         version: &Version,
         rev: u32,
     ) -> anyhow::Result<Package> {
-        let url = self
-            .registry
-            .url
-            .join("package/")?
-            .join(&format!(
-                "{}/",
-                id.indexed_path().as_ref().to_str().unwrap()
-            ))?
-            .join(&format!("{version}/"))?
-            .join(&format!("{rev}.json"))?;
-
-        let req = self.http.get(url).build()?;
-        let res = self.http.execute(req).await?;
-
-        let pack = res.json().await?;
-
-        Ok(pack)
+        self.registry.get(id, version, rev).await
     }
 }
 

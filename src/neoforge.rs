@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, sync::OnceLock};
+use std::{collections::BTreeSet, str::FromStr, sync::OnceLock};
 
 use reqwest::Client;
 use semver::Version;
@@ -32,13 +32,19 @@ impl NeoforgeManager {
 
         #[derive(Clone, Debug, Serialize, Deserialize)]
         struct Versions {
+            #[serde(rename = "isSnapshot")]
             is_snapshot: bool,
-            versions: Vec<Version>,
+            versions: Vec<String>,
         }
 
         let versions = res.json::<Versions>().await?;
 
-        let versions = versions.versions.into_iter().collect();
+        let versions = versions
+            .versions
+            .into_iter()
+            .filter_map(|v| Version::from_str(&v).ok());
+
+        let versions = versions.into_iter().collect();
 
         Ok(self.versions.get_or_init(|| versions))
     }

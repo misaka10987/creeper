@@ -1,6 +1,7 @@
 use crate::Creeper;
 
 pub mod build_index;
+pub mod nf_version;
 pub mod run;
 
 pub trait Execute {

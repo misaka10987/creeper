@@ -111,3 +111,25 @@ pub fn parse_neoforge_version(version: &str) -> Option<Version> {
     version.patch = patch;
     Some(version)
 }
+
+pub fn decode_neoforge_version(version: &Version) -> String {
+    if version.major < 26 {
+        return version.to_string();
+    }
+    let high = version.patch >> 32;
+    let low = version.patch & 0xFFFFFFFF;
+    let pre = if version.pre.is_empty() {
+        "".to_string()
+    } else {
+        format!("-{}", version.pre)
+    };
+    let build = if version.build.is_empty() {
+        "".to_string()
+    } else {
+        format!("+{}", version.build)
+    };
+
+    let version = format!("{}.{}.{}.{}", version.major, version.minor, high, low);
+    let version = format!("{}{}{}", version, pre, build);
+    version
+}

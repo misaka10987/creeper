@@ -31,7 +31,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 use crate::{
-    cmd::{Execute, build_index::BuildIndex, run::Run},
+    cmd::{Execute, build_index::BuildIndex, nf_version::NeoForgeVersion, run::Run},
     game::GameManager,
     neoforge::NeoforgeManager,
     path::init_creeper_dirs,
@@ -140,6 +140,8 @@ enum SubCommand {
     Tool(Tool),
     Run(Run),
     BuildIndex(BuildIndex),
+    #[command(name = "nf-version")]
+    NeoForgeVersion(NeoForgeVersion),
     #[clap(hide = true)]
     AwwMan,
 }
@@ -151,6 +153,7 @@ impl Execute for SubCommand {
             SubCommand::Run(run) => lib.execute(run).await,
             SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
             SubCommand::BuildIndex(build_index) => lib.execute(build_index).await,
+            SubCommand::NeoForgeVersion(nf_version) => lib.execute(nf_version).await,
         }
     }
 }

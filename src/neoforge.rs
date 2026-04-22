@@ -16,6 +16,7 @@ const VERSIONS_URL: &str =
 pub struct NeoforgeManager {
     http: Client,
     versions: OnceLock<BTreeSet<Version>>,
+    index: OnceLock<BTreeMap<VersionRev, PackNode>>,
 }
 
 impl NeoforgeManager {
@@ -23,6 +24,7 @@ impl NeoforgeManager {
         Self {
             http,
             versions: OnceLock::new(),
+            index: OnceLock::new(),
         }
     }
 
@@ -53,7 +55,11 @@ impl NeoforgeManager {
         Ok(self.versions.get_or_init(|| versions))
     }
 
-    pub async fn get_index(&self) -> anyhow::Result<BTreeMap<VersionRev, PackNode>> {
+    pub async fn get_index(&self) -> anyhow::Result<&BTreeMap<VersionRev, PackNode>> {
+        if let Some(index) = self.index.get() {
+            return Ok(index);
+        }
+
         let list = self.list_version().await?;
         let index = list
             .iter()
@@ -70,13 +76,18 @@ impl NeoforgeManager {
                 (VersionRev(version.clone(), 0), node)
             })
             .collect();
-        Ok(index)
+
+        Ok(self.index.get_or_init(|| index))
     }
 }
 
 impl Creeper {
     pub async fn list_neoforge_version(&self) -> anyhow::Result<&BTreeSet<Version>> {
         self.neoforge.list_version().await
+    }
+
+    pub async fn get_neoforge_index(&self) -> anyhow::Result<&BTreeMap<VersionRev, PackNode>> {
+        self.neoforge.get_index().await
     }
 }
 

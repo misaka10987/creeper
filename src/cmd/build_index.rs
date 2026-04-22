@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, path::PathBuf, str::FromStr};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use anyhow::{anyhow, bail, ensure};
 use clap::Parser;
@@ -30,7 +34,7 @@ pub struct BuildIndex {
 }
 
 impl Execute for BuildIndex {
-    async fn execute(self, _lib: &crate::Creeper) -> anyhow::Result<()> {
+    async fn execute(self, lib: &crate::Creeper) -> anyhow::Result<()> {
         let mut read = read_dir(&self.input).await?;
         while let Some(lv1) = read.next_entry().await? {
             let lv1_name = lv1.file_name();
@@ -119,21 +123,65 @@ impl Execute for BuildIndex {
                     }
 
                     if let Some(output) = &self.output {
-                        let file = output.join(id.indexed_path()).with_added_extension("jsonl");
-                        create_dir_all(file.parent().unwrap()).await?;
-                        let file = File::create(file).await?;
-                        let mut writer = BufWriter::new(file);
-                        for (_, line) in &pack {
-                            let json = serde_json::to_string(line)?;
-                            let line = format!("{}\n", json);
-                            writer.write_all(line.as_bytes()).await?;
-                        }
-                        writer.flush().await?;
-                        info!("wrote {} line(s) to index for {id}", pack.len());
+                        write_index(
+                            output.join(id.indexed_path()).with_added_extension("jsonl"),
+                            &pack,
+                        )
+                        .await?;
                     }
                 }
             }
         }
+
+        info!("processing neoforge");
+
+        let neoforge = lib
+            .get_neoforge_index()
+            .await?
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    k.clone(),
+                    IndexLine {
+                        id: Id::neoforge(),
+                        version: k.0.clone(),
+                        rev: k.1.clone(),
+                        node: v.clone(),
+                    },
+                )
+            })
+            .collect();
+
+        if let Some(output) = &self.output {
+            write_index(
+                output
+                    .join(Id::neoforge().indexed_path())
+                    .with_added_extension("jsonl"),
+                &neoforge,
+            )
+            .await?;
+        }
+
+        info!("index successfully built");
+
         Ok(())
     }
+}
+
+pub async fn write_index(
+    output: impl AsRef<Path>,
+    index: &BTreeMap<VersionRev, IndexLine>,
+) -> anyhow::Result<()> {
+    let output = output.as_ref();
+    create_dir_all(output.parent().unwrap()).await?;
+    let file = File::create(output).await?;
+    let mut writer = BufWriter::new(file);
+    for (_, line) in index {
+        let json = serde_json::to_string(line)?;
+        let line = format!("{}\n", json);
+        writer.write_all(line.as_bytes()).await?;
+    }
+    writer.flush().await?;
+    info!("wrote {} line(s) to {}", index.len(), output.display());
+    Ok(())
 }

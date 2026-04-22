@@ -1,10 +1,14 @@
-use std::{collections::BTreeSet, str::FromStr, sync::OnceLock};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr,
+    sync::OnceLock,
+};
 
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::Creeper;
+use crate::{Creeper, Id, pack::PackNode, registry::VersionRev};
 
 const VERSIONS_URL: &str =
     "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
@@ -47,6 +51,26 @@ impl NeoforgeManager {
         let versions = versions.into_iter().collect();
 
         Ok(self.versions.get_or_init(|| versions))
+    }
+
+    pub async fn get_index(&self) -> anyhow::Result<BTreeMap<VersionRev, PackNode>> {
+        let list = self.list_version().await?;
+        let index = list
+            .iter()
+            .map(|version| {
+                let req = if version.major >= 26 {
+                    format!("{}.{}", version.major, version.minor)
+                } else {
+                    format!("1.{}.{}", version.major, version.minor)
+                };
+                let dep = Some((Id::minecraft(), req.parse().unwrap()))
+                    .into_iter()
+                    .collect();
+                let node = PackNode { dep };
+                (VersionRev(version.clone(), 0), node)
+            })
+            .collect();
+        Ok(index)
     }
 }
 

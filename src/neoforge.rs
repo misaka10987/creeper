@@ -7,6 +7,7 @@ use std::{
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{Creeper, Id, pack::PackNode, registry::VersionRev};
 
@@ -45,12 +46,18 @@ impl NeoforgeManager {
 
         let versions = res.json::<Versions>().await?;
 
+        let count = versions.versions.len();
+
         let versions = versions
             .versions
             .into_iter()
-            .filter_map(|s| parse_neoforge_version(&s));
+            .filter_map(|s| parse_neoforge_version(&s))
+            .collect::<BTreeSet<_>>();
 
-        let versions = versions.into_iter().collect();
+        info!(
+            "retrieved {count} neoforge versions, of which {} valid",
+            versions.len()
+        );
 
         Ok(self.versions.get_or_init(|| versions))
     }

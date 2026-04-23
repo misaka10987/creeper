@@ -74,10 +74,11 @@ impl Creeper {
         let registry = Registry::new(args.registry.clone(), http.clone())?;
         let inst = GameManager::new(args.working_dir.clone());
         let neoforge = NeoforgeManager::new(http.clone());
+        let vanilla = VanillaManager::new(http.clone());
         let val = CreeperInner {
             args,
             storage: StorageManager::new().await?,
-            vanilla: VanillaManager::new(),
+            vanilla,
             http,
             registry,
             neoforge,
@@ -92,6 +93,7 @@ impl Creeper {
 
     pub async fn update_all(&self) -> anyhow::Result<()> {
         self.update_registry().await?;
+        self.update_vanilla().await?;
         self.update_neoforge().await?;
         Ok(())
     }

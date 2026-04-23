@@ -165,6 +165,7 @@ impl Creeper {
     pub fn blocking_get_index(&self, package: &Id) -> anyhow::Result<Index> {
         if !package.is_regular() {
             match package.as_str() {
+                "vanilla" => return self.vanilla.blocking_get_index().cloned(),
                 "neoforge" => return self.neoforge.blocking_get_index().cloned(),
                 _ => todo!(),
             }

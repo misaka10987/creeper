@@ -1,8 +1,11 @@
-use std::{collections::HashMap, sync::OnceLock};
+use std::{collections::HashMap, path::PathBuf, sync::OnceLock};
 
 use crate::{
-    Artifact, Checksum, Creeper, Install,
+    Artifact, Checksum, Creeper, Id, Install,
+    index::{Index, IndexLine, VersionRev},
     mc::{check_class, check_os},
+    pack::PackNode,
+    path::creeper_cache_dir,
 };
 
 use anyhow::anyhow;
@@ -15,26 +18,88 @@ use mc_launchermeta::{
     version_manifest::Manifest,
 };
 
+use reqwest::Client;
 use semver::Version;
 
 use tokio::{sync::RwLock, task::JoinSet};
 use tracing::{Instrument, info};
 
+fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
+    versions
+        .into_iter()
+        .map(|version| {
+            (
+                VersionRev(version, 0),
+                PackNode {
+                    dep: HashMap::new(),
+                },
+            )
+        })
+        .collect()
+}
+
 pub struct VanillaManager {
+    http: Client,
     manifest: OnceLock<Manifest>,
     version: RwLock<HashMap<Version, McVersion>>,
+    index: OnceLock<Index>,
 }
 
 impl VanillaManager {
-    pub fn new() -> Self {
+    pub fn new(http: Client) -> Self {
         Self {
+            http,
             manifest: OnceLock::new(),
             version: RwLock::new(HashMap::new()),
+            index: OnceLock::new(),
         }
+    }
+
+    fn index_cache_path() -> anyhow::Result<PathBuf> {
+        let path = creeper_cache_dir()?
+            .join("builtin")
+            .join("index")
+            .join(Id::vanilla().indexed_path())
+            .with_added_extension("jsonl");
+        Ok(path)
+    }
+
+    pub async fn update(&self) -> anyhow::Result<()> {
+        let req = self.http.get(VERSION_MANIFEST_URL).build()?;
+        let res = self.http.execute(req).await?;
+
+        let manifest = res.json::<Manifest>().await?;
+
+        let mut versions = vec![];
+        for version in manifest.versions {
+            versions.push(version.id.parse::<Version>()?);
+        }
+
+        let index = vanilla_index(versions);
+
+        let cache = Self::index_cache_path()?;
+        IndexLine::write(cache, &Id::minecraft(), index).await?;
+
+        Ok(())
+    }
+
+    pub fn blocking_get_index(&self) -> anyhow::Result<&Index> {
+        if let Some(index) = self.index.get() {
+            return Ok(index);
+        }
+
+        let cache = Self::index_cache_path()?;
+        let index = IndexLine::blocking_read(cache)?;
+
+        Ok(self.index.get_or_init(|| index))
     }
 }
 
 impl Creeper {
+    pub async fn update_vanilla(&self) -> anyhow::Result<()> {
+        self.vanilla.update().await
+    }
+
     async fn vanilla_lib(&self, lib: Vec<Library>) -> anyhow::Result<Vec<Artifact>> {
         let arts = filter_lib(lib);
 

@@ -1,22 +1,14 @@
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::{path::PathBuf, str::FromStr};
 
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{anyhow, bail};
 use clap::Parser;
-use semver::Version;
-use tokio::{
-    fs::{File, create_dir_all, read_dir, read_to_string},
-    io::{AsyncWriteExt, BufWriter},
-};
+use tokio::fs::read_dir;
 use tracing::info;
 
 use crate::{
-    Id, Package,
+    Id,
     cmd::Execute,
-    registry::{IndexLine, VersionRev},
+    index::{IndexLine, compile_index},
 };
 
 /// Build the lookup index for a package registry.
@@ -64,70 +56,10 @@ impl Execute for BuildIndex {
 
                     info!("processing package {}", id);
 
-                    let mut pack = BTreeMap::new();
-
-                    let mut read = read_dir(p.path()).await?;
-                    while let Some(v) = read.next_entry().await? {
-                        let version = v.file_name();
-                        let version = version
-                            .to_str()
-                            .ok_or(anyhow!("invalid name {}", v.path().display()))?;
-                        let version = Version::parse(version)?;
-
-                        let mut read = read_dir(v.path()).await?;
-                        while let Some(r) = read.next_entry().await? {
-                            let path = r.path();
-                            if !r.file_type().await?.is_file() {
-                                bail!(
-                                    "invalid item {} in package registry, expected file",
-                                    path.display()
-                                );
-                            }
-                            if !path.extension().is_some_and(|s| s == "toml") {
-                                bail!(
-                                    "invalid item {} in package registry, expected TOML",
-                                    path.display()
-                                );
-                            }
-
-                            let rev = path
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .ok_or(anyhow!("failed to parse filename: {}", path.display()))?;
-                            let rev: u32 = rev.parse()?;
-
-                            let version_rev = VersionRev(version.clone(), rev);
-
-                            let toml = read_to_string(&path).await?;
-                            let p: Package = toml::from_str(&toml)?;
-
-                            ensure!(p.id == id, "inconsistent id in {}", path.display());
-                            ensure!(
-                                p.version == version,
-                                "inconsistent version in {}",
-                                path.display()
-                            );
-                            ensure!(p.rev == rev, "inconsistent revision in {}", path.display());
-
-                            let node = p.node;
-
-                            let line = IndexLine {
-                                id: id.clone(),
-                                version: version.clone(),
-                                rev,
-                                node,
-                            };
-
-                            pack.insert(version_rev, line);
-                        }
-                    }
+                    let index = compile_index(p.path()).await?;
 
                     if let Some(output) = &self.output {
-                        write_index(
-                            output.join(id.indexed_path()).with_added_extension("jsonl"),
-                            &pack,
-                        )
-                        .await?;
+                        IndexLine::write(output, &id, index).await?;
                     }
                 }
             }
@@ -135,53 +67,17 @@ impl Execute for BuildIndex {
 
         info!("processing neoforge");
 
-        let neoforge = lib
-            .get_neoforge_index()
-            .await?
-            .into_iter()
-            .map(|(k, v)| {
-                (
-                    k.clone(),
-                    IndexLine {
-                        id: Id::neoforge(),
-                        version: k.0.clone(),
-                        rev: k.1.clone(),
-                        node: v.clone(),
-                    },
-                )
-            })
-            .collect();
+        let neoforge = lib.get_neoforge_index().await?;
 
         if let Some(output) = &self.output {
-            write_index(
-                output
-                    .join(Id::neoforge().indexed_path())
-                    .with_added_extension("jsonl"),
-                &neoforge,
-            )
-            .await?;
+            let output = output
+                .join(Id::neoforge().indexed_path())
+                .with_added_extension("jsonl");
+            IndexLine::write(output, &Id::neoforge(), neoforge.clone()).await?;
         }
 
         info!("index successfully built");
 
         Ok(())
     }
-}
-
-pub async fn write_index(
-    output: impl AsRef<Path>,
-    index: &BTreeMap<VersionRev, IndexLine>,
-) -> anyhow::Result<()> {
-    let output = output.as_ref();
-    create_dir_all(output.parent().unwrap()).await?;
-    let file = File::create(output).await?;
-    let mut writer = BufWriter::new(file);
-    for (_, line) in index {
-        let json = serde_json::to_string(line)?;
-        let line = format!("{}\n", json);
-        writer.write_all(line.as_bytes()).await?;
-    }
-    writer.flush().await?;
-    info!("wrote {} line(s) to {}", index.len(), output.display());
-    Ok(())
 }

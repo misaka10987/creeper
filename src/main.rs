@@ -5,6 +5,7 @@ mod id;
 mod java;
 mod launch;
 // mod lock;
+mod index;
 mod install;
 mod mc;
 mod neoforge;
@@ -87,6 +88,12 @@ impl Creeper {
 
     pub async fn execute(&self, cmd: impl Execute) -> anyhow::Result<()> {
         cmd.execute(self).await
+    }
+
+    pub async fn update_all(&self) -> anyhow::Result<()> {
+        self.update_registry().await?;
+        self.update_neoforge().await?;
+        Ok(())
     }
 }
 

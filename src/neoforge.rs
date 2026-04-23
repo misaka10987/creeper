@@ -1,15 +1,16 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    str::FromStr,
-    sync::OnceLock,
-};
+use std::{collections::BTreeSet, path::PathBuf, str::FromStr, sync::OnceLock};
 
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::{Creeper, Id, pack::PackNode, registry::VersionRev};
+use crate::{
+    Creeper, Id,
+    index::{Index, IndexLine, VersionRev},
+    pack::PackNode,
+    path::creeper_cache_dir,
+};
 
 const VERSIONS_URL: &str =
     "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
@@ -17,7 +18,7 @@ const VERSIONS_URL: &str =
 pub struct NeoforgeManager {
     http: Client,
     versions: OnceLock<BTreeSet<Version>>,
-    index: OnceLock<BTreeMap<VersionRev, PackNode>>,
+    index: OnceLock<Index>,
 }
 
 impl NeoforgeManager {
@@ -29,11 +30,15 @@ impl NeoforgeManager {
         }
     }
 
-    pub async fn list_version(&self) -> anyhow::Result<&BTreeSet<Version>> {
-        if let Some(versions) = self.versions.get() {
-            return Ok(versions);
-        }
+    pub fn index_cache_path() -> anyhow::Result<PathBuf> {
+        let path = creeper_cache_dir()?
+            .join("index")
+            .join(Id::neoforge().indexed_path())
+            .with_added_extension("jsonl");
+        Ok(path)
+    }
 
+    pub async fn update(&self) -> anyhow::Result<()> {
         let req = self.http.get(VERSIONS_URL).build()?;
         let res = self.http.execute(req).await?;
 
@@ -51,38 +56,58 @@ impl NeoforgeManager {
         let versions = versions
             .versions
             .into_iter()
-            .filter_map(|s| parse_neoforge_version(&s))
-            .collect::<BTreeSet<_>>();
+            .filter_map(|s| parse_neoforge_version(&s));
+
+        let index = neoforge_index(versions);
 
         info!(
             "retrieved {count} neoforge versions, of which {} valid",
-            versions.len()
+            index.len()
         );
+
+        let cache = Self::index_cache_path()?;
+
+        IndexLine::write(&cache, &Id::neoforge(), index).await?;
+
+        Ok(())
+    }
+
+    pub async fn list_version(&self) -> anyhow::Result<&BTreeSet<Version>> {
+        if let Some(versions) = self.versions.get() {
+            return Ok(versions);
+        }
+
+        let versions = self
+            .get_index()
+            .await?
+            .keys()
+            .map(|VersionRev(v, _)| v)
+            .cloned()
+            .collect();
 
         Ok(self.versions.get_or_init(|| versions))
     }
 
-    pub async fn get_index(&self) -> anyhow::Result<&BTreeMap<VersionRev, PackNode>> {
+    pub async fn get_index(&self) -> anyhow::Result<&Index> {
         if let Some(index) = self.index.get() {
             return Ok(index);
         }
 
-        let list = self.list_version().await?;
-        let index = list
-            .iter()
-            .map(|version| {
-                let req = if version.major >= 26 {
-                    format!("{}.{}", version.major, version.minor)
-                } else {
-                    format!("1.{}.{}", version.major, version.minor)
-                };
-                let dep = Some((Id::minecraft(), req.parse().unwrap()))
-                    .into_iter()
-                    .collect();
-                let node = PackNode { dep };
-                (VersionRev(version.clone(), 0), node)
-            })
-            .collect();
+        let cache = Self::index_cache_path()?;
+
+        let index = IndexLine::read(cache).await?;
+
+        Ok(self.index.get_or_init(|| index))
+    }
+
+    pub fn blocking_get_index(&self) -> anyhow::Result<&Index> {
+        if let Some(index) = self.index.get() {
+            return Ok(index);
+        }
+
+        let cache = Self::index_cache_path()?;
+
+        let index = IndexLine::blocking_read(cache)?;
 
         Ok(self.index.get_or_init(|| index))
     }
@@ -93,8 +118,12 @@ impl Creeper {
         self.neoforge.list_version().await
     }
 
-    pub async fn get_neoforge_index(&self) -> anyhow::Result<&BTreeMap<VersionRev, PackNode>> {
+    pub async fn get_neoforge_index(&self) -> anyhow::Result<&Index> {
         self.neoforge.get_index().await
+    }
+
+    pub async fn update_neoforge(&self) -> anyhow::Result<()> {
+        self.neoforge.update().await
     }
 }
 
@@ -150,4 +179,37 @@ pub fn decode_neoforge_version(version: &Version) -> String {
     let version = format!("{}.{}.{}.{}", version.major, version.minor, high, low);
     let version = format!("{}{}{}", version, pre, build);
     version
+}
+
+/// Generate NeoForge package index from list of versions, applying the following rules to each version:
+///
+/// - Package ID be `neoforge`;
+///
+/// - Version be the given version;
+///
+/// - Revision be `0`;
+///
+/// - For neoforge `x.y.z.w` where `x` >= 26, depend on `minecraft = ^x.y`; and
+///
+/// - For neoforge `x.y.z` where `x` < 26, depend on `minecraft = ^1.x.y`.
+///
+/// # Note
+///
+/// The behavior is undefined unless there is no duplicate version in the input.
+fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
+    versions
+        .into_iter()
+        .map(|version| {
+            let req = if version.major >= 26 {
+                format!("{}.{}", version.major, version.minor)
+            } else {
+                format!("1.{}.{}", version.major, version.minor)
+            };
+            let dep = Some((Id::minecraft(), req.parse().unwrap()))
+                .into_iter()
+                .collect();
+            let node = PackNode { dep };
+            (VersionRev(version, 0), node)
+        })
+        .collect()
 }

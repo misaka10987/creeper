@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fs::read_to_string,
     path::PathBuf,
     sync::RwLock,
 };
@@ -9,7 +8,6 @@ use anyhow::{anyhow, bail};
 use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use semver::Version;
-use serde::{Deserialize, Serialize};
 use tokio::{
     fs::{File, create_dir_all, read_to_string as async_read_to_string, try_exists},
     io::AsyncWriteExt,
@@ -18,7 +16,12 @@ use tokio::{
 use tracing::{debug, trace};
 use url::Url;
 
-use crate::{Creeper, Id, Package, pack::PackNode, path::creeper_cache_dir};
+use crate::{
+    Creeper, Id, Package,
+    index::{IndexLine, VersionRev},
+    pack::PackNode,
+    path::creeper_cache_dir,
+};
 
 pub struct Registry {
     pub url: Url,
@@ -118,7 +121,10 @@ impl Registry {
         }
     }
 
-    pub fn get_index(&self, package: &Id) -> anyhow::Result<BTreeMap<VersionRev, PackNode>> {
+    pub fn blocking_get_index(
+        &self,
+        package: &Id,
+    ) -> anyhow::Result<BTreeMap<VersionRev, PackNode>> {
         if let Some(pack) = self.index_cache.read().unwrap().get(package) {
             return Ok(pack.clone());
         }
@@ -127,12 +133,9 @@ impl Registry {
             .join("index")
             .join(package.indexed_path())
             .with_added_extension("jsonl");
-        let jsonl = read_to_string(path)?;
-        let mut pack = BTreeMap::new();
-        for line in jsonl.lines() {
-            let line = serde_json::from_str::<IndexLine>(line)?;
-            pack.insert(VersionRev(line.version, line.rev), line.node);
-        }
+
+        let pack = IndexLine::blocking_read(path)?;
+
         self.index_cache
             .write()
             .unwrap()
@@ -141,7 +144,7 @@ impl Registry {
     }
 
     pub fn get_node(&self, package: &Id, version: &Version, rev: u32) -> anyhow::Result<PackNode> {
-        let pack = self.get_index(package)?;
+        let pack = self.blocking_get_index(package)?;
         let node = pack.get(&VersionRev(version.clone(), rev)).ok_or(anyhow!(
             "no {} rev {} for {}",
             version,
@@ -152,7 +155,7 @@ impl Registry {
     }
 
     pub fn get_versions(&self, package: &Id) -> anyhow::Result<BTreeSet<Version>> {
-        let pack = self.get_index(package)?;
+        let pack = self.blocking_get_index(package)?;
         trace!("found {} version(s) for {}", pack.len(), package);
         let versions = pack
             .keys()
@@ -205,27 +208,5 @@ impl Creeper {
         rev: u32,
     ) -> anyhow::Result<Package> {
         self.registry.get(id, version, rev).await
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct IndexLine {
-    pub id: Id,
-    pub version: Version,
-    pub rev: u32,
-    #[serde(flatten)]
-    pub node: PackNode,
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub struct VersionRev(pub Version, pub u32);
-impl PartialOrd for VersionRev {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.0.cmp(&other.0).then(self.1.cmp(&other.1)))
-    }
-}
-impl Ord for VersionRev {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
     }
 }

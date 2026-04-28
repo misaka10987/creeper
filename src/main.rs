@@ -48,7 +48,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct CreeperInner {
     pub args: CreeperConfig,
-    storage: ArtifactManager,
+    artifact: ArtifactManager,
     vanilla: VanillaManager,
     http: Client,
     registry: Registry,
@@ -75,9 +75,10 @@ impl Creeper {
         let inst = GameManager::new(args.working_dir.clone());
         let neoforge = NeoforgeManager::new(http.clone());
         let vanilla = VanillaManager::new(http.clone());
+        let artifact = ArtifactManager::new(http.clone()).await?;
         let val = CreeperInner {
             args,
-            storage: ArtifactManager::new().await?,
+            artifact,
             vanilla,
             http,
             registry,

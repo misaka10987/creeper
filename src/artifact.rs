@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use sqlx::{query, query_as};
@@ -87,18 +88,19 @@ impl Artifact {
 const DB_INIT_QUERY: &str = include_str!("artifact.sql");
 
 pub struct ArtifactManager {
+    http: Client,
     index: SqlitePool,
 }
 
 impl ArtifactManager {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn new(http: Client) -> anyhow::Result<Self> {
         let path = creeper_data_dir()?.join("storage-index.db");
         let opt = SqliteConnectOptions::default()
             .filename(path)
             .create_if_missing(true);
         let index = SqlitePool::connect_with(opt).await?;
         index.execute(DB_INIT_QUERY).await?;
-        let val = Self { index };
+        let val = Self { index, http };
         Ok(val)
     }
 
@@ -214,13 +216,11 @@ impl ArtifactManager {
             .await?;
         Ok(art)
     }
-}
 
-impl Creeper {
     #[instrument(skip(self, artifact), fields(artifact.name = &artifact.name))]
     pub async fn retrieve(&self, artifact: &Artifact) -> anyhow::Result<PathBuf> {
         let blake3 = Checksum::blake3(artifact.blake3.clone());
-        if let Some(found) = self.storage.find_checksum(&blake3).await? {
+        if let Some(found) = self.find_checksum(&blake3).await? {
             let path = found.path()?;
             trace!("found at {path:?}, checking file integrity");
             if blake3.check(&path).await? {
@@ -254,9 +254,9 @@ impl Creeper {
         let checksums = checksum.into_iter().collect::<Vec<_>>();
 
         for checksum in &checksums {
-            if let Some(art) = self.storage.find_checksum(checksum).await? {
+            if let Some(art) = self.find_checksum(checksum).await? {
                 debug!("fingerprint found in local storage");
-                let art = self.storage.affix_checksum(&art.blake3, checksums).await?;
+                let art = self.affix_checksum(&art.blake3, checksums).await?;
                 info!("verified file integrity, skipping download");
                 return Ok(art);
             }
@@ -291,8 +291,24 @@ impl Creeper {
 
         info!("download finished");
 
-        let art = self.storage.store(&path, name, src, checksums).await?;
+        let art = self.store(&path, name, src, checksums).await?;
 
         Ok(art)
+    }
+}
+
+impl Creeper {
+    pub async fn retrieve_artifact(&self, artifact: &Artifact) -> anyhow::Result<PathBuf> {
+        self.artifact.retrieve(artifact).await
+    }
+
+    pub async fn download(
+        &self,
+        name: String,
+        src: String,
+        len: Option<u64>,
+        checksum: impl IntoIterator<Item = Checksum> + Send,
+    ) -> anyhow::Result<Artifact> {
+        self.artifact.download(name, src, len, checksum).await
     }
 }

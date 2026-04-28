@@ -3,11 +3,12 @@ use std::{collections::BTreeMap, io::BufRead, path::Path, str::FromStr};
 use anyhow::{anyhow, bail, ensure};
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use serde_inline_default::serde_inline_default;
 use tokio::{
     fs::{File, create_dir_all, read_dir, read_to_string},
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
 };
-use tracing::info;
+use tracing::debug;
 
 use crate::{Creeper, Id, Package, pack::PackNode};
 
@@ -77,17 +78,27 @@ pub async fn compile_index(src: impl AsRef<Path>) -> anyhow::Result<Index> {
     Ok(index)
 }
 
+#[serde_inline_default]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IndexLine {
     pub id: Id,
     pub version: Version,
+    #[serde_inline_default(0)]
+    #[serde(skip_serializing_if = "is_zero")]
     pub rev: u32,
     #[serde(flatten)]
     pub node: PackNode,
 }
 
+#[allow(unused)] // used by `#[serde(skip_serializing_if = "is_zero")]`
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
 impl IndexLine {
     pub fn blocking_read(jsonl: impl AsRef<Path>) -> anyhow::Result<Index> {
+        debug!("reading index from {}", jsonl.as_ref().display());
+
         let file = std::fs::File::options()
             .read(true)
             .write(false)
@@ -105,6 +116,8 @@ impl IndexLine {
     }
 
     pub async fn read(jsonl: impl AsRef<Path>) -> anyhow::Result<Index> {
+        debug!("reading index from {}", jsonl.as_ref().display());
+
         let file = File::options().read(true).write(false).open(jsonl).await?;
         let mut reader = BufReader::new(file).lines();
 
@@ -120,6 +133,9 @@ impl IndexLine {
 
     pub async fn write(output: impl AsRef<Path>, id: &Id, index: Index) -> anyhow::Result<()> {
         let output = output.as_ref();
+
+        debug!("writing index for {id} to {}", output.display());
+
         if let Some(parent) = output.parent() {
             create_dir_all(parent).await?;
         }
@@ -142,7 +158,7 @@ impl IndexLine {
 
         writer.flush().await?;
 
-        info!("wrote {count} index lines for {id} to {}", output.display());
+        debug!("wrote {count} index lines to {}", output.display());
 
         Ok(())
     }

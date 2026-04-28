@@ -26,7 +26,7 @@ pub struct BuildIndex {
 }
 
 impl Execute for BuildIndex {
-    async fn execute(self, lib: &crate::Creeper) -> anyhow::Result<()> {
+    async fn execute(self, _lib: &crate::Creeper) -> anyhow::Result<()> {
         let mut read = read_dir(&self.input).await?;
         while let Some(lv1) = read.next_entry().await? {
             let lv1_name = lv1.file_name();
@@ -59,21 +59,11 @@ impl Execute for BuildIndex {
                     let index = compile_index(p.path()).await?;
 
                     if let Some(output) = &self.output {
+                        let output = output.join(id.indexed_path()).with_added_extension("jsonl");
                         IndexLine::write(output, &id, index).await?;
                     }
                 }
             }
-        }
-
-        info!("processing neoforge");
-
-        let neoforge = lib.get_neoforge_index().await?;
-
-        if let Some(output) = &self.output {
-            let output = output
-                .join(Id::neoforge().indexed_path())
-                .with_added_extension("jsonl");
-            IndexLine::write(output, &Id::neoforge(), neoforge.clone()).await?;
         }
 
         info!("index successfully built");

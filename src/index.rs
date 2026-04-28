@@ -188,4 +188,17 @@ impl Creeper {
         }
         self.registry.blocking_get_index(package)
     }
+
+    pub fn blocking_get_node(
+        &self,
+        package: &Id,
+        version: &Version,
+        rev: u32,
+    ) -> anyhow::Result<PackNode> {
+        let index = self.blocking_get_index(package)?;
+        let node = index
+            .get(&VersionRev(version.clone(), rev))
+            .ok_or(anyhow!("no {version} rev {rev} for {package}"))?;
+        Ok(node.clone())
+    }
 }

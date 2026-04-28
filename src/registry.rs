@@ -4,7 +4,7 @@ use std::{
     sync::RwLock,
 };
 
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use semver::Version;
@@ -143,17 +143,6 @@ impl Registry {
             .unwrap()
             .insert(package.clone(), pack.clone());
         Ok(pack)
-    }
-
-    pub fn get_node(&self, package: &Id, version: &Version, rev: u32) -> anyhow::Result<PackNode> {
-        let pack = self.blocking_get_index(package)?;
-        let node = pack.get(&VersionRev(version.clone(), rev)).ok_or(anyhow!(
-            "no {} rev {} for {}",
-            version,
-            rev,
-            package
-        ))?;
-        Ok(node.clone())
     }
 
     pub async fn get(&self, id: &Id, version: &Version, rev: u32) -> anyhow::Result<Package> {

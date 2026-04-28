@@ -183,6 +183,9 @@ impl Creeper {
         Ok(sol)
     }
 
+    /// Topologically sort the dependencies. Dependencies goes before dependents in the output.
+    ///
+    /// The behavior is undefined unless the input is a valid solution, i.e. dependencies of each package in the input are also present in the input.
     pub fn sort_dependency(&self, dep: HashMap<Id, Version>) -> anyhow::Result<Vec<(Id, Version)>> {
         let mut graph = DiGraph::<&Id, ()>::new();
         let mut id_to_node = HashMap::new();
@@ -195,11 +198,7 @@ impl Creeper {
         }
 
         for (package, version) in &dep {
-            if !package.is_regular() {
-                todo!()
-            }
-
-            let dep = self.registry.get_node(package, version, 0)?.dep;
+            let dep = self.blocking_get_node(package, version, 0)?.dep;
 
             for (d, _) in dep {
                 let node_package = id_to_node[package];

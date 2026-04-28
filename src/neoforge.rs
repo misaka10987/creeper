@@ -207,7 +207,7 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
             } else {
                 format!("1.{}.{}", version.major, version.minor)
             };
-            let dep = Some((Id::minecraft(), req.parse().unwrap()))
+            let dep = Some((Id::vanilla(), req.parse().unwrap()))
                 .into_iter()
                 .collect();
             let node = PackNode { dep };

@@ -47,11 +47,10 @@ impl Artifact {
     }
 
     pub fn checksum(self) -> impl Iterator<Item = Checksum> {
-        Some(self.blake3)
-            .map(Checksum::blake3)
+        Some(Checksum::blake3(self.blake3))
             .into_iter()
-            .chain(self.sha1.map(Checksum::sha1).into_iter())
-            .chain(self.sha256.map(Checksum::sha256).into_iter())
+            .chain(self.sha1.map(Checksum::sha1))
+            .chain(self.sha256.map(Checksum::sha256))
     }
 
     pub fn path(&self) -> anyhow::Result<PathBuf> {

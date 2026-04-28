@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::RwLock,
 };
@@ -13,7 +13,7 @@ use tokio::{
     io::AsyncWriteExt,
     process::Command,
 };
-use tracing::{debug, trace};
+use tracing::debug;
 use url::Url;
 
 use crate::{
@@ -152,16 +152,6 @@ impl Registry {
             package
         ))?;
         Ok(node.clone())
-    }
-
-    pub fn get_versions(&self, package: &Id) -> anyhow::Result<BTreeSet<Version>> {
-        let pack = self.blocking_get_index(package)?;
-        trace!("found {} version(s) for {}", pack.len(), package);
-        let versions = pack
-            .keys()
-            .map(|VersionRev(version, _rev)| version.clone())
-            .collect();
-        Ok(versions)
     }
 
     pub async fn get(&self, id: &Id, version: &Version, rev: u32) -> anyhow::Result<Package> {

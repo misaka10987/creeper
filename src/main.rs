@@ -5,6 +5,7 @@ mod id;
 mod java;
 mod launch;
 // mod lock;
+mod artifact;
 mod index;
 mod install;
 mod mc;
@@ -15,7 +16,6 @@ mod pbar;
 mod prelude;
 mod pubgrub;
 mod registry;
-mod storage;
 mod tool;
 mod user;
 mod util;
@@ -32,12 +32,12 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 use crate::{
+    artifact::ArtifactManager,
     cmd::{Execute, build_index::BuildIndex, nf_version::NeoForgeVersion, run::Run},
     game::GameManager,
     neoforge::NeoforgeManager,
     path::init_creeper_dirs,
     registry::Registry,
-    storage::StorageManager,
     tool::Tool,
     vanilla::VanillaManager,
 };
@@ -48,7 +48,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct CreeperInner {
     pub args: CreeperConfig,
-    storage: StorageManager,
+    storage: ArtifactManager,
     vanilla: VanillaManager,
     http: Client,
     registry: Registry,
@@ -77,7 +77,7 @@ impl Creeper {
         let vanilla = VanillaManager::new(http.clone());
         let val = CreeperInner {
             args,
-            storage: StorageManager::new().await?,
+            storage: ArtifactManager::new().await?,
             vanilla,
             http,
             registry,

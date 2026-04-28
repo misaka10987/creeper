@@ -84,13 +84,13 @@ impl Artifact {
     }
 }
 
-const DB_INIT_QUERY: &str = include_str!("storage.sql");
+const DB_INIT_QUERY: &str = include_str!("artifact.sql");
 
-pub struct StorageManager {
+pub struct ArtifactManager {
     index: SqlitePool,
 }
 
-impl StorageManager {
+impl ArtifactManager {
     pub async fn new() -> anyhow::Result<Self> {
         let path = creeper_data_dir()?.join("storage-index.db");
         let opt = SqliteConnectOptions::default()

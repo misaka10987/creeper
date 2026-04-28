@@ -13,7 +13,7 @@ use tokio::{
     io::AsyncWriteExt,
     process::Command,
 };
-use tracing::debug;
+use tracing::{debug, info};
 use url::Url;
 
 use crate::{
@@ -83,6 +83,8 @@ impl Registry {
     }
 
     async fn update(&self) -> anyhow::Result<()> {
+        info!("updating registry {}", self.url);
+
         let cache = self.index_cache_path()?;
         let url = self.index_url().await?;
         match url.scheme() {

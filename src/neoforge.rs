@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, path::PathBuf, str::FromStr, sync::OnceLock};
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::{
     Creeper, Id,
@@ -39,6 +39,8 @@ impl NeoforgeManager {
     }
 
     pub async fn update(&self) -> anyhow::Result<()> {
+        info!("updating NeoForge metadata");
+
         let req = self.http.get(VERSIONS_URL).build()?;
         let res = self.http.execute(req).await?;
 
@@ -60,8 +62,8 @@ impl NeoforgeManager {
 
         let index = neoforge_index(versions);
 
-        info!(
-            "retrieved {count} neoforge versions, of which {} valid",
+        debug!(
+            "retrieved {count} NeoForge versions, of which {} valid",
             index.len()
         );
 

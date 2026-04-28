@@ -22,7 +22,7 @@ use reqwest::Client;
 use semver::Version;
 
 use tokio::{sync::RwLock, task::JoinSet};
-use tracing::{Instrument, info};
+use tracing::{Instrument, debug, info, trace};
 
 fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
     versions
@@ -65,15 +65,29 @@ impl VanillaManager {
     }
 
     pub async fn update(&self) -> anyhow::Result<()> {
+        info!("updating vanilla metadata");
+
         let req = self.http.get(VERSION_MANIFEST_URL).build()?;
         let res = self.http.execute(req).await?;
 
         let manifest = res.json::<Manifest>().await?;
 
         let mut versions = vec![];
+
+        let count = manifest.versions.len();
+
         for version in manifest.versions {
-            versions.push(version.id.parse::<Version>()?);
+            if let Some(version) = version.id.parse().ok() {
+                versions.push(version);
+            } else {
+                trace!("ignoring invalid vanilla version {}", version.id);
+            }
         }
+
+        debug!(
+            "retrieved {count} vanilla versions, of which {} valid",
+            versions.len()
+        );
 
         let index = vanilla_index(versions);
 

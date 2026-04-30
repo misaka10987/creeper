@@ -56,7 +56,7 @@ pub struct FetchManifest;
 impl Execute for FetchManifest {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let manifest = lib.vanilla_manifest().await?;
-        let json = serde_json::to_string_pretty(manifest)?;
+        let json = serde_json::to_string(manifest)?;
         println!("{json}");
         Ok(())
     }
@@ -73,7 +73,7 @@ pub struct FetchMcVersion {
 impl Execute for FetchMcVersion {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let mc_version = lib.vanilla_version(self.version).await?;
-        let json = serde_json::to_string_pretty(&mc_version)?;
+        let json = serde_json::to_string(&mc_version)?;
         println!("{json}");
         Ok(())
     }
@@ -90,8 +90,8 @@ pub struct VanillaInstall {
 impl Execute for VanillaInstall {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let install = lib.vanilla_install(self.version).await?;
-        let toml = serde_json::to_string_pretty(&install)?;
-        println!("{toml}");
+        let json = serde_json::to_string(&install)?;
+        println!("{json}");
         Ok(())
     }
 }

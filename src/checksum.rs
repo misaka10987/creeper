@@ -10,6 +10,7 @@ use anyhow::anyhow;
 use const_hex::ToHexExt;
 use ring::digest::{Algorithm, Context, SHA1_FOR_LEGACY_USE_ONLY, SHA256};
 use tokio::task::spawn_blocking;
+use tracing::debug;
 
 pub async fn blake3(file: impl AsRef<Path>) -> anyhow::Result<String> {
     fn calc(file: impl AsRef<Path>) -> anyhow::Result<String> {
@@ -97,12 +98,16 @@ pub enum HashFunc {
 
 impl HashFunc {
     pub async fn calc(&self, file: impl AsRef<Path>) -> anyhow::Result<String> {
-        let file = file.as_ref().to_owned();
-        match self {
+        let file = file.as_ref();
+
+        let sum = match self {
             HashFunc::Blake3 => blake3(file).await,
             HashFunc::Sha1 => sha1(file).await,
             HashFunc::Sha256 => sha256(file).await,
-        }
+        }?;
+
+        debug!("calculated {} {} = {}", self, file.display(), sum);
+        Ok(sum)
     }
 }
 

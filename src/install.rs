@@ -1,8 +1,9 @@
 use std::{collections::HashMap, path::PathBuf};
 
+use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::Artifact;
+use crate::{Artifact, Creeper, Id};
 
 /// Things installed to the game instance by a package.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -68,3 +69,15 @@ impl Extend<Self> for Install {
 }
 
 pub type FileMap = HashMap<PathBuf, Artifact>;
+
+impl Creeper {
+    pub async fn install(&self, package: &Id, version: Version) -> anyhow::Result<Install> {
+        if !package.is_regular() {
+            match package.as_str() {
+                _ => todo!(),
+            }
+        }
+        let package = self.query_registry(package, &version, 0).await?;
+        Ok(package.install)
+    }
+}

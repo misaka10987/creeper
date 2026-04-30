@@ -182,12 +182,12 @@ impl Creeper {
         self.registry.update().await
     }
 
-    pub async fn get_package(
+    pub async fn query_registry(
         &self,
-        id: &Id,
+        package: &Id,
         version: &Version,
         rev: u32,
     ) -> anyhow::Result<Package> {
-        self.registry.get(id, version, rev).await
+        self.registry.get(package, version, rev).await
     }
 }

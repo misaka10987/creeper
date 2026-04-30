@@ -168,7 +168,7 @@ impl Execute for GetPackage {
             self.package
         );
         let (id, version) = (pieces[0].parse()?, pieces[1].parse()?);
-        let package = lib.get_package(&id, &version, self.rev).await?;
+        let package = lib.query_registry(&id, &version, self.rev).await?;
         let toml = toml::to_string_pretty(&package)?;
         println!("{toml}");
         Ok(())

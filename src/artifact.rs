@@ -78,7 +78,7 @@ impl Artifact {
 
     pub fn storage_path(blake3: &str) -> anyhow::Result<PathBuf> {
         let path = creeper_data_dir()?
-            .join("storage")
+            .join("artifact")
             .join(&blake3[..2])
             .join(blake3);
         Ok(path)
@@ -94,7 +94,7 @@ pub struct ArtifactManager {
 
 impl ArtifactManager {
     pub async fn new(http: Client) -> anyhow::Result<Self> {
-        let path = creeper_data_dir()?.join("storage-index.db");
+        let path = creeper_data_dir()?.join("artifact.db");
         let opt = SqliteConnectOptions::default()
             .filename(path)
             .create_if_missing(true);
@@ -148,8 +148,6 @@ impl ArtifactManager {
         src: String,
         checksum: impl IntoIterator<Item = Checksum>,
     ) -> anyhow::Result<Artifact> {
-        // let storage: &StorageManager = self.as_ref();
-
         let blake3 = blake3(&file).await?;
 
         if self.find(&blake3).await?.is_some() {
@@ -180,8 +178,6 @@ impl ArtifactManager {
         blake3: &str,
         checksum: impl IntoIterator<Item = Checksum>,
     ) -> anyhow::Result<Artifact> {
-        // let storage: &StorageManager = self.as_ref();
-
         let mut art = self
             .find(blake3)
             .await?

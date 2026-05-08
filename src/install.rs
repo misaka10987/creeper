@@ -1,9 +1,9 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, iter::once, path::PathBuf};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::{Artifact, Creeper, Id};
+use crate::{Artifact, Creeper, Id, Package};
 
 /// Things installed to the game instance by a package.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -71,6 +71,10 @@ impl Extend<Self> for Install {
 pub type FileMap = HashMap<PathBuf, Artifact>;
 
 impl Creeper {
+    /// Retrieve the installation data for a specific version of package.
+    ///
+    /// Note that this does not install the dependencies of the package.
+    /// Use [`Self::recursive_install`] for that.
     pub async fn install(&self, package: &Id, version: Version) -> anyhow::Result<Install> {
         if !package.is_regular() {
             match package.as_str() {
@@ -80,5 +84,22 @@ impl Creeper {
         }
         let package = self.query_registry(package, &version, 0).await?;
         Ok(package.install)
+    }
+
+    /// Recursively retrieve the installation data for the provided package and its dependencies.
+    pub async fn recursive_install(&self, package: Package) -> anyhow::Result<Install> {
+        let dep = self.resolve(package.node.dep)?;
+        let sorted = self.sort_dependency(dep)?;
+
+        let mut install = Install::default();
+
+        for (id, version) in sorted {
+            let package = self.query_registry(&id, &version, 0).await?;
+            install.extend(once(package.install));
+        }
+
+        install.extend(once(package.install));
+
+        Ok(install)
     }
 }

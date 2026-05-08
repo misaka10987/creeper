@@ -74,6 +74,7 @@ impl Creeper {
     pub async fn install(&self, package: &Id, version: Version) -> anyhow::Result<Install> {
         if !package.is_regular() {
             match package.as_str() {
+                "vanilla" => return self.vanilla_install(version).await,
                 _ => todo!(),
             }
         }

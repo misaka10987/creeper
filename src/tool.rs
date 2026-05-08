@@ -14,10 +14,10 @@ pub enum Tool {
     LoadInst(LoadInst),
     FetchManifest(FetchManifest),
     FetchMcVersion(FetchMcVersion),
-    VanillaInstall(VanillaInstall),
     Resolve(Resolve),
     GetPackage(GetPackage),
     ListNeoforgeVersion(ListNeoforgeVersion),
+    GetInstall(GetInstall),
 }
 
 impl Execute for Tool {
@@ -26,12 +26,12 @@ impl Execute for Tool {
             Tool::LoadInst(load_inst) => lib.execute(load_inst).await,
             Tool::FetchManifest(fetch_manifest) => lib.execute(fetch_manifest).await,
             Tool::FetchMcVersion(fetch_mc_version) => lib.execute(fetch_mc_version).await,
-            Tool::VanillaInstall(vanilla_install) => lib.execute(vanilla_install).await,
             Tool::Resolve(resolve) => lib.execute(resolve).await,
             Tool::GetPackage(get_package) => lib.execute(get_package).await,
             Tool::ListNeoforgeVersion(list_neoforge_version) => {
                 lib.execute(list_neoforge_version).await
             }
+            Tool::GetInstall(get_install) => lib.execute(get_install).await,
         }
     }
 }
@@ -74,23 +74,6 @@ impl Execute for FetchMcVersion {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let mc_version = lib.vanilla_version(self.version).await?;
         let json = serde_json::to_string(&mc_version)?;
-        println!("{json}");
-        Ok(())
-    }
-}
-
-/// Install and retrieve metadata of specific minecraft version.
-#[derive(Clone, Debug, Parser)]
-pub struct VanillaInstall {
-    /// The version of installation.
-    #[arg(value_name = "VERSION")]
-    version: Version,
-}
-
-impl Execute for VanillaInstall {
-    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let install = lib.vanilla_install(self.version).await?;
-        let json = serde_json::to_string(&install)?;
         println!("{json}");
         Ok(())
     }
@@ -171,6 +154,34 @@ impl Execute for GetPackage {
         let package = lib.query_registry(&id, &version, self.rev).await?;
         let toml = toml::to_string_pretty(&package)?;
         println!("{toml}");
+        Ok(())
+    }
+}
+
+/// Get the installation performed by the specific package.
+#[derive(Clone, Debug, Parser)]
+pub struct GetInstall {
+    /// The package in the `<id>@<version>` format.
+    #[arg(value_name = "PACKAGE")]
+    pub package: String,
+    /// The revision number of this version, defaults to 0.
+    #[arg(long, default_value_t = 0)]
+    pub rev: u32,
+}
+
+impl Execute for GetInstall {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let pieces = self.package.split('@').collect::<Vec<_>>();
+        ensure!(
+            pieces.len() == 2,
+            "invalid package version {}, expected <id>@<version>",
+            self.package
+        );
+        let (id, version) = (pieces[0].parse()?, pieces[1].parse()?);
+
+        let install = lib.install(&id, version).await?;
+        let json = serde_json::to_string(&install)?;
+        println!("{json}");
         Ok(())
     }
 }

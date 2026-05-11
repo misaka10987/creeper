@@ -12,7 +12,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
-use crate::util::mv;
+use crate::util::{mv, set_readonly};
 use crate::{
     Checksum, Creeper,
     checksum::{HashFunc, blake3},
@@ -166,6 +166,8 @@ impl ArtifactManager {
             }
             art.affix_checksum(checksum);
         }
+
+        set_readonly(&file).await?;
 
         mv(&file, art.path()?).await?;
         self.add(&art).await?;

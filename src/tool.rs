@@ -18,6 +18,7 @@ pub enum Tool {
     GetPackage(GetPackage),
     ListNeoforgeVersion(ListNeoforgeVersion),
     GetInstall(GetInstall),
+    CurrentInstall(CurrentInstall),
 }
 
 impl Execute for Tool {
@@ -32,6 +33,7 @@ impl Execute for Tool {
                 lib.execute(list_neoforge_version).await
             }
             Tool::GetInstall(get_install) => lib.execute(get_install).await,
+            Tool::CurrentInstall(current_install) => lib.execute(current_install).await,
         }
     }
 }
@@ -202,6 +204,23 @@ impl Execute for ListNeoforgeVersion {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let versions = lib.list_neoforge_version().await?;
         let json = serde_json::to_string(versions)?;
+        println!("{json}");
+        Ok(())
+    }
+}
+
+/// Print the installation data of the current game instance being managed.
+#[derive(Clone, Debug, Parser)]
+pub struct CurrentInstall;
+
+impl Execute for CurrentInstall {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let game = lib.game.pack().await?;
+
+        lib.update_all().await?;
+
+        let install = lib.recursive_install(game.clone()).await?;
+        let json = serde_json::to_string(&install)?;
         println!("{json}");
         Ok(())
     }

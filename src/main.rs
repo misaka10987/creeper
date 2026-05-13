@@ -152,6 +152,7 @@ enum SubCommand {
     BuildIndex(BuildIndex),
     #[command(name = "nf-version")]
     NeoForgeVersion(NeoForgeVersion),
+    Install(cmd::install::Install),
     #[clap(hide = true)]
     AwwMan,
 }
@@ -164,6 +165,7 @@ impl Execute for SubCommand {
             SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
             SubCommand::BuildIndex(build_index) => lib.execute(build_index).await,
             SubCommand::NeoForgeVersion(nf_version) => lib.execute(nf_version).await,
+            SubCommand::Install(install) => lib.execute(install).await,
         }
     }
 }

@@ -86,6 +86,22 @@ impl Creeper {
         Ok(package.install)
     }
 
+    /// Install all specified packages in the input.
+    /// Automatically merging them with the latter overriding the former.
+    pub async fn install_all(
+        &self,
+        packages: impl IntoIterator<Item = (Id, Version)>,
+    ) -> anyhow::Result<Install> {
+        let mut install = Install::default();
+
+        for (id, version) in packages {
+            let package = self.install(&id, version).await?;
+            install.extend(once(package));
+        }
+
+        Ok(install)
+    }
+
     /// Recursively retrieve the installation data for the provided package and its dependencies.
     pub async fn recursive_install(&self, package: Package) -> anyhow::Result<Install> {
         let dep = self.resolve(package.node.dep)?;

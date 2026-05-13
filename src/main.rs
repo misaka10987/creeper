@@ -4,7 +4,7 @@ mod game;
 mod id;
 mod java;
 mod launch;
-// mod lock;
+mod lock;
 mod artifact;
 mod index;
 mod install;

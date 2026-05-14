@@ -18,7 +18,6 @@ pub enum Tool {
     GetPackage(GetPackage),
     ListNeoforgeVersion(ListNeoforgeVersion),
     GetInstall(GetInstall),
-    LaunchCommand(LaunchCommand),
 }
 
 impl Execute for Tool {
@@ -33,7 +32,6 @@ impl Execute for Tool {
                 lib.execute(list_neoforge_version).await
             }
             Tool::GetInstall(get_install) => lib.execute(get_install).await,
-            Tool::LaunchCommand(launch_command) => lib.execute(launch_command).await,
         }
     }
 }
@@ -205,17 +203,6 @@ impl Execute for ListNeoforgeVersion {
         let versions = lib.list_neoforge_version().await?;
         let json = serde_json::to_string(versions)?;
         println!("{json}");
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Parser)]
-pub struct LaunchCommand;
-
-impl Execute for LaunchCommand {
-    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let cmd = lib.launch().await?;
-        println!("{cmd:?}");
         Ok(())
     }
 }

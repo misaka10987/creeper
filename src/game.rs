@@ -10,7 +10,7 @@ use tokio::{
     sync::RwLock,
 };
 
-use crate::{Package, lock::Lock};
+use crate::{Creeper, Package, lock::Lock};
 
 pub struct GameManager {
     dir: OnceLock<PathBuf>,
@@ -106,6 +106,24 @@ impl GameManager {
         }
 
         Ok(())
+    }
+}
+
+impl Creeper {
+    pub async fn game_dir(&self) -> anyhow::Result<&PathBuf> {
+        self.game.dir().await
+    }
+
+    pub async fn game_pack(&self) -> anyhow::Result<&Package> {
+        self.game.pack().await
+    }
+
+    pub async fn game_lock(&self) -> anyhow::Result<Option<Lock>> {
+        self.game.lock().await
+    }
+
+    pub async fn set_game_lock(&self, lock: Option<Lock>) -> anyhow::Result<()> {
+        self.game.set_lock(lock).await
     }
 }
 

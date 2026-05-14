@@ -5,4 +5,4 @@ pub use super::java::Java;
 pub use super::artifact::Artifact;
 pub use super::install::Install;
 pub use super::pack::Package;
-pub use super::user::User;
+// pub use super::user::User;

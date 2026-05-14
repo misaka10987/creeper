@@ -1,34 +1,43 @@
-use std::collections::HashMap;
+use tokio::{fs::read_to_string, process::Command};
 
-pub struct LaunchCommand {
-    envs: HashMap<String, String>,
-    java_flags: Vec<String>,
-    game_flags: Vec<String>,
-}
+use crate::{Creeper, Install};
 
-impl LaunchCommand {
-    pub fn new() -> Self {
-        Self {
-            envs: HashMap::new(),
-            java_flags: vec![],
-            game_flags: vec![],
+impl Creeper {
+    pub async fn launch(&self) -> anyhow::Result<Command> {
+        let path = self.game_dir().await?.join(".creeper").join("install.json");
+        let json = read_to_string(path).await?;
+
+        let install = serde_json::from_str::<Install>(&json)?;
+
+        let mut cmd = Command::new("java");
+
+        for flag in install.java_flag {
+            cmd.arg(flag);
         }
-    }
-    pub fn add(&mut self, opt: impl LaunchOption) {
-        self.envs.extend(opt.envs());
-        self.java_flags.extend(opt.java_flags());
-        self.game_flags.extend(opt.game_flags());
-    }
-}
 
-pub trait LaunchOption {
-    fn envs(&self) -> HashMap<String, String> {
-        HashMap::new()
-    }
-    fn java_flags(&self) -> Vec<String> {
-        vec![]
-    }
-    fn game_flags(&self) -> Vec<String> {
-        vec![]
+        let mut cp = vec![];
+
+        for lib in install.java_lib {
+            let art = self.retrieve_artifact(&lib).await?;
+            cp.push(art.display().to_string());
+        }
+
+        if let Some(mc_jar) = install.mc_jar {
+            let art = self.retrieve_artifact(&mc_jar).await?;
+            cp.push(art.display().to_string());
+        }
+
+        let cp = cp.join(":");
+        cmd.arg("-cp").arg(cp);
+
+        if let Some(java_main_class) = install.java_main_class {
+            cmd.arg(java_main_class);
+        }
+
+        for flag in install.mc_flag {
+            cmd.arg(flag);
+        }
+
+        Ok(cmd)
     }
 }

@@ -1,13 +1,13 @@
+mod artifact;
 mod checksum;
 mod cmd;
 mod game;
 mod id;
+mod index;
+mod install;
 mod java;
 mod launch;
 mod lock;
-mod artifact;
-mod index;
-mod install;
 mod mc;
 mod neoforge;
 mod pack;
@@ -17,7 +17,7 @@ mod prelude;
 mod pubgrub;
 mod registry;
 mod tool;
-mod user;
+// mod user;
 mod util;
 mod vanilla;
 

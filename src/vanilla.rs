@@ -193,8 +193,8 @@ impl Creeper {
     }
 
     pub async fn vanilla_install(&self, version: Version) -> anyhow::Result<Install> {
-        let version = self.vanilla_version(version).await?;
-        let client = version.downloads.client;
+        let mc_version = self.vanilla_version(version.clone()).await?;
+        let client = mc_version.downloads.client;
         let client = self
             .download(
                 "minecraft.jar".into(),
@@ -203,8 +203,8 @@ impl Creeper {
                 Some(Checksum::sha1(client.sha1)),
             )
             .await?;
-        let lib = self.vanilla_lib(version.libraries).await?;
-        let asset_index = version.asset_index;
+        let lib = self.vanilla_lib(mc_version.libraries).await?;
+        let asset_index = mc_version.asset_index;
         let asset_index = self
             .download(
                 asset_index.id,
@@ -215,9 +215,10 @@ impl Creeper {
             .await?;
         let install = Install {
             java_lib: lib,
-            java_main_class: Some(version.main_class),
+            java_main_class: Some(mc_version.main_class),
             mc_jar: Some(client),
             mc_asset_index: Some(asset_index),
+            mc_flag: vec!["--version".into(), version.to_string()],
             ..Default::default()
         };
         Ok(install)

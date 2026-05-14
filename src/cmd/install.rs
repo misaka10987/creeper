@@ -1,7 +1,7 @@
 use std::iter::once;
 
 use clap::Parser;
-use tokio::fs::{create_dir_all, read_to_string, write};
+use tokio::fs::{create_dir_all, write};
 
 use crate::{cmd::Execute, lock::Lock};
 
@@ -16,21 +16,11 @@ impl Execute for Install {
     async fn execute(self, lib: &crate::Creeper) -> anyhow::Result<()> {
         let package = lib.game.pack().await?;
 
-        let lock_path = lib.game.dir().await?.join("creeper.lock");
+        let lock = lib.game.lock().await?;
 
-        let locked = if !self.update && lock_path.exists() {
-            let toml = read_to_string(&lock_path).await?;
-            let lock = toml::from_str::<Lock>(&toml)?;
-
-            lock.satisfies(package.node.dep.clone())
-                .then_some(lock.package)
-        } else {
-            None
-        };
-
-        let dep = match locked {
-            Some(dep) => dep,
-            None => {
+        let dep = match lock {
+            Some(lock) if lock.satisfies(package.node.dep.clone()) && !self.update => lock.package,
+            _ => {
                 lib.update_all().await?;
                 let sol = lib.resolve(package.node.dep.clone())?;
 
@@ -38,9 +28,7 @@ impl Execute for Install {
                     registry: lib.args.registry.clone(),
                     package: sol.clone(),
                 };
-                let toml = toml::to_string(&lock)?;
-
-                write(&lock_path, toml).await?;
+                lib.game.set_lock(Some(lock)).await?;
 
                 sol
             }

@@ -5,13 +5,17 @@ use std::{
 };
 
 use anyhow::anyhow;
-use tokio::fs::{read_to_string, try_exists};
+use tokio::{
+    fs::{create_dir_all, read_to_string, remove_file, try_exists, write},
+    sync::RwLock,
+};
 
-use crate::Package;
+use crate::{Package, lock::Lock};
 
 pub struct GameManager {
     dir: OnceLock<PathBuf>,
     pack: OnceLock<Package>,
+    lock: RwLock<OnceLock<Option<Lock>>>,
 }
 
 impl GameManager {
@@ -23,6 +27,7 @@ impl GameManager {
         Self {
             dir: d,
             pack: OnceLock::new(),
+            lock: RwLock::new(OnceLock::new()),
         }
     }
 
@@ -46,15 +51,61 @@ impl GameManager {
         Ok(self.dir.get_or_init(|| found))
     }
 
+    pub async fn pack_path(&self) -> anyhow::Result<PathBuf> {
+        let dir = self.dir().await?;
+        Ok(dir.join("creeper.toml"))
+    }
+
+    pub async fn lock_path(&self) -> anyhow::Result<PathBuf> {
+        let dir = self.dir().await?;
+        Ok(dir.join("creeper.lock"))
+    }
+
     pub async fn pack(&self) -> anyhow::Result<&Package> {
         if let Some(pack) = self.pack.get() {
             return Ok(pack);
         }
 
-        let path = self.dir().await?.join("creeper.toml");
-        let toml = read_to_string(path).await?;
+        let toml = read_to_string(self.pack_path().await?).await?;
         let pack = toml::from_str(&toml)?;
         Ok(self.pack.get_or_init(|| pack))
+    }
+
+    pub async fn lock(&self) -> anyhow::Result<Option<Lock>> {
+        if let Some(lock) = self.lock.read().await.get() {
+            return Ok(lock.clone());
+        }
+
+        let path = self.lock_path().await?;
+
+        let lock = if try_exists(path).await? {
+            let toml = read_to_string(self.lock_path().await?).await?;
+            Some(toml::from_str(&toml)?)
+        } else {
+            None
+        };
+
+        let lock = self.lock.write().await.get_or_init(|| lock).clone();
+
+        Ok(lock)
+    }
+
+    pub async fn set_lock(&self, lock: Option<Lock>) -> anyhow::Result<()> {
+        *self.lock.write().await = lock.clone().into();
+
+        let path = self.lock_path().await?;
+
+        if let Some(lock) = lock {
+            let toml = toml::to_string(&lock)?;
+            create_dir_all(path.parent().unwrap()).await?;
+            write(&path, toml).await?;
+        } else {
+            if try_exists(&path).await? {
+                remove_file(&path).await?;
+            }
+        }
+
+        Ok(())
     }
 }
 

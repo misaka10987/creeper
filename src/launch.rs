@@ -38,6 +38,8 @@ impl Creeper {
             cmd.arg(flag);
         }
 
+        cmd.arg("--gameDir").arg(self.game_dir().await?);
+
         Ok(cmd)
     }
 }

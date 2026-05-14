@@ -33,7 +33,7 @@ use url::Url;
 
 use crate::{
     artifact::ArtifactManager,
-    cmd::{Execute, build_index::BuildIndex, nf_version::NeoForgeVersion, run::Run},
+    cmd::{Execute, build_index::BuildIndex, launch::Launch, nf_version::NeoForgeVersion},
     game::GameManager,
     neoforge::NeoforgeManager,
     path::init_creeper_dirs,
@@ -148,7 +148,7 @@ struct Args {
 enum SubCommand {
     #[command(subcommand)]
     Tool(Tool),
-    Run(Run),
+    Launch(Launch),
     BuildIndex(BuildIndex),
     #[command(name = "nf-version")]
     NeoForgeVersion(NeoForgeVersion),
@@ -161,11 +161,11 @@ impl Execute for SubCommand {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         match self {
             SubCommand::Tool(tool) => lib.execute(tool).await,
-            SubCommand::Run(run) => lib.execute(run).await,
             SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
             SubCommand::BuildIndex(build_index) => lib.execute(build_index).await,
             SubCommand::NeoForgeVersion(nf_version) => lib.execute(nf_version).await,
             SubCommand::Install(install) => lib.execute(install).await,
+            SubCommand::Launch(launch) => lib.execute(launch).await,
         }
     }
 }

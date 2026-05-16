@@ -57,12 +57,12 @@ impl Extend<Self> for Install {
                 mc_mod,
             } = next;
             self.java_lib.extend(java_lib);
-            self.java_main_class = self.java_main_class.take().or(java_main_class);
+            self.java_main_class = java_main_class.or(self.java_main_class.take());
             self.native.extend(native);
             self.java_flag.extend(java_flag);
-            self.mc_jar = self.mc_jar.take().or(mc_jar);
+            self.mc_jar = mc_jar.or(self.mc_jar.take());
             self.mc_flag.extend(mc_flag);
-            self.mc_asset_index = self.mc_asset_index.take().or(mc_asset_index);
+            self.mc_asset_index = mc_asset_index.or(self.mc_asset_index.take());
             self.mc_mod.extend(mc_mod);
         }
     }
@@ -79,6 +79,7 @@ impl Creeper {
         if !package.is_regular() {
             match package.as_str() {
                 "vanilla" => return self.vanilla_install(version).await,
+                "neoforge" => return self.neoforge_install(&version).await,
                 _ => todo!(),
             }
         }

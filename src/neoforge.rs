@@ -1,12 +1,19 @@
-use std::{collections::BTreeSet, path::PathBuf, str::FromStr, sync::OnceLock};
+use std::{collections::BTreeSet, iter::once, path::PathBuf, str::FromStr, sync::OnceLock};
 
+use anyhow::anyhow;
+use async_zip::base::read::seek::ZipFileReader;
+use mc_launchermeta::{
+    VersionKind,
+    version::{Arguments, JavaVersion, library::Library, logging::Logging},
+};
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use tokio::{fs::File, io::BufReader};
 use tracing::{debug, info};
 
 use crate::{
-    Creeper, Id,
+    Checksum, Creeper, Id, Install,
     index::{Index, IndexLine, VersionRev},
     pack::PackNode,
     path::creeper_cache_dir,
@@ -127,6 +134,57 @@ impl Creeper {
     pub async fn update_neoforge(&self) -> anyhow::Result<()> {
         self.neoforge.update().await
     }
+
+    pub async fn neoforge_install(&self, version: &Version) -> anyhow::Result<Install> {
+        let nf_version = decode_neoforge_version(version);
+        let url = format!(
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/{nf_version}/neoforge-{nf_version}-installer.jar"
+        );
+
+        let sha1_url = format!("{url}.sha1");
+
+        let req = self.http.get(sha1_url).build()?;
+        let res = self.http.execute(req).await?;
+
+        let sha1 = res.text().await?.trim().to_string();
+
+        let name = format!("neoforge-{nf_version}-installer.jar");
+        let installer = self
+            .download(name, url, None, once(Checksum::sha1(sha1)))
+            .await?;
+
+        let installer = self.retrieve_artifact(&installer).await?;
+        let jar = File::open(installer).await?;
+        let read = BufReader::new(jar);
+
+        let mut zip = ZipFileReader::with_tokio(read).await?;
+
+        // find version.json
+        let index = zip
+            .file()
+            .entries()
+            .iter()
+            .position(|e| e.filename().as_str().is_ok_and(|s| s == "version.json"))
+            .ok_or(anyhow!("missing version.json in neoforge installer"))?;
+
+        let mut read = zip.reader_with_entry(index).await?;
+
+        let mut buf = String::new();
+        read.read_to_string_checked(&mut buf).await?;
+
+        let version = serde_json::from_str::<NfVersion>(&buf)?;
+
+        let lib = self.vanilla_lib(version.libraries).await?;
+
+        // TODO: version.arguments
+        let install = Install {
+            java_lib: lib,
+            java_main_class: Some(version.main_class),
+            ..Default::default()
+        };
+
+        Ok(install)
+    }
 }
 
 /// NeoForge's versioning scheme does not always follow the semver standard:
@@ -214,4 +272,34 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
             (VersionRev(version, 0), node)
         })
         .collect()
+}
+
+// mc_launchermeta::version::Version
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct NfVersion {
+    //
+    pub inherits_from: String,
+    #[serde(default)]
+    pub arguments: Option<Arguments>,
+    #[serde(default)]
+    pub minecraft_arguments: Option<String>,
+    // pub asset_index: AssetIndex,
+    // pub assets: String,
+    #[serde(default)]
+    pub compliance_level: Option<u8>,
+    // pub downloads: Downloads,
+    pub id: String,
+    #[serde(default)]
+    pub java_version: Option<JavaVersion>,
+    pub libraries: Vec<Library>,
+    #[serde(default)]
+    pub logging: Option<Logging>,
+    pub main_class: String,
+    // pub minimum_launcher_version: u8,
+    pub release_time: String,
+    pub time: String,
+    #[serde(rename = "type")]
+    pub kind: VersionKind,
 }

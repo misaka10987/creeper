@@ -114,7 +114,7 @@ impl Creeper {
         self.vanilla.update().await
     }
 
-    async fn vanilla_lib(&self, lib: Vec<Library>) -> anyhow::Result<Vec<Artifact>> {
+    pub(crate) async fn vanilla_lib(&self, lib: Vec<Library>) -> anyhow::Result<Vec<Artifact>> {
         let arts = filter_lib(lib);
 
         info!("downloading {} library artifacts", arts.len());

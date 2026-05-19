@@ -1,15 +1,18 @@
+use std::iter::once;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail};
+use anyhow::{bail, ensure};
+use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use sqlx::{query, query_as};
-use tokio::fs::{File, create_dir_all, metadata};
+use tokio::fs::{File, create_dir_all, metadata, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
+use crate::checksum;
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
 use crate::util::{mv, set_readonly};
@@ -47,6 +50,32 @@ impl Artifact {
         }
     }
 
+    pub fn try_extend(&mut self, other: impl Iterator<Item = Self>) -> anyhow::Result<()> {
+        for art in other {
+            let Self {
+                blake3,
+                name: _,
+                src: _,
+                len,
+                sha1,
+                sha256,
+                md5,
+            } = art;
+            if self.blake3 != blake3
+                || self.len != len
+                || matches!((&self.sha1, &sha1), (Some(x), Some(y)) if x != y)
+                || matches!((&self.sha256, &sha256), (Some(x), Some(y)) if x != y)
+                || matches!((&self.md5, &md5), (Some(x), Some(y)) if x != y)
+            {
+                bail!("different artifacts can not be extended");
+            }
+            self.sha1 = sha1;
+            self.sha256 = sha256;
+            self.md5 = md5;
+        }
+        Ok(())
+    }
+
     pub fn checksum(self) -> impl Iterator<Item = Checksum> {
         Some(Checksum::blake3(self.blake3))
             .into_iter()
@@ -82,6 +111,11 @@ impl Artifact {
             .join(&blake3[..2])
             .join(blake3);
         Ok(path)
+    }
+
+    pub async fn verify(&self, file: impl AsRef<Path>) -> anyhow::Result<bool> {
+        let b3 = blake3(file).await?;
+        Ok(b3 == self.blake3)
     }
 }
 
@@ -122,6 +156,16 @@ impl ArtifactManager {
         Ok(found)
     }
 
+    async fn has_storage(&self, blake3: &str) -> anyhow::Result<bool> {
+        let path = Artifact::storage_path(blake3)?;
+        if try_exists(&path).await? {
+            if checksum::blake3(&path).await? == blake3 {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     async fn add(&self, artifact: &Artifact) -> anyhow::Result<()> {
         if self.find(&artifact.blake3).await?.is_some() {
             warn!("duplicate add of artifact, this is likely due to an inefficient design");
@@ -140,109 +184,83 @@ impl ArtifactManager {
         Ok(())
     }
 
-    #[instrument(skip(self, name, src, checksum), fields(file = file.as_ref().display().to_string()))]
-    async fn store(
-        &self,
-        file: impl AsRef<Path>,
-        name: String,
-        src: String,
-        checksum: impl IntoIterator<Item = Checksum>,
-    ) -> anyhow::Result<Artifact> {
-        let blake3 = blake3(&file).await?;
-
-        if self.find(&blake3).await?.is_some() {
-            return self.affix_checksum(&blake3, checksum).await;
-        }
-
-        let len = metadata(&file).await?.len();
-        let mut art = Artifact::new(blake3.clone(), name, src, len);
-        for checksum in checksum {
-            // no need to calculate again for blake3
-            if checksum.function == HashFunc::Blake3 && checksum.hex_hash != blake3 {
-                bail!("broken file {:?}, expected {checksum}", file.as_ref())
-            }
-            if !checksum.check(&file).await? {
-                bail!("broken file {:?}, expected {checksum}", file.as_ref())
-            }
-            art.affix_checksum(checksum);
-        }
-
-        set_readonly(&file).await?;
-
-        mv(&file, art.path()?).await?;
-        self.add(&art).await?;
-
-        Ok(art)
-    }
-
-    async fn affix_checksum(
-        &self,
-        blake3: &str,
-        checksum: impl IntoIterator<Item = Checksum>,
-    ) -> anyhow::Result<Artifact> {
-        let mut art = self
-            .find(blake3)
-            .await?
-            .ok_or(anyhow!("affix checksum to nonexistent artifact"))?;
-
-        let file = art.path()?;
-
-        let mut added = false;
-
-        for checksum in checksum {
-            if art.has_checksum(checksum.function) {
-                continue;
-            }
-            if !checksum.check(&file).await? {
-                bail!("incorrect new checksum {checksum} for {file:?}");
-            }
-            art.affix_checksum(checksum);
-            added = true;
-        }
-
-        if !added {
-            debug!("no changes to checksum");
-            return Ok(art);
-        }
-
-        query("UPDATE artifact SET sha1 = ?, sha256 = ?, md5 = ? WHERE blake3 = ?")
+    async fn update(&self, art: &Artifact) -> anyhow::Result<()> {
+        let r = query("UPDATE artifact SET sha1 = ?, sha256 = ?, md5 = ? WHERE blake3 = ?")
             .bind(&art.sha1)
             .bind(&art.sha256)
             .bind(&art.md5)
-            .bind(blake3)
+            .bind(&art.blake3)
             .execute(&self.index)
             .await?;
-        Ok(art)
-    }
 
-    #[instrument(skip(self, artifact), fields(artifact.name = &artifact.name))]
-    pub async fn retrieve(&self, artifact: &Artifact) -> anyhow::Result<PathBuf> {
-        let blake3 = Checksum::blake3(artifact.blake3.clone());
-        if let Some(found) = self.find_checksum(&blake3).await? {
-            let path = found.path()?;
-            trace!("found at {path:?}, checking file integrity");
-            if blake3.check(&path).await? {
-                trace!("hashes match");
-                return Ok(path);
-            }
-            trace!("hashes mismatch, removing false file");
+        match r.rows_affected() {
+            0 => bail!("no artifact to update"),
+            1 => Ok(()),
+            _ => panic!("duplicate blake3 (primary key)"),
         }
-        debug!("downloading from {}", artifact.src);
-
-        let art = self
-            .download(
-                artifact.name.clone(),
-                artifact.src.clone(),
-                Some(artifact.len),
-                artifact.clone().checksum(),
-            )
-            .await?;
-
-        Ok(art.path()?)
     }
 
+    async fn add_or_update(&self, art: Artifact) -> anyhow::Result<()> {
+        if let Some(mut a) = self.find(&art.blake3).await? {
+            a.try_extend(once(art))?;
+            self.update(&a).await
+        } else {
+            self.add(&art).await
+        }
+    }
+
+    /// See [`Creeper::retrieve_artifact`].
+    #[instrument(skip(self, art), fields(artifact = &art.name))]
+    async fn retrieve(&self, art: &Artifact) -> anyhow::Result<PathBuf> {
+        let path = art.path()?;
+
+        if self.has_storage(&art.blake3).await? {
+            self.add_or_update(art.clone()).await?;
+            return Ok(path);
+        }
+
+        debug!("downloading from {}", art.src);
+
+        let cache = creeper_cache_dir()?.join(BASE64_URL_SAFE.encode(&art.src));
+        trace!("download caching to {cache:?}");
+        create_dir_all(cache.parent().unwrap()).await?;
+
+        let mut writer = BufWriter::new(File::create(&cache).await?);
+
+        let span = Span::current();
+        let trunc: String = art.name.chars().take(8).collect();
+        span.pb_set_message(&trunc);
+        span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
+        span.pb_set_length(art.len);
+
+        let req = self.http.get(&art.src).build()?;
+        let mut res = self.http.execute(req).await?;
+
+        while let Some(chunk) = res.chunk().await? {
+            writer.write_all(&chunk).await?;
+            span.pb_inc(chunk.len() as u64);
+        }
+
+        writer.shutdown().await?;
+
+        info!("download finished");
+
+        set_readonly(&cache).await?;
+
+        if !art.verify(&cache).await? {
+            bail!("invalid download");
+        }
+
+        self.add_or_update(art.clone()).await?;
+
+        mv(&cache, &path).await?;
+
+        Ok(path)
+    }
+
+    /// See [`Creeper::download`].
     #[instrument(skip(self, name, len, checksum))]
-    pub async fn download(
+    async fn download(
         &self,
         name: String,
         src: String,
@@ -251,21 +269,45 @@ impl ArtifactManager {
     ) -> anyhow::Result<Artifact> {
         let checksums = checksum.into_iter().collect::<Vec<_>>();
 
+        // if any of the specified checksums already exists in the database,
+        // skip downloading and verify the file with remaining checksums
         for checksum in &checksums {
-            if let Some(art) = self.find_checksum(checksum).await? {
+            if let Some(mut art) = self.find_checksum(checksum).await? {
                 debug!("fingerprint found in local storage");
-                let art = self.affix_checksum(&art.blake3, checksums).await?;
-                info!("verified file integrity, skipping download");
+
+                let path = self.retrieve(&art).await?;
+
+                let func = checksum.function;
+
+                for checksum in checksums {
+                    // because the `retrieve` method already checks blake3,
+                    // no need to calculate again
+                    if checksum.function == HashFunc::Blake3 {
+                        ensure!(
+                            checksum.hex_hash == art.blake3,
+                            "blake3 mismatch while {func} match"
+                        );
+                        continue;
+                    }
+
+                    if !checksum.check(&path).await? {
+                        bail!("incorrect checksum for {path:?}, expected {checksum}");
+                    }
+
+                    art.affix_checksum(checksum);
+                }
+
+                self.add_or_update(art.clone()).await?;
+
                 return Ok(art);
             }
         }
 
-        let path = creeper_cache_dir()?.join(blake3::hash(src.as_bytes()).to_hex().to_string());
+        let cache = creeper_cache_dir()?.join(BASE64_URL_SAFE.encode(&src));
+        trace!("download caching to {cache:?}");
+        create_dir_all(cache.parent().unwrap()).await?;
 
-        trace!("download caching to {path:?}");
-
-        create_dir_all(path.parent().unwrap()).await?;
-        let mut writer = BufWriter::new(File::create(&path).await?);
+        let mut writer = BufWriter::new(File::create(&cache).await?);
 
         let span = Span::current();
         let trunc: String = name.chars().take(8).collect();
@@ -289,17 +331,69 @@ impl ArtifactManager {
 
         info!("download finished");
 
-        let art = self.store(&path, name, src, checksums).await?;
+        set_readonly(&cache).await?;
+
+        let b3 = blake3(&cache).await?;
+        let path = Artifact::storage_path(&b3)?;
+
+        let download_len = metadata(&cache).await?.len();
+
+        let len = match len {
+            Some(len) if len != download_len => bail!(
+                "download {} length mismatch, expected {len}",
+                cache.display()
+            ),
+            Some(len) => len,
+            None => download_len,
+        };
+
+        let mut art = Artifact::new(b3, name, src, len);
+
+        for checksum in checksums {
+            if checksum.function == HashFunc::Blake3 {
+                ensure!(
+                    art.blake3 == checksum.hex_hash,
+                    "blake3 mismatch for downloaded file"
+                );
+                continue;
+            }
+
+            if !checksum.check(&cache).await? {
+                bail!("broken download {}, expected {checksum}", cache.display());
+            }
+
+            art.affix_checksum(checksum);
+        }
+
+        self.add_or_update(art.clone()).await?;
+
+        mv(&cache, &path).await?;
 
         Ok(art)
     }
 }
 
 impl Creeper {
-    pub async fn retrieve_artifact(&self, artifact: &Artifact) -> anyhow::Result<PathBuf> {
-        self.artifact.retrieve(artifact).await
+    /// Retrieve an artifact and return its storage path.
+    ///
+    /// This automatically downloads the file and updates the artifact database, if necessary.
+    ///
+    /// # Important Note
+    ///
+    /// Despite the fact that multiple checksums can be defined in an `Artifact`,
+    /// the method only guarantees the output file matches the blake3 checksum.
+    /// Any other checksums will be regarded as automatically correct,
+    /// if the blake3 checksum matches.
+    ///
+    /// This implies that, if the method is called with an `Artifact` with a false optional checksum,
+    /// the method will still succeed and potentially write poisoned records into the artifact database.
+    pub async fn retrieve_artifact(&self, art: &Artifact) -> anyhow::Result<PathBuf> {
+        self.artifact.retrieve(art).await
     }
 
+    /// Download a file from specified URL and store it in the artifact storage.
+    ///
+    /// If `len` and `checksum` are specified, it is guaranteed that the downloaded file matches the constraints.
     pub async fn download(
         &self,
         name: String,

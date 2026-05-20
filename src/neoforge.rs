@@ -10,7 +10,7 @@ use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::BufReader};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::{
     Checksum, Creeper, Id, Install,
@@ -176,10 +176,57 @@ impl Creeper {
 
         let lib = self.vanilla_lib(version.libraries).await?;
 
-        // TODO: version.arguments
+        let (java_flag, mc_flag) = if let Some(args) = version.arguments {
+            let java_flag = args.jvm.into_iter().flat_map(|arg| arg.values);
+
+            let mut it = java_flag.peekable();
+
+            let mut java_flag = vec![];
+
+            while let Some(arg) = it.next() {
+                match arg.as_str() {
+                    "-p" => {
+                        let value = it
+                            .peek()
+                            .ok_or(anyhow!("missing value for java argument -p"))?;
+
+                        let value = value.replace("${library_directory}/", "");
+
+                        let names = value.split("${classpath_separator}");
+
+                        let mut libs = vec![];
+
+                        for name in names {
+                            if let Some(art) = lib.iter().find(|art| art.name == name) {
+                                let lib = self.retrieve_artifact(art).await?;
+                                libs.push(lib.display().to_string());
+                            } else {
+                                error!("library {name} not found during neoforge install");
+                            }
+                        }
+
+                        java_flag.push("-p".into());
+                        java_flag.push(libs.join(":"));
+
+                        it.next();
+                    }
+                    s if !s.contains("$") => java_flag.push(s.into()),
+                    s => error!("ignoring unsupported neoforge java argument {s}"),
+                }
+            }
+
+            let mc_flag = args.game.into_iter().flat_map(|arg| arg.values).collect();
+
+            (java_flag, mc_flag)
+        } else {
+            (vec![], vec![])
+        };
+
         let install = Install {
             java_lib: lib,
             java_main_class: Some(version.main_class),
+            java_flag,
+            mc_flag,
             ..Default::default()
         };
 

@@ -11,11 +11,18 @@ use crate::{Artifact, Creeper, Id, Package};
 pub struct Install {
     /// Additional java libraries (classical), prepended to the `--class-path` command line argument when launching the game.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub java_lib: HashMap<PathBuf, Artifact>,
+    pub java_lib_class: HashMap<PathBuf, Artifact>,
 
     /// Additional java modules (Java 9+), prepended to the `--module-path` command line argument when launching the game.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub java_mod: HashMap<PathBuf, Artifact>,
+    pub java_lib_mod: HashMap<PathBuf, Artifact>,
+
+    /// Additional java library files.
+    /// These are placed under the libraries directory, but not automatically added to java CLI arguments.
+    ///
+    /// This is useful for programs like neoforge which implements custom class loading logic.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub java_lib_file: HashMap<PathBuf, Artifact>,
 
     /// Java main class override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -58,8 +65,9 @@ impl Extend<Self> for Install {
     fn extend<T: IntoIterator<Item = Self>>(&mut self, iter: T) {
         for next in iter {
             let Self {
-                java_lib,
-                java_mod,
+                java_lib_class,
+                java_lib_mod,
+                java_lib_file,
                 java_main_class,
                 native,
                 java_flag,
@@ -68,8 +76,9 @@ impl Extend<Self> for Install {
                 mc_asset_index,
                 mc_mod,
             } = next;
-            self.java_lib.extend(java_lib);
-            self.java_mod.extend(java_mod);
+            self.java_lib_class.extend(java_lib_class);
+            self.java_lib_mod.extend(java_lib_mod);
+            self.java_lib_file.extend(java_lib_file);
             self.java_main_class = java_main_class.or(self.java_main_class.take());
             self.native.extend(native);
             self.java_flag.extend(java_flag);

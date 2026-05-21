@@ -219,7 +219,7 @@ impl Creeper {
             )
             .await?;
         let install = Install {
-            java_lib: lib,
+            java_lib_class: lib,
             java_main_class: Some(mc_version.main_class),
             mc_jar: Some(client),
             mc_asset_index: Some(asset_index),

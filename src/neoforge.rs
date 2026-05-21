@@ -15,6 +15,7 @@ use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
+use url::Url;
 
 use crate::{
     Checksum, Creeper, Id, Install,
@@ -163,9 +164,18 @@ impl Creeper {
         let version = extract_zip(&installer, "version.json").await?;
         let version = serde_json::from_str::<NfVersion>(&version)?;
 
-        let lib = self.vanilla_lib(version.libraries).await?;
+        let install_profile = extract_zip(&installer, "install_profile.json").await?;
+        let install_profile = serde_json::from_str::<NfInstallProfile>(&install_profile)?;
 
-        let mut java_mod = HashMap::new();
+        let mut java_lib_class = HashMap::new();
+        let mut java_lib_mod = HashMap::new();
+        let mut java_lib_file = HashMap::new();
+
+        java_lib_class.extend(self.vanilla_lib(version.libraries).await?);
+
+        // libraries defined in `install_profile.json` does not require being prepended to `--module-path`
+        // because they are loaded by neoforge's custom class loader
+        java_lib_file.extend(self.vanilla_lib(install_profile.libraries).await?);
 
         let (java_flag, mc_flag) = if let Some(args) = version.arguments {
             let java_flag = args.jvm.into_iter().flat_map(|arg| arg.values);
@@ -187,8 +197,8 @@ impl Creeper {
 
                         for name in names {
                             let path = PathBuf::from(name);
-                            if let Some(art) = lib.get(&path) {
-                                java_mod.insert(path, art.clone());
+                            if let Some(art) = java_lib_class.get(&path) {
+                                java_lib_mod.insert(path, art.clone());
                             } else {
                                 error!("library {name} not found during neoforge install");
                             }
@@ -209,8 +219,9 @@ impl Creeper {
         };
 
         let install = Install {
-            java_lib: lib,
-            java_mod,
+            java_lib_class,
+            java_lib_mod,
+            java_lib_file,
             java_main_class: Some(version.main_class),
             java_flag,
             mc_flag,
@@ -336,4 +347,46 @@ pub struct NfVersion {
     pub time: String,
     #[serde(rename = "type")]
     pub kind: VersionKind,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct NfInstallProfile {
+    pub spec: u64,
+    pub profile: String,
+    pub version: String,
+    pub icon: String,
+    pub minecraft: Version,
+    pub json: PathBuf,
+    pub logo: PathBuf,
+    pub welcome: String,
+    pub mirror_list: Url,
+    pub hide_extract: bool,
+    pub data: HashMap<String, install_profile::DataValue>,
+    pub processors: Vec<install_profile::Processor>,
+    pub libraries: Vec<Library>,
+    pub server_jar_path: String,
+}
+
+pub mod install_profile {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    #[serde(deny_unknown_fields)]
+    pub struct DataValue {
+        pub client: String,
+        pub server: String,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    #[serde(deny_unknown_fields)]
+    pub struct Processor {
+        pub sides: Option<Vec<String>>,
+        pub jar: String,
+        pub classpath: Vec<String>,
+        pub args: Vec<String>,
+    }
 }

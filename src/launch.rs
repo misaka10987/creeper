@@ -23,7 +23,7 @@ impl Creeper {
 
         let mut cp = vec![];
 
-        for (path, art) in install.java_lib {
+        for (path, art) in install.java_lib_class {
             let path = lib_path.join(path);
             create_dir_all(path.parent().unwrap()).await?;
 
@@ -45,7 +45,7 @@ impl Creeper {
 
         let mut p = vec![];
 
-        for (path, art) in install.java_mod {
+        for (path, art) in install.java_lib_mod {
             let path = lib_path.join(path);
             create_dir_all(path.parent().unwrap()).await?;
 
@@ -55,6 +55,16 @@ impl Creeper {
             }
 
             p.push(path.display().to_string());
+        }
+
+        for (path, art) in install.java_lib_file {
+            let path = lib_path.join(path);
+            create_dir_all(path.parent().unwrap()).await?;
+
+            if !(try_exists(&path).await? && art.verify(&path).await?) {
+                let art = self.retrieve_artifact(&art).await?;
+                symlink(&art, &path).await?;
+            }
         }
 
         let p = p.join(":");

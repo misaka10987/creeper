@@ -7,7 +7,6 @@ use std::{
 };
 
 use anyhow::anyhow;
-use async_zip::base::read::seek::ZipFileReader;
 use mc_launchermeta::{
     VersionKind,
     version::{Arguments, JavaVersion, library::Library, logging::Logging},
@@ -15,7 +14,6 @@ use mc_launchermeta::{
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use tokio::{fs::File, io::BufReader};
 use tracing::{debug, error, info};
 
 use crate::{
@@ -23,6 +21,7 @@ use crate::{
     index::{Index, IndexLine, VersionRev},
     pack::PackNode,
     path::creeper_cache_dir,
+    util::extract_zip,
 };
 
 const VERSIONS_URL: &str =
@@ -160,25 +159,9 @@ impl Creeper {
             .await?;
 
         let installer = self.retrieve_artifact(&installer).await?;
-        let jar = File::open(installer).await?;
-        let read = BufReader::new(jar);
 
-        let mut zip = ZipFileReader::with_tokio(read).await?;
-
-        // find version.json
-        let index = zip
-            .file()
-            .entries()
-            .iter()
-            .position(|e| e.filename().as_str().is_ok_and(|s| s == "version.json"))
-            .ok_or(anyhow!("missing version.json in neoforge installer"))?;
-
-        let mut read = zip.reader_with_entry(index).await?;
-
-        let mut buf = String::new();
-        read.read_to_string_checked(&mut buf).await?;
-
-        let version = serde_json::from_str::<NfVersion>(&buf)?;
+        let version = extract_zip(&installer, "version.json").await?;
+        let version = serde_json::from_str::<NfVersion>(&version)?;
 
         let lib = self.vanilla_lib(version.libraries).await?;
 

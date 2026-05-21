@@ -1,4 +1,10 @@
-use std::{collections::BTreeSet, iter::once, path::PathBuf, str::FromStr, sync::OnceLock};
+use std::{
+    collections::{BTreeSet, HashMap},
+    iter::once,
+    path::PathBuf,
+    str::FromStr,
+    sync::OnceLock,
+};
 
 use anyhow::anyhow;
 use async_zip::base::read::seek::ZipFileReader;
@@ -176,6 +182,8 @@ impl Creeper {
 
         let lib = self.vanilla_lib(version.libraries).await?;
 
+        let mut java_mod = HashMap::new();
+
         let (java_flag, mc_flag) = if let Some(args) = version.arguments {
             let java_flag = args.jvm.into_iter().flat_map(|arg| arg.values);
 
@@ -194,19 +202,14 @@ impl Creeper {
 
                         let names = value.split("${classpath_separator}");
 
-                        let mut libs = vec![];
-
                         for name in names {
-                            if let Some(art) = lib.iter().find(|art| art.name == name) {
-                                let lib = self.retrieve_artifact(art).await?;
-                                libs.push(lib.display().to_string());
+                            let path = PathBuf::from(name);
+                            if let Some(art) = lib.get(&path) {
+                                java_mod.insert(path, art.clone());
                             } else {
                                 error!("library {name} not found during neoforge install");
                             }
                         }
-
-                        java_flag.push("-p".into());
-                        java_flag.push(libs.join(":"));
 
                         it.next();
                     }
@@ -224,6 +227,7 @@ impl Creeper {
 
         let install = Install {
             java_lib: lib,
+            java_mod,
             java_main_class: Some(version.main_class),
             java_flag,
             mc_flag,

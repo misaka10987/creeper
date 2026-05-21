@@ -1,4 +1,7 @@
-use tokio::{fs::read_to_string, process::Command};
+use tokio::{
+    fs::{create_dir_all, read_to_string, symlink, try_exists},
+    process::Command,
+};
 
 use crate::{Creeper, Install};
 
@@ -15,11 +18,21 @@ impl Creeper {
             cmd.arg(flag);
         }
 
+        let lib_path = self.game_dir().await?.join(".creeper").join("lib");
+        create_dir_all(&lib_path).await?;
+
         let mut cp = vec![];
 
-        for lib in install.java_lib {
-            let art = self.retrieve_artifact(&lib).await?;
-            cp.push(art.display().to_string());
+        for (path, art) in install.java_lib {
+            let path = lib_path.join(path);
+            create_dir_all(path.parent().unwrap()).await?;
+
+            if !(try_exists(&path).await? && art.verify(&path).await?) {
+                let art = self.retrieve_artifact(&art).await?;
+                symlink(&art, &path).await?;
+            }
+
+            cp.push(path.display().to_string());
         }
 
         if let Some(mc_jar) = install.mc_jar {
@@ -28,7 +41,26 @@ impl Creeper {
         }
 
         let cp = cp.join(":");
-        cmd.arg("-cp").arg(cp);
+        cmd.arg("--class-path").arg(cp);
+
+        let mut p = vec![];
+
+        for (path, art) in install.java_mod {
+            let path = lib_path.join(path);
+            create_dir_all(path.parent().unwrap()).await?;
+
+            if !(try_exists(&path).await? && art.verify(&path).await?) {
+                let art = self.retrieve_artifact(&art).await?;
+                symlink(&art, &path).await?;
+            }
+
+            p.push(path.display().to_string());
+        }
+
+        let p = p.join(":");
+        cmd.arg("--module-path").arg(p);
+
+        cmd.arg(format!("-DlibraryDirectory={}", lib_path.display()));
 
         if let Some(java_main_class) = install.java_main_class {
             cmd.arg(java_main_class);

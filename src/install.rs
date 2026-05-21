@@ -9,27 +9,38 @@ use crate::{Artifact, Creeper, Id, Package};
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Install {
-    /// Additional java libraries, prepended to the classpath when launching the game.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub java_lib: Vec<Artifact>,
+    /// Additional java libraries (classical), prepended to the `--class-path` command line argument when launching the game.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub java_lib: HashMap<PathBuf, Artifact>,
+
+    /// Additional java modules (Java 9+), prepended to the `--module-path` command line argument when launching the game.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub java_mod: HashMap<PathBuf, Artifact>,
+
     /// Java main class override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub java_main_class: Option<String>,
+
     /// Native libraries to be added.
-    #[serde(default, skip_serializing_if = "FileMap::is_empty")]
-    pub native: FileMap,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub native: HashMap<PathBuf, Artifact>,
+
     /// Extra java command line options.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub java_flag: Vec<String>,
+
     /// Minecraft client `.jar` file override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mc_jar: Option<Artifact>,
+
     /// Command line options passed to the Minecraft game program.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mc_flag: Vec<String>,
+
     /// Minecraft asset index JSON file override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mc_asset_index: Option<Artifact>,
+
     /// Minecraft mod files to be added to the `mods` folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mc_mod: Vec<Artifact>,
@@ -48,6 +59,7 @@ impl Extend<Self> for Install {
         for next in iter {
             let Self {
                 java_lib,
+                java_mod,
                 java_main_class,
                 native,
                 java_flag,
@@ -57,6 +69,7 @@ impl Extend<Self> for Install {
                 mc_mod,
             } = next;
             self.java_lib.extend(java_lib);
+            self.java_mod.extend(java_mod);
             self.java_main_class = java_main_class.or(self.java_main_class.take());
             self.native.extend(native);
             self.java_flag.extend(java_flag);
@@ -67,8 +80,6 @@ impl Extend<Self> for Install {
         }
     }
 }
-
-pub type FileMap = HashMap<PathBuf, Artifact>;
 
 impl Creeper {
     /// Retrieve the installation data for a specific version of package.

@@ -114,7 +114,10 @@ impl Creeper {
         self.vanilla.update().await
     }
 
-    pub(crate) async fn vanilla_lib(&self, lib: Vec<Library>) -> anyhow::Result<Vec<Artifact>> {
+    pub(crate) async fn vanilla_lib(
+        &self,
+        lib: Vec<Library>,
+    ) -> anyhow::Result<HashMap<PathBuf, Artifact>> {
         let arts = filter_lib(lib);
 
         info!("downloading {} library artifacts", arts.len());
@@ -126,20 +129,22 @@ impl Creeper {
             let fut = async move {
                 creeper
                     .download(
-                        art.path,
+                        art.path.clone(),
                         art.url,
                         Some(art.size),
                         Some(Checksum::sha1(art.sha1)),
                     )
                     .await
+                    .map(|a| (art.path, a))
             };
             set.spawn(fut.in_current_span());
         }
 
-        let mut lib = vec![];
+        let mut lib = HashMap::new();
 
         while let Some(res) = set.join_next().await {
-            lib.push(res??);
+            let (k, v) = res??;
+            lib.insert(k.into(), v);
         }
 
         Ok(lib)

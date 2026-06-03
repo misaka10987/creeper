@@ -2,8 +2,10 @@ use std::{collections::HashMap, iter::once, path::PathBuf};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use tokio::fs::{create_dir_all, read_to_string, try_exists, write};
+use tracing::debug;
 
-use crate::{Artifact, Creeper, Id, Package};
+use crate::{Artifact, Creeper, Id, Package, path::creeper_cache_dir};
 
 /// Things installed to the game instance by a package.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -90,21 +92,45 @@ impl Extend<Self> for Install {
     }
 }
 
+fn cache_path() -> anyhow::Result<PathBuf> {
+    let path = creeper_cache_dir()?.join("install");
+    Ok(path)
+}
+
 impl Creeper {
     /// Retrieve the installation data for a specific version of package.
     ///
     /// Note that this does not install the dependencies of the package.
     /// Use [`Self::recursive_install`] for that.
     pub async fn install(&self, package: &Id, version: Version) -> anyhow::Result<Install> {
-        if !package.is_regular() {
+        let cache = cache_path()?
+            .join(package.indexed_path())
+            .join(version.to_string())
+            .with_added_extension("json");
+
+        if try_exists(&cache).await? {
+            let json = read_to_string(&cache).await?;
+            let install = serde_json::from_str(&json)?;
+            debug!("using cached install {package}@{version}");
+            return Ok(install);
+        }
+
+        let install = if !package.is_regular() {
             match package.as_str() {
-                "vanilla" => return self.vanilla_install(version).await,
-                "neoforge" => return self.neoforge_install(&version).await,
+                "vanilla" => self.vanilla_install(version).await?,
+                "neoforge" => self.neoforge_install(&version).await?,
                 _ => todo!(),
             }
-        }
-        let package = self.query_registry(package, &version, 0).await?;
-        Ok(package.install)
+        } else {
+            let package = self.query_registry(package, &version, 0).await?;
+            package.install
+        };
+
+        let json = serde_json::to_string(&install)?;
+        create_dir_all(cache.parent().unwrap()).await?;
+        write(&cache, json).await?;
+
+        Ok(install)
     }
 
     /// Install all specified packages in the input.

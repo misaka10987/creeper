@@ -18,7 +18,7 @@ use tracing::{debug, error, info};
 use url::Url;
 
 use crate::{
-    Checksum, Creeper, Id, Install,
+    Artifact, Checksum, Creeper, Id, Install,
     index::{Index, IndexLine, VersionRev},
     pack::PackNode,
     path::creeper_cache_dir,
@@ -141,8 +141,9 @@ impl Creeper {
         self.neoforge.update().await
     }
 
-    pub async fn neoforge_install(&self, version: &Version) -> anyhow::Result<Install> {
+    async fn neoforge_installer_jar(&self, version: &Version) -> anyhow::Result<Artifact> {
         let nf_version = decode_neoforge_version(version);
+
         let url = format!(
             "https://maven.neoforged.net/releases/net/neoforged/neoforge/{nf_version}/neoforge-{nf_version}-installer.jar"
         );
@@ -159,23 +160,45 @@ impl Creeper {
             .download(name, url, None, once(Checksum::sha1(sha1)))
             .await?;
 
+        Ok(installer)
+    }
+
+    pub async fn neoforge_install(&self, version: &Version) -> anyhow::Result<Install> {
+        let installer = self.neoforge_installer_jar(version).await?;
+
         let installer = self.retrieve_artifact(&installer).await?;
+
+        // handle install as defined in `version.json`
 
         let version = extract_zip(&installer, "version.json").await?;
         let version = serde_json::from_str::<NfVersion>(&version)?;
 
+        let mut install = self.neoforge_version_install(version).await?;
+
+        // handle install as defined in `install_profile.json`
+
         let install_profile = extract_zip(&installer, "install_profile.json").await?;
         let install_profile = serde_json::from_str::<NfInstallProfile>(&install_profile)?;
 
-        let mut java_lib_class = HashMap::new();
-        let mut java_lib_mod = HashMap::new();
         let mut java_lib_file = HashMap::new();
-
-        java_lib_class.extend(self.vanilla_lib(version.libraries).await?);
 
         // libraries defined in `install_profile.json` does not require being prepended to `--module-path`
         // because they are loaded by neoforge's custom class loader
         java_lib_file.extend(self.vanilla_lib(install_profile.libraries).await?);
+
+        install.extend(once(Install {
+            java_lib_file,
+            ..Default::default()
+        }));
+
+        // TODO: run processors
+
+        Ok(install)
+    }
+
+    async fn neoforge_version_install(&self, version: NfVersion) -> anyhow::Result<Install> {
+        let java_lib_class = self.vanilla_lib(version.libraries).await?;
+        let mut java_lib_mod = HashMap::new();
 
         let (java_flag, mc_flag) = if let Some(args) = version.arguments {
             let java_flag = args.jvm.into_iter().flat_map(|arg| arg.values);
@@ -221,7 +244,6 @@ impl Creeper {
         let install = Install {
             java_lib_class,
             java_lib_mod,
-            java_lib_file,
             java_main_class: Some(version.main_class),
             java_flag,
             mc_flag,

@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Display,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -159,6 +160,12 @@ impl MavenCoord {
             .join(&self.artifact)
             .join(self.version.to_string())
             .join(format!("{}-{}", self.artifact, self.version))
+    }
+}
+
+impl Display for MavenCoord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}:{}", self.group, self.artifact, self.version)
     }
 }
 

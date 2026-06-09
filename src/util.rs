@@ -1,7 +1,12 @@
-use std::{collections::HashMap, path::Path, str::FromStr};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail, ensure};
 use async_zip::base::read::seek::ZipFileReader;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use tokio::{
     fs::{File, copy, create_dir_all, metadata, remove_file, rename, set_permissions},
@@ -120,6 +125,73 @@ impl FromStr for JarManifest {
             manifest_version,
             implementation_version,
             main_class,
+        })
+    }
+}
+
+pub fn is_valid_java_package(name: &str) -> bool {
+    for piece in name.split(".") {
+        let mut chars = piece.chars();
+
+        if chars.next().is_none_or(|c| !c.is_ascii_lowercase()) {
+            return false;
+        }
+
+        if !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+            return false;
+        }
+    }
+
+    true
+}
+
+pub struct MavenCoord {
+    pub group: String,
+    pub artifact: String,
+    pub version: Version,
+}
+
+impl MavenCoord {
+    pub fn path(&self) -> PathBuf {
+        self.group
+            .split(".")
+            .fold(PathBuf::new(), |acc, x| acc.join(x))
+            .join(&self.artifact)
+            .join(self.version.to_string())
+            .join(format!("{}-{}", self.artifact, self.version))
+    }
+}
+
+impl FromStr for MavenCoord {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let pieces = s.split(":").collect::<Vec<_>>();
+
+        ensure!(
+            pieces.len() == 3,
+            "invalid maven id {s}, expected <group>:<artifact>:<version>"
+        );
+
+        let (group, artifact, version) = (pieces[0], pieces[1], pieces[2]);
+
+        if !is_valid_java_package(group) {
+            bail!("invalid group id {group}");
+        }
+
+        if !artifact
+            .chars()
+            .all(|c| c.is_ascii_alphabetic() || c.is_ascii_digit() || c == '-' || c == '_')
+        {
+            bail!("invalid artifact id {artifact}");
+        }
+
+        let version = version.parse()?;
+
+        Ok(Self {
+            group: group.into(),
+            artifact: artifact.into(),
+            version,
         })
     }
 }

@@ -14,7 +14,8 @@ use mc_launchermeta::{
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info};
+use tokio::process::Command;
+use tracing::{debug, error, info, trace};
 use url::Url;
 
 use crate::{
@@ -22,8 +23,12 @@ use crate::{
     index::{Index, IndexLine, VersionRev},
     pack::PackNode,
     path::creeper_cache_dir,
-    util::extract_zip,
+    util::{JarManifest, MavenCoord, extract_zip},
 };
+
+fn classpath_path(cp: &str) -> PathBuf {
+    todo!()
+}
 
 const VERSIONS_URL: &str =
     "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
@@ -192,6 +197,71 @@ impl Creeper {
         }));
 
         // TODO: run processors
+
+        for proc in install_profile.processors {
+            if proc
+                .sides
+                .is_some_and(|s| s.iter().find(|s| *s == "client").is_none())
+            {
+                trace!("skipping a processor because of side mismatch");
+                continue;
+            }
+
+            // println!("{}", proc.jar.parse::<MavenCoord>()?.path().display());
+            // dbg!(&install.java_lib_file);
+
+            let jar = install
+                .java_lib_file
+                .get(
+                    &proc
+                        .jar
+                        .parse::<MavenCoord>()?
+                        .path()
+                        .with_added_extension("jar"),
+                )
+                // .values()
+                // .find_map(|a| (a.name == proc.jar).then_some(a))
+                .ok_or(anyhow!(
+                    "processor runs {} but the jar file not found",
+                    proc.jar
+                ))?;
+
+            let jar = self.retrieve_artifact(jar).await?;
+
+            let manifest = extract_zip(&jar, "META-INF/MANIFEST.MF")
+                .await?
+                .parse::<JarManifest>()?;
+
+            let main_class = manifest
+                .main_class
+                .ok_or(anyhow!("processor missing java main class"))?;
+
+            let mut cp = vec![jar.display().to_string()];
+
+            for c in proc.classpath {
+                let coord = c.parse::<MavenCoord>()?;
+
+                let jar = install
+                    .java_lib_file
+                    .get(&coord.path().with_added_extension("jar"))
+                    .ok_or(anyhow!(
+                        "processor classpath {} not found in java libraries",
+                        c
+                    ))?;
+
+                let jar = self.retrieve_artifact(jar).await?;
+
+                cp.push(jar.display().to_string());
+            }
+
+            let mut cmd = Command::new("java");
+
+            cmd.arg("--class-path").arg(cp.join(":"));
+
+            cmd.arg(main_class);
+
+            todo!("run {cmd:?}");
+        }
 
         Ok(install)
     }

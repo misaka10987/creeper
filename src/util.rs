@@ -7,7 +7,6 @@ use std::{
 
 use anyhow::{anyhow, bail, ensure};
 use async_zip::base::read::seek::ZipFileReader;
-use semver::Version;
 use serde::{Deserialize, Serialize};
 use tokio::{
     fs::{File, copy, create_dir_all, metadata, remove_file, rename, set_permissions},
@@ -130,7 +129,10 @@ impl FromStr for JarManifest {
     }
 }
 
+/// Check whether the given string is a valid domain name for a java package.
 pub fn is_valid_java_package(name: &str) -> bool {
+    let name = name.replace("-", "_");
+
     for piece in name.split(".") {
         let mut chars = piece.chars();
 
@@ -138,7 +140,7 @@ pub fn is_valid_java_package(name: &str) -> bool {
             return false;
         }
 
-        if !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+        if !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
             return false;
         }
     }
@@ -146,10 +148,33 @@ pub fn is_valid_java_package(name: &str) -> bool {
     true
 }
 
+// fn normalize_version(version: &str) -> String {
+//     let (version, suffix) = version
+//         .split_once("-")
+//         .or(version.split_once("+"))
+//         .unwrap_or((version, ""));
+
+//     match version.matches(".").count() {
+//         0 => format!("{}.0.0{}", version, suffix),
+//         1 => format!("{}.0{}", version, suffix),
+//         _ => format!("{}{}", version, suffix),
+//     }
+// }
+
+/// A maven coordinate defined as `<groupId>:<artifactId>:<version>`.
 pub struct MavenCoord {
+    /// The group id.
+    ///
+    /// # Note
+    ///
+    /// The bahavior is undefined unless this is a valid java package name, i.e. [`is_valid_java_package`].
     pub group: String,
+    /// The artifact id.
     pub artifact: String,
-    pub version: Version,
+    /// The version.
+    ///
+    /// This is at most times, but not guaranteed to be, a semver.
+    pub version: String,
 }
 
 impl MavenCoord {
@@ -193,12 +218,12 @@ impl FromStr for MavenCoord {
             bail!("invalid artifact id {artifact}");
         }
 
-        let version = version.parse()?;
+        // let version = normalize_version(version).parse()?;
 
         Ok(Self {
             group: group.into(),
             artifact: artifact.into(),
-            version,
+            version: version.into(),
         })
     }
 }

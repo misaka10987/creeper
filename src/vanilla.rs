@@ -6,6 +6,7 @@ use crate::{
     mc::{check_class, check_os},
     pack::PackNode,
     path::creeper_cache_dir,
+    util::MavenCoord,
 };
 
 use anyhow::anyhow;
@@ -116,7 +117,7 @@ impl Creeper {
 
     pub(crate) async fn vanilla_lib(
         &self,
-        lib: Vec<Library>,
+        lib: impl IntoIterator<Item = Library>,
     ) -> anyhow::Result<HashMap<PathBuf, Artifact>> {
         let arts = filter_lib(lib);
 
@@ -125,17 +126,25 @@ impl Creeper {
         let mut set = JoinSet::new();
 
         for art in arts {
+            let path = art.path.clone();
+
+            let name = art
+                .path
+                .parse::<MavenCoord>()
+                .map(|c| c.to_string())
+                .unwrap_or(art.path);
+
             let creeper = self.clone();
             let fut = async move {
                 creeper
                     .download(
-                        art.path.clone(),
+                        name,
                         art.url,
                         Some(art.size),
                         Some(Checksum::sha1(art.sha1)),
                     )
                     .await
-                    .map(|a| (art.path, a))
+                    .map(|a| (path, a))
             };
             set.spawn(fut.in_current_span());
         }
@@ -230,7 +239,7 @@ impl Creeper {
     }
 }
 
-fn filter_lib(lib: Vec<Library>) -> Vec<McArtifact> {
+fn filter_lib(lib: impl IntoIterator<Item = Library>) -> Vec<McArtifact> {
     lib.into_iter()
         // apply the rules
         .filter(|x| {

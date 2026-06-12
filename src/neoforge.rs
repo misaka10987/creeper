@@ -207,20 +207,9 @@ impl Creeper {
                 continue;
             }
 
-            // println!("{}", proc.jar.parse::<MavenCoord>()?.path().display());
-            // dbg!(&install.java_lib_file);
-
             let jar = install
                 .java_lib_file
-                .get(
-                    &proc
-                        .jar
-                        .parse::<MavenCoord>()?
-                        .path()
-                        .with_added_extension("jar"),
-                )
-                // .values()
-                // .find_map(|a| (a.name == proc.jar).then_some(a))
+                .get(&proc.jar.parse::<MavenCoord>()?.path())
                 .ok_or(anyhow!(
                     "processor runs {} but the jar file not found",
                     proc.jar
@@ -241,13 +230,10 @@ impl Creeper {
             for c in proc.classpath {
                 let coord = c.parse::<MavenCoord>()?;
 
-                let jar = install
-                    .java_lib_file
-                    .get(&coord.path().with_added_extension("jar"))
-                    .ok_or(anyhow!(
-                        "processor classpath {} not found in java libraries",
-                        c
-                    ))?;
+                let jar = install.java_lib_file.get(&coord.path()).ok_or(anyhow!(
+                    "processor classpath {} not found in java libraries",
+                    c
+                ))?;
 
                 let jar = self.retrieve_artifact(jar).await?;
 

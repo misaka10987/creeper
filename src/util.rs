@@ -7,11 +7,13 @@ use std::{
 
 use anyhow::{anyhow, bail, ensure};
 use async_zip::base::read::seek::ZipFileReader;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use tokio::{
     fs::{File, copy, create_dir_all, metadata, remove_file, rename, set_permissions},
     io::BufReader,
 };
+use tracing::warn;
 
 pub async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
     if let Some(parent) = dst.as_ref().parent() {
@@ -148,6 +150,12 @@ pub fn is_valid_java_package(name: &str) -> bool {
     true
 }
 
+/// Check whether the given string is a valid [maven artifact identifier](https://maven.apache.org/guides/mini/guide-naming-conventions.html#artifact-identifier), i.e. consists only of lowercase ascii letters, digits and hyphens.
+pub fn is_valid_maven_artifact(name: &str) -> bool {
+    name.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
 // fn normalize_version(version: &str) -> String {
 //     let (version, suffix) = version
 //         .split_once("-")
@@ -162,6 +170,7 @@ pub fn is_valid_java_package(name: &str) -> bool {
 // }
 
 /// A maven coordinate defined as `<groupId>:<artifactId>:<version>`.
+#[derive(Clone, PartialEq, Eq)]
 pub struct MavenCoord {
     /// The group id.
     ///
@@ -169,28 +178,158 @@ pub struct MavenCoord {
     ///
     /// The bahavior is undefined unless this is a valid java package name, i.e. [`is_valid_java_package`].
     pub group: String,
+
     /// The artifact id.
     pub artifact: String,
+
     /// The version.
     ///
     /// This is at most times, but not guaranteed to be, a semver.
     pub version: String,
+
+    /// The path extension, defaults to `"jar"` if not specified.
+    pub extension: Option<String>,
+
+    /// The classifier.
+    pub classifier: Option<String>,
+}
+
+#[cfg(test)]
+#[test]
+fn test() {
+    const COORD: &str = "net.neoforged:neoform:1.21.1-20240808.144430:mappings-merged@txt";
+    const PATH: &str = "net/neoforged/neoform/1.21.1-20240808.144430/neoform-1.21.1-20240808.144430-mappings-merged.txt";
+
+    let x = COORD.parse::<MavenCoord>().unwrap();
+    let y = MavenCoord::from_path(PATH).unwrap();
+
+    assert!(x == y);
+    assert!(x.path() == *PATH);
+    assert!(y.to_string() == COORD);
 }
 
 impl MavenCoord {
     pub fn path(&self) -> PathBuf {
+        let classifier = if let Some(s) = &self.classifier {
+            &format!("-{s}")
+        } else {
+            ""
+        };
+
+        let extension = if let Some(s) = &self.extension {
+            &format!(".{s}")
+        } else {
+            ".jar"
+        };
+
+        let name = format!("{}-{}{classifier}{extension}", self.artifact, self.version);
+
         self.group
             .split(".")
             .fold(PathBuf::new(), |acc, x| acc.join(x))
             .join(&self.artifact)
             .join(self.version.to_string())
-            .join(format!("{}-{}", self.artifact, self.version))
+            .join(name)
+    }
+
+    pub fn from_path(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let mut path = path.as_ref().to_path_buf();
+
+        let extension = if let Some(s) = path.extension() {
+            let name = s
+                .to_str()
+                .ok_or(anyhow!("invalid maven path extension {}", s.display()))?;
+
+            if name == "jar" {
+                None
+            } else {
+                Some(name.into())
+            }
+        } else {
+            Some("".into())
+        };
+
+        path.set_extension("");
+
+        let mut components = vec![];
+
+        for c in path.components() {
+            let name = c.as_os_str();
+
+            let name = name
+                .to_str()
+                .ok_or(anyhow!("invalid maven path component {}", name.display()))?;
+            components.push(name);
+        }
+
+        ensure!(
+            components.len() >= 4,
+            "invalid maven path {}, expected at least 4 components",
+            path.display()
+        );
+
+        let last = components[components.len() - 1];
+        let version = components[components.len() - 2];
+        let artifact = components[components.len() - 3];
+
+        let classifier = last
+            .strip_prefix(&format!("{artifact}-{version}"))
+            .ok_or(anyhow!("invalid maven path {}", path.display()))?;
+
+        let classifier = if classifier.is_empty() {
+            None
+        } else {
+            Some(
+                classifier
+                    .strip_prefix("-")
+                    .ok_or(anyhow!("invalid classifier {classifier} in maven path"))?,
+            )
+        };
+
+        let group = components[..components.len() - 3].join(".");
+
+        if !is_valid_java_package(&group) {
+            bail!("invalid group {group} in maven path");
+        }
+
+        if !is_valid_maven_artifact(artifact) {
+            // does only warn because neoforge uses CamelCase in some artifact names
+            warn!("invalid artifact {artifact} in maven path");
+        }
+
+        if !version.parse::<Version>().is_ok() {
+            warn!("version {version} in maven path is not valid semver, this is not recommended");
+        }
+
+        Ok(Self {
+            group,
+            artifact: artifact.into(),
+            version: version.into(),
+            classifier: classifier.map(|s| s.into()),
+            extension,
+        })
     }
 }
 
 impl Display for MavenCoord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", self.group, self.artifact, self.version)
+        let classifier = if let Some(s) = &self.classifier {
+            &format!(":{s}")
+        } else {
+            ""
+        };
+
+        let extension = if let Some(s) = &self.extension {
+            &format!("@{s}")
+        } else {
+            ""
+        };
+
+        write!(
+            f,
+            "{}:{}:{}{classifier}{extension}",
+            self.group, self.artifact, self.version
+        )
     }
 }
 
@@ -198,32 +337,49 @@ impl FromStr for MavenCoord {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let pieces = s.split(":").collect::<Vec<_>>();
+        let pieces = s.split("@").collect::<Vec<_>>();
 
-        ensure!(
-            pieces.len() == 3,
-            "invalid maven id {s}, expected <group>:<artifact>:<version>"
-        );
+        let (main, ext) = match pieces.len() {
+            0 => unreachable!(),
+            1 => (pieces[0], None),
+            2 => (pieces[0], Some(pieces[1])),
+            _ => bail!(
+                "invalid maven coordinate {s}, expected <group>:<artifact>:<version>[:<classifier>][@<extension>]"
+            ),
+        };
 
-        let (group, artifact, version) = (pieces[0], pieces[1], pieces[2]);
+        let pieces = main.split(":").collect::<Vec<_>>();
+
+        let (group, artifact, version, classifier) = match pieces.len() {
+            0 => unreachable!(),
+            3 => (pieces[0], pieces[1], pieces[2], None),
+            4 => (pieces[0], pieces[1], pieces[2], Some(pieces[3])),
+            _ => bail!(
+                "invalid maven coordinate {s}, expected <group>:<artifact>:<version>[:<classifier>][@<extension>]"
+            ),
+        };
 
         if !is_valid_java_package(group) {
-            bail!("invalid group id {group}");
+            bail!("invalid group {group} in maven coordinate");
         }
 
-        if !artifact
-            .chars()
-            .all(|c| c.is_ascii_alphabetic() || c.is_ascii_digit() || c == '-' || c == '_')
-        {
-            bail!("invalid artifact id {artifact}");
+        if !is_valid_maven_artifact(artifact) {
+            // does only warn because neoforge uses CamelCase in some artifact names
+            warn!("invalid artifact {artifact} in maven coordinate");
         }
 
-        // let version = normalize_version(version).parse()?;
+        if !version.parse::<Version>().is_ok() {
+            warn!(
+                "version {version} in maven coordinate is not valid semver, this is not recommended"
+            );
+        }
 
         Ok(Self {
             group: group.into(),
             artifact: artifact.into(),
             version: version.into(),
+            classifier: classifier.map(|s| s.into()),
+            extension: ext.map(|s| s.into()),
         })
     }
 }

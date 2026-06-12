@@ -1,12 +1,11 @@
 use std::{collections::HashMap, path::PathBuf, sync::OnceLock};
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install,
+    Artifact, Checksum, Creeper, Id, Install, MavenCoord,
     index::{Index, IndexLine, VersionRev},
     mc::{check_class, check_os},
     pack::PackNode,
     path::creeper_cache_dir,
-    util::MavenCoord,
 };
 
 use anyhow::anyhow;
@@ -128,9 +127,7 @@ impl Creeper {
         for art in arts {
             let path = art.path.clone();
 
-            let name = art
-                .path
-                .parse::<MavenCoord>()
+            let name = MavenCoord::from_path(&art.path)
                 .map(|c| c.to_string())
                 .unwrap_or(art.path);
 

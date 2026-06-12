@@ -19,11 +19,11 @@ use tracing::{debug, error, info, trace};
 use url::Url;
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install,
+    Artifact, Checksum, Creeper, Id, Install, MavenCoord,
     index::{Index, IndexLine, VersionRev},
     pack::PackNode,
     path::creeper_cache_dir,
-    util::{JarManifest, MavenCoord, extract_zip},
+    util::{JarManifest, extract_zip},
 };
 
 fn classpath_path(cp: &str) -> PathBuf {

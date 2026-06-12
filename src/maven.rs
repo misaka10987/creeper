@@ -86,6 +86,37 @@ fn test() {
 }
 
 impl MavenCoord {
+    pub fn new(
+        group: String,
+        artifact: String,
+        version: String,
+        classifier: Option<String>,
+        extension: Option<String>,
+    ) -> anyhow::Result<Self> {
+        if !is_valid_java_package(&group) {
+            bail!("invalid group {group} in maven coordinate");
+        }
+
+        if !is_valid_maven_artifact(&artifact) {
+            // does only warn because neoforge uses CamelCase in some artifact names
+            warn!("invalid artifact {artifact} in maven coordinate");
+        }
+
+        if !version.parse::<Version>().is_ok() {
+            warn!(
+                "version {version} in maven coordinate is not valid semver, this is not recommended"
+            );
+        }
+
+        Ok(Self {
+            group,
+            artifact,
+            version,
+            classifier,
+            extension,
+        })
+    }
+
     pub fn path(&self) -> PathBuf {
         let classifier = if let Some(s) = &self.classifier {
             &format!("-{s}")
@@ -165,26 +196,13 @@ impl MavenCoord {
 
         let group = components[..components.len() - 3].join(".");
 
-        if !is_valid_java_package(&group) {
-            bail!("invalid group {group} in maven path");
-        }
-
-        if !is_valid_maven_artifact(artifact) {
-            // does only warn because neoforge uses CamelCase in some artifact names
-            warn!("invalid artifact {artifact} in maven path");
-        }
-
-        if !version.parse::<Version>().is_ok() {
-            warn!("version {version} in maven path is not valid semver, this is not recommended");
-        }
-
-        Ok(Self {
+        Ok(Self::new(
             group,
-            artifact: artifact.into(),
-            version: version.into(),
-            classifier: classifier.map(|s| s.into()),
+            artifact.into(),
+            version.into(),
+            classifier.map(|s| s.into()),
             extension,
-        })
+        )?)
     }
 }
 
@@ -216,7 +234,7 @@ impl FromStr for MavenCoord {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let pieces = s.split("@").collect::<Vec<_>>();
 
-        let (main, ext) = match pieces.len() {
+        let (main, extension) = match pieces.len() {
             0 => unreachable!(),
             1 => (pieces[0], None),
             2 => (pieces[0], Some(pieces[1])),
@@ -236,27 +254,12 @@ impl FromStr for MavenCoord {
             ),
         };
 
-        if !is_valid_java_package(group) {
-            bail!("invalid group {group} in maven coordinate");
-        }
-
-        if !is_valid_maven_artifact(artifact) {
-            // does only warn because neoforge uses CamelCase in some artifact names
-            warn!("invalid artifact {artifact} in maven coordinate");
-        }
-
-        if !version.parse::<Version>().is_ok() {
-            warn!(
-                "version {version} in maven coordinate is not valid semver, this is not recommended"
-            );
-        }
-
-        Ok(Self {
-            group: group.into(),
-            artifact: artifact.into(),
-            version: version.into(),
-            classifier: classifier.map(|s| s.into()),
-            extension: ext.map(|s| s.into()),
-        })
+        Ok(Self::new(
+            group.into(),
+            artifact.into(),
+            version.into(),
+            classifier.map(|s| s.into()),
+            extension.map(|s| s.into()),
+        )?)
     }
 }

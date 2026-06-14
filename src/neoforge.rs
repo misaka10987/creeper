@@ -1,3 +1,5 @@
+mod fmt;
+
 use std::{
     collections::{BTreeSet, HashMap},
     iter::once,
@@ -14,6 +16,7 @@ use mc_launchermeta::{
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use strfmt::Format;
 use tokio::process::Command;
 use tracing::{debug, error, info, trace};
 use url::Url;
@@ -21,13 +24,15 @@ use url::Url;
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, MavenCoord,
     index::{Index, IndexLine, VersionRev},
+    neoforge::fmt::maven_coord_format,
     pack::PackNode,
     path::creeper_cache_dir,
     util::{JarManifest, extract_zip},
 };
 
-fn classpath_path(cp: &str) -> PathBuf {
-    todo!()
+fn cache_path() -> anyhow::Result<PathBuf> {
+    let path = creeper_cache_dir()?.join("builtin").join("neoforge");
+    Ok(path)
 }
 
 const VERSIONS_URL: &str =
@@ -175,12 +180,15 @@ impl Creeper {
 
         // handle install as defined in `version.json`
 
-        let version = extract_zip(&installer, "version.json").await?;
-        let version = serde_json::from_str::<NfVersion>(&version)?;
+        let nf_version = extract_zip(&installer, "version.json").await?;
+        let nf_version = serde_json::from_str::<NfVersion>(&nf_version)?;
 
-        let mut install = self.neoforge_version_install(version).await?;
+        let mut install = self.neoforge_version_install(nf_version).await?;
 
         // handle install as defined in `install_profile.json`
+
+        let tmp_dir = cache_path()?.join("tmp").join(version.to_string());
+        let tmp_lib_dir = tmp_dir.join("lib");
 
         let install_profile = extract_zip(&installer, "install_profile.json").await?;
         let install_profile = serde_json::from_str::<NfInstallProfile>(&install_profile)?;
@@ -197,6 +205,12 @@ impl Creeper {
         }));
 
         // TODO: run processors
+
+        let vars = install_profile
+            .data
+            .into_iter()
+            .map(|(k, v)| (k, v.client))
+            .collect::<HashMap<_, _>>();
 
         for proc in install_profile.processors {
             if proc
@@ -245,6 +259,12 @@ impl Creeper {
             cmd.arg("--class-path").arg(cp.join(":"));
 
             cmd.arg(main_class);
+
+            for arg in proc.args {
+                let arg = arg.format(&vars)?;
+                let arg = maven_coord_format(&arg, &tmp_lib_dir)?;
+                cmd.arg(arg);
+            }
 
             todo!("run {cmd:?}");
         }

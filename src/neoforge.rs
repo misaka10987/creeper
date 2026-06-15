@@ -8,7 +8,7 @@ use std::{
     sync::OnceLock,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use mc_launchermeta::{
     VersionKind,
     version::{Arguments, JavaVersion, library::Library, logging::Logging},
@@ -17,7 +17,10 @@ use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use strfmt::Format;
-use tokio::process::Command;
+use tokio::{
+    fs::{create_dir_all, read_to_string, try_exists, write},
+    process::Command,
+};
 use tracing::{debug, error, info, trace};
 use url::Url;
 
@@ -199,18 +202,48 @@ impl Creeper {
         // because they are loaded by neoforge's custom class loader
         java_lib_file.extend(self.vanilla_lib(install_profile.libraries).await?);
 
-        install.extend(once(Install {
-            java_lib_file,
-            ..Default::default()
-        }));
-
         // TODO: run processors
+
+        info!("preparing neoforge install environment");
+
+        for (path, art) in &java_lib_file {
+            let path = tmp_lib_dir.join(path);
+            self.retrieve_artifact_to(art, path).await?;
+        }
+
+        let vanilla_install = {
+            let cache = creeper_cache_dir()?
+                .join("install")
+                .join(Id::vanilla().indexed_path())
+                .with_added_extension("json");
+
+            if try_exists(&cache).await? {
+                let json = read_to_string(&cache).await?;
+                let install = serde_json::from_str(&json)?;
+                install
+            } else {
+                let install = self.vanilla_install(required_mc_version(version)).await?;
+                let json = serde_json::to_string(&install)?;
+                create_dir_all(cache.parent().unwrap()).await?;
+                write(&cache, json).await?;
+                install
+            }
+        };
+
+        let mc_jar = vanilla_install
+            .mc_jar
+            .ok_or(anyhow!("missing minecraft jar in vanilla install"))?;
+        let mc_jar = self.retrieve_artifact(&mc_jar).await?;
 
         let vars = install_profile
             .data
             .into_iter()
             .map(|(k, v)| (k, v.client))
+            .chain(once(("SIDE".into(), "client".into())))
+            .chain(once(("MINECRAFT_JAR".into(), mc_jar.display().to_string())))
             .collect::<HashMap<_, _>>();
+
+        info!("running neoforge install processors");
 
         for proc in install_profile.processors {
             if proc
@@ -221,8 +254,7 @@ impl Creeper {
                 continue;
             }
 
-            let jar = install
-                .java_lib_file
+            let jar = java_lib_file
                 .get(&proc.jar.parse::<MavenCoord>()?.path())
                 .ok_or(anyhow!(
                     "processor runs {} but the jar file not found",
@@ -244,7 +276,7 @@ impl Creeper {
             for c in proc.classpath {
                 let coord = c.parse::<MavenCoord>()?;
 
-                let jar = install.java_lib_file.get(&coord.path()).ok_or(anyhow!(
+                let jar = java_lib_file.get(&coord.path()).ok_or(anyhow!(
                     "processor classpath {} not found in java libraries",
                     c
                 ))?;
@@ -266,8 +298,23 @@ impl Creeper {
                 cmd.arg(arg);
             }
 
-            todo!("run {cmd:?}");
+            debug!("running command {cmd:?}");
+
+            let mut proc = cmd.spawn()?;
+
+            let exit = proc.wait().await?;
+
+            if !exit.success() {
+                bail!("processor failed");
+            }
         }
+
+        todo!("collect neoforge install result");
+
+        install.extend(once(Install {
+            java_lib_file,
+            ..Default::default()
+        }));
 
         Ok(install)
     }
@@ -382,6 +429,15 @@ pub fn decode_neoforge_version(version: &Version) -> String {
     let version = format!("{}.{}.{}.{}", version.major, version.minor, high, low);
     let version = format!("{}{}{}", version, pre, build);
     version
+}
+
+fn required_mc_version(nf_version: &Version) -> Version {
+    if nf_version.major >= 26 {
+        let high = nf_version.patch >> 32;
+        Version::new(nf_version.major, nf_version.minor, high)
+    } else {
+        Version::new(1, nf_version.major, nf_version.minor)
+    }
 }
 
 /// Generate NeoForge package index from list of versions, applying the following rules to each version:

@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use sqlx::{query, query_as};
-use tokio::fs::{File, create_dir_all, metadata, try_exists};
+use tokio::fs::{File, create_dir_all, metadata, remove_file, symlink, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -389,6 +389,40 @@ impl Creeper {
     /// the method will still succeed and potentially write poisoned records into the artifact database.
     pub async fn retrieve_artifact(&self, art: &Artifact) -> anyhow::Result<PathBuf> {
         self.artifact.retrieve(art).await
+    }
+
+    /// Retrieve an artifact and create a soft link to it at the specified path.
+    /// Creating parent directories if necessary.
+    ///
+    /// This function will **remove** `path` first if it is an existing soft link so that repeated calls will get the same result.
+    /// However, if `path` is existing but not a soft link, the function will fail.
+    ///
+    /// See [`Self::retrieve_artifact`] for details and caveats.
+    pub async fn retrieve_artifact_to(
+        &self,
+        art: &Artifact,
+        path: impl AsRef<Path>,
+    ) -> anyhow::Result<()> {
+        let dst = path.as_ref();
+        trace!(
+            "retrieving artifact {} to {}",
+            &art.blake3[..6],
+            dst.display()
+        );
+
+        let src = self.retrieve_artifact(art).await?;
+
+        if let Some(parent) = dst.parent() {
+            create_dir_all(parent).await?;
+        }
+
+        if dst.is_symlink() {
+            remove_file(dst).await?;
+        }
+
+        symlink(src, dst).await?;
+
+        Ok(())
     }
 
     /// Download a file from specified URL and store it in the artifact storage.

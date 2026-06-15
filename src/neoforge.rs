@@ -23,6 +23,7 @@ use tokio::{
 };
 use tracing::{debug, error, info, trace};
 use url::Url;
+use walkdir::WalkDir;
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, MavenCoord,
@@ -320,7 +321,26 @@ impl Creeper {
             }
         }
 
-        todo!("collect neoforge install result");
+        info!("collecting neoforge install result");
+
+        for i in WalkDir::new(tmp_lib_dir) {
+            let entry = i?;
+            let file = entry.path();
+
+            if file.is_dir() {
+                continue;
+            }
+
+            if java_lib_file.contains_key(file) {
+                continue;
+            }
+
+            trace!("found file {}", file.display());
+
+            let art = self.store_artifact(file).await?;
+
+            java_lib_file.insert(file.to_path_buf(), art);
+        }
 
         install.extend(once(Install {
             java_lib_file,

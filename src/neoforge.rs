@@ -30,7 +30,8 @@ use crate::{
     neoforge::fmt::maven_coord_format,
     pack::PackNode,
     path::creeper_cache_dir,
-    util::{JarManifest, extract_zip},
+    util::JarManifest,
+    zip::{extract_zip, extract_zip_to},
 };
 
 fn cache_path() -> anyhow::Result<PathBuf> {
@@ -235,13 +236,20 @@ impl Creeper {
             .ok_or(anyhow!("missing minecraft jar in vanilla install"))?;
         let mc_jar = self.retrieve_artifact(&mc_jar).await?;
 
-        let vars = install_profile
+        // prepare variables
+        let mut vars = install_profile
             .data
             .into_iter()
             .map(|(k, v)| (k, v.client))
             .chain(once(("SIDE".into(), "client".into())))
             .chain(once(("MINECRAFT_JAR".into(), mc_jar.display().to_string())))
             .collect::<HashMap<_, _>>();
+
+        // special case: BINPATCH /data/client.lzma is packaged in the installer jar
+        // extract it first
+        let binpatch = tmp_dir.join("installer").join("data").join("client.lzma");
+        extract_zip_to(&installer, "data/client.lzma", &binpatch).await?;
+        vars.insert("BINPATCH".into(), binpatch.display().to_string());
 
         info!("running neoforge install processors");
 

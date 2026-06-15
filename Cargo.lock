@@ -525,6 +525,7 @@ dependencies = [
  "stop",
  "strfmt",
  "tokio",
+ "tokio-util",
  "toml",
  "tracing",
  "tracing-indicatif",

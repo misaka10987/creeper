@@ -21,6 +21,7 @@ mod tool;
 mod maven;
 mod util;
 mod vanilla;
+mod zip;
 
 use clap::Parser;
 use reqwest::Client;

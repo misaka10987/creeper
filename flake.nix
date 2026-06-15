@@ -1,0 +1,65 @@
+{
+  description = "devshell";
+
+  inputs = {
+    nixpkgs.url = "git+https://mirrors.nju.edu.cn/git/nixpkgs.git?ref=nixos-unstable&shallow=1";
+  };
+
+  outputs =
+    { self, nixpkgs }:
+    let
+      system = "x86_64-linux";
+      pkgs = import nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+      };
+    in
+    {
+      devShells.${system}.default =
+        let
+          fhs = pkgs.buildFHSEnv {
+            name = "fhs-devshell";
+
+            targetPkgs =
+              pkgs: with pkgs; [
+                bash
+
+                # OpenGL / Vulkan
+                libGL
+                glfw3-minecraft
+                libglvnd
+                vulkan-loader
+
+                # X11
+                libx11
+                libxxf86vm
+                libxext
+                libxcursor
+                libxrandr
+                libxtst
+
+                # Audio
+                libpulseaudio
+                alsa-lib
+                openal
+
+                # Wayland / GTK
+                wayland
+                gtk3
+                glib
+
+                libxft
+                fontconfig
+                freetype
+              ];
+
+            runScript = "nu";
+          };
+        in
+        pkgs.mkShell {
+          packages = [ fhs ];
+
+          shellHook = "fhs-devshell";
+        };
+    };
+}

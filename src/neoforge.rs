@@ -318,15 +318,17 @@ impl Creeper {
 
         info!("collecting neoforge install result");
 
-        for i in WalkDir::new(tmp_lib_dir) {
+        for i in WalkDir::new(&tmp_lib_dir) {
             let entry = i?;
             let file = entry.path();
+
+            let relative = file.strip_prefix(&tmp_lib_dir).unwrap();
 
             if file.is_dir() {
                 continue;
             }
 
-            if java_lib_file.contains_key(file) {
+            if java_lib_file.contains_key(relative) {
                 continue;
             }
 
@@ -334,7 +336,7 @@ impl Creeper {
 
             let art = self.store_artifact(file).await?;
 
-            java_lib_file.insert(file.to_path_buf(), art);
+            java_lib_file.insert(relative.to_path_buf(), art);
         }
 
         install.extend(once(Install {

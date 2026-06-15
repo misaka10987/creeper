@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS
     artifact (
         blake3 TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        src TEXT NOT NULL,
+        src TEXT,
         len INTEGER NOT NULL,
         sha1 TEXT,
         sha256 TEXT,

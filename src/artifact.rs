@@ -1,7 +1,7 @@
 use std::iter::once;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, ensure};
+use anyhow::{anyhow, bail, ensure};
 use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ use crate::{
 pub struct Artifact {
     pub blake3: String,
     pub name: String,
-    pub src: String,
+    pub src: Option<String>,
     pub len: u64,
     // other checksums
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -38,7 +38,7 @@ pub struct Artifact {
 }
 
 impl Artifact {
-    pub fn new(blake3: String, name: String, src: String, len: u64) -> Self {
+    pub fn new(blake3: String, name: String, src: Option<String>, len: u64) -> Self {
         Self {
             blake3,
             name,
@@ -219,9 +219,14 @@ impl ArtifactManager {
             return Ok(path);
         }
 
-        debug!("downloading from {}", art.src);
+        let src = match &art.src {
+            Some(x) => x,
+            None => bail!("missing download source"),
+        };
 
-        let cache = creeper_cache_dir()?.join(BASE64_URL_SAFE.encode(&art.src));
+        debug!("downloading from {}", src);
+
+        let cache = creeper_cache_dir()?.join(BASE64_URL_SAFE.encode(&src));
         trace!("download caching to {cache:?}");
         create_dir_all(cache.parent().unwrap()).await?;
 
@@ -233,7 +238,7 @@ impl ArtifactManager {
         span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
         span.pb_set_length(art.len);
 
-        let req = self.http.get(&art.src).build()?;
+        let req = self.http.get(src).build()?;
         let mut res = self.http.execute(req).await?;
 
         while let Some(chunk) = res.chunk().await? {
@@ -347,7 +352,7 @@ impl ArtifactManager {
             None => download_len,
         };
 
-        let mut art = Artifact::new(b3, name, src, len);
+        let mut art = Artifact::new(b3, name, Some(src), len);
 
         for checksum in checksums {
             if checksum.function == HashFunc::Blake3 {
@@ -436,5 +441,33 @@ impl Creeper {
         checksum: impl IntoIterator<Item = Checksum> + Send,
     ) -> anyhow::Result<Artifact> {
         self.artifact.download(name, src, len, checksum).await
+    }
+
+    /// Store a file to the artifact storage.
+    ///
+    /// # Note
+    ///
+    /// The file will not have a download source.
+    pub async fn store_artifact(&self, file: impl AsRef<Path>) -> anyhow::Result<Artifact> {
+        let file = file.as_ref();
+
+        let b3 = blake3(file).await?;
+
+        if let Some(art) = self.artifact.find(&b3).await? {
+            return Ok(art);
+        }
+
+        let name = file
+            .file_name()
+            .ok_or(anyhow!("missing filename"))?
+            .to_str()
+            .ok_or(anyhow!("invalid filename"))?;
+
+        let metadata = metadata(file).await?;
+        let len = metadata.len();
+
+        let art = Artifact::new(b3, name.into(), None, len);
+
+        Ok(art)
     }
 }

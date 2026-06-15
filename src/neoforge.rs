@@ -8,7 +8,7 @@ use std::{
     sync::OnceLock,
 };
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use mc_launchermeta::{
     VersionKind,
     version::{Arguments, JavaVersion, library::Library, logging::Logging},
@@ -194,6 +194,7 @@ impl Creeper {
 
         let tmp_dir = cache_path()?.join("tmp").join(version.to_string());
         let tmp_lib_dir = tmp_dir.join("lib");
+        let tmp_root_dir = tmp_dir.join("root");
 
         let install_profile = extract_zip(&installer, "install_profile.json").await?;
         let install_profile = serde_json::from_str::<NfInstallProfile>(&install_profile)?;
@@ -247,6 +248,8 @@ impl Creeper {
             .map(|(k, v)| (k, v.client))
             .chain(once(("SIDE".into(), "client".into())))
             .chain(once(("MINECRAFT_JAR".into(), mc_jar.display().to_string())))
+            .chain(once(("ROOT".into(), tmp_root_dir.display().to_string())))
+            .chain(once(("INSTALLER".into(), installer.display().to_string())))
             .collect::<HashMap<_, _>>();
 
         // special case: BINPATCH /data/client.lzma is packaged in the installer jar
@@ -258,14 +261,6 @@ impl Creeper {
         info!("running neoforge install processors");
 
         for proc in install_profile.processors {
-            if proc
-                .sides
-                .is_some_and(|s| s.iter().find(|s| *s == "client").is_none())
-            {
-                trace!("skipping a processor because of side mismatch");
-                continue;
-            }
-
             let jar = java_lib_file
                 .get(&proc.jar.parse::<MavenCoord>()?.path())
                 .ok_or(anyhow!(
@@ -314,10 +309,10 @@ impl Creeper {
 
             let mut proc = cmd.spawn()?;
 
-            let exit = proc.wait().await?;
+            let exit = proc.wait().await;
 
-            if !exit.success() {
-                bail!("processor failed");
+            if let Err(e) = exit {
+                error!("a processor failed: {e}");
             }
         }
 

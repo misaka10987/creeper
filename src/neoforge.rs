@@ -213,9 +213,12 @@ impl Creeper {
         }
 
         let vanilla_install = {
+            let version = required_mc_version(version);
+
             let cache = creeper_cache_dir()?
                 .join("install")
                 .join(Id::vanilla().indexed_path())
+                .join(version.to_string())
                 .with_added_extension("json");
 
             if try_exists(&cache).await? {
@@ -223,7 +226,7 @@ impl Creeper {
                 let install = serde_json::from_str(&json)?;
                 install
             } else {
-                let install = self.vanilla_install(required_mc_version(version)).await?;
+                let install = self.vanilla_install(version).await?;
                 let json = serde_json::to_string(&install)?;
                 create_dir_all(cache.parent().unwrap()).await?;
                 write(&cache, json).await?;

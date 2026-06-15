@@ -41,7 +41,9 @@ impl Creeper {
         }
 
         let cp = cp.join(":");
-        cmd.arg("--class-path").arg(cp);
+        if !cp.is_empty() {
+            cmd.arg("--class-path").arg(cp);
+        }
 
         let mut p = vec![];
 
@@ -68,7 +70,9 @@ impl Creeper {
         }
 
         let p = p.join(":");
-        cmd.arg("--module-path").arg(p);
+        if !p.is_empty() {
+            cmd.arg("--module-path").arg(p);
+        }
 
         cmd.arg(format!("-DlibraryDirectory={}", lib_path.display()));
 

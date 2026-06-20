@@ -1,8 +1,12 @@
 use std::{collections::HashMap, path::Path, str::FromStr};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
+use inquire::Confirm;
 use serde::{Deserialize, Serialize};
-use tokio::fs::{File, copy, create_dir_all, metadata, remove_file, rename, set_permissions};
+use tokio::fs::{
+    File, copy, create_dir_all, metadata, remove_dir_all, remove_file, rename, set_permissions,
+};
+use tracing::info;
 
 pub async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
     if let Some(parent) = dst.as_ref().parent() {
@@ -78,4 +82,16 @@ impl FromStr for JarManifest {
             main_class,
         })
     }
+}
+
+/// Prompt the user to confirm the removal of a file or directory, and remove it if confirmed.
+pub async fn prompt_remove(path: impl AsRef<Path>) -> anyhow::Result<()> {
+    let path = path.as_ref();
+    let confirm = Confirm::new(&format!("Remove {}?", path.display())).prompt()?;
+    if !confirm {
+        bail!("aborted by user");
+    }
+    info!("removing {}", path.display());
+    remove_dir_all(path).await?;
+    Ok(())
 }

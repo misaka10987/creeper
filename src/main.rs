@@ -155,6 +155,7 @@ enum SubCommand {
     #[command(name = "nf-version")]
     NeoForgeVersion(NeoForgeVersion),
     Install(cmd::install::Install),
+    Nuke(cmd::nuke::Nuke),
     #[clap(hide = true)]
     AwwMan,
 }
@@ -168,6 +169,7 @@ impl Execute for SubCommand {
             SubCommand::NeoForgeVersion(nf_version) => lib.execute(nf_version).await,
             SubCommand::Install(install) => lib.execute(install).await,
             SubCommand::Launch(launch) => lib.execute(launch).await,
+            SubCommand::Nuke(nuke) => lib.execute(nuke).await,
         }
     }
 }

@@ -1,4 +1,10 @@
-use std::{collections::BTreeMap, io::BufRead, path::Path, str::FromStr};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::BufRead,
+    path::Path,
+    str::FromStr,
+    sync::RwLock,
+};
 
 use anyhow::{anyhow, bail, ensure};
 use semver::Version;
@@ -177,16 +183,41 @@ impl Ord for VersionRev {
     }
 }
 
+pub struct IndexCache {
+    pub map: RwLock<HashMap<Id, Index>>,
+}
+
+impl IndexCache {
+    pub fn new() -> Self {
+        Self {
+            map: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
 impl Creeper {
     pub fn blocking_get_index(&self, package: &Id) -> anyhow::Result<Index> {
-        if !package.is_regular() {
+        if let Some(index) = self.index_cache.map.read().unwrap().get(package) {
+            return Ok(index.clone());
+        }
+
+        let index = if !package.is_regular() {
             match package.as_str() {
-                "vanilla" => return self.vanilla.blocking_get_index().cloned(),
-                "neoforge" => return self.neoforge.blocking_get_index().cloned(),
+                "vanilla" => self.vanilla.blocking_get_index()?.clone(),
+                "neoforge" => self.neoforge.blocking_get_index()?.clone(),
                 _ => todo!(),
             }
-        }
-        self.registry.blocking_get_index(package)
+        } else {
+            self.registry.blocking_get_index(package)?
+        };
+
+        self.index_cache
+            .map
+            .write()
+            .unwrap()
+            .insert(package.clone(), index.clone());
+
+        Ok(index)
     }
 
     pub fn blocking_get_node(

@@ -37,6 +37,7 @@ use crate::{
     artifact::ArtifactManager,
     cmd::{Execute, build_index::BuildIndex, launch::Launch, nf_version::NeoForgeVersion},
     game::GameManager,
+    index::IndexCache,
     neoforge::NeoforgeManager,
     path::init_creeper_dirs,
     registry::Registry,
@@ -54,6 +55,7 @@ pub struct CreeperInner {
     vanilla: VanillaManager,
     http: Client,
     registry: Registry,
+    index_cache: IndexCache,
     game: GameManager,
     neoforge: NeoforgeManager,
 }
@@ -84,6 +86,7 @@ impl Creeper {
             vanilla,
             http,
             registry,
+            index_cache: IndexCache::new(),
             neoforge,
             game: inst,
         };

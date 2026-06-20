@@ -18,8 +18,7 @@ use url::Url;
 
 use crate::{
     Creeper, Id, Package,
-    index::{IndexLine, VersionRev},
-    pack::PackNode,
+    index::{Index, IndexLine, VersionRev},
     path::creeper_cache_dir,
 };
 
@@ -27,7 +26,6 @@ pub struct Registry {
     pub url: Url,
     http: Client,
     cache: RwLock<HashMap<Id, BTreeMap<VersionRev, Package>>>,
-    index_cache: RwLock<HashMap<Id, BTreeMap<VersionRev, PackNode>>>,
 }
 
 impl Registry {
@@ -53,7 +51,6 @@ impl Registry {
             url,
             http,
             cache: RwLock::new(HashMap::new()),
-            index_cache: RwLock::new(HashMap::new()),
         })
     }
 
@@ -123,13 +120,7 @@ impl Registry {
         }
     }
 
-    pub fn blocking_get_index(
-        &self,
-        package: &Id,
-    ) -> anyhow::Result<BTreeMap<VersionRev, PackNode>> {
-        if let Some(pack) = self.index_cache.read().unwrap().get(package) {
-            return Ok(pack.clone());
-        }
+    pub fn blocking_get_index(&self, package: &Id) -> anyhow::Result<Index> {
         let path = self
             .index_cache_path()?
             .join("index")
@@ -138,10 +129,6 @@ impl Registry {
 
         let pack = IndexLine::blocking_read(path)?;
 
-        self.index_cache
-            .write()
-            .unwrap()
-            .insert(package.clone(), pack.clone());
         Ok(pack)
     }
 

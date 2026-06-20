@@ -46,7 +46,6 @@ const VERSIONS_URL: &str =
 pub struct NeoforgeManager {
     http: Client,
     versions: OnceLock<BTreeSet<Version>>,
-    index: OnceLock<Index>,
 }
 
 impl NeoforgeManager {
@@ -54,7 +53,6 @@ impl NeoforgeManager {
         Self {
             http,
             versions: OnceLock::new(),
-            index: OnceLock::new(),
         }
     }
 
@@ -118,38 +116,26 @@ impl NeoforgeManager {
         Ok(self.versions.get_or_init(|| versions))
     }
 
-    pub async fn get_index(&self) -> anyhow::Result<&Index> {
-        if let Some(index) = self.index.get() {
-            return Ok(index);
-        }
-
+    pub async fn get_index(&self) -> anyhow::Result<Index> {
         let cache = Self::index_cache_path()?;
 
         let index = IndexLine::read(cache).await?;
 
-        Ok(self.index.get_or_init(|| index))
+        Ok(index)
     }
 
-    pub fn blocking_get_index(&self) -> anyhow::Result<&Index> {
-        if let Some(index) = self.index.get() {
-            return Ok(index);
-        }
-
+    pub fn blocking_get_index(&self) -> anyhow::Result<Index> {
         let cache = Self::index_cache_path()?;
 
         let index = IndexLine::blocking_read(cache)?;
 
-        Ok(self.index.get_or_init(|| index))
+        Ok(index)
     }
 }
 
 impl Creeper {
     pub async fn list_neoforge_version(&self) -> anyhow::Result<&BTreeSet<Version>> {
         self.neoforge.list_version().await
-    }
-
-    pub async fn get_neoforge_index(&self) -> anyhow::Result<&Index> {
-        self.neoforge.get_index().await
     }
 
     pub async fn update_neoforge(&self) -> anyhow::Result<()> {

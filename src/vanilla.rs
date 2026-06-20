@@ -42,7 +42,6 @@ pub struct VanillaManager {
     http: Client,
     manifest: OnceLock<Manifest>,
     version: RwLock<HashMap<Version, McVersion>>,
-    index: OnceLock<Index>,
 }
 
 impl VanillaManager {
@@ -51,7 +50,6 @@ impl VanillaManager {
             http,
             manifest: OnceLock::new(),
             version: RwLock::new(HashMap::new()),
-            index: OnceLock::new(),
         }
     }
 
@@ -97,15 +95,12 @@ impl VanillaManager {
         Ok(())
     }
 
-    pub fn blocking_get_index(&self) -> anyhow::Result<&Index> {
-        if let Some(index) = self.index.get() {
-            return Ok(index);
-        }
-
+    pub fn blocking_get_index(&self) -> anyhow::Result<Index> {
         let cache = Self::index_cache_path()?;
+
         let index = IndexLine::blocking_read(cache)?;
 
-        Ok(self.index.get_or_init(|| index))
+        Ok(index)
     }
 }
 

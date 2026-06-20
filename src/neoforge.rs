@@ -328,7 +328,14 @@ impl Creeper {
                 continue;
             }
 
-            if java_lib_file.contains_key(relative) {
+            if java_lib_file.contains_key(relative)
+                || install.java_lib_class.contains_key(relative)
+                || install.java_lib_mod.contains_key(relative)
+                || install.java_lib_file.contains_key(relative)
+                || vanilla_install.java_lib_class.contains_key(relative)
+                || vanilla_install.java_lib_mod.contains_key(relative)
+                || vanilla_install.java_lib_file.contains_key(relative)
+            {
                 continue;
             }
 
@@ -343,6 +350,8 @@ impl Creeper {
             java_lib_file,
             ..Default::default()
         }));
+
+        install.simplify();
 
         Ok(install)
     }

@@ -61,6 +61,12 @@ impl Install {
         new.extend(Some(next));
         new
     }
+
+    pub fn simplify(&mut self) {
+        self.java_lib_file.retain(|k, _v| {
+            !self.java_lib_class.contains_key(k) && !self.java_lib_mod.contains_key(k)
+        });
+    }
 }
 
 impl Extend<Self> for Install {
@@ -89,6 +95,8 @@ impl Extend<Self> for Install {
             self.mc_asset_index = mc_asset_index.or(self.mc_asset_index.take());
             self.mc_mod.extend(mc_mod);
         }
+
+        self.simplify();
     }
 }
 

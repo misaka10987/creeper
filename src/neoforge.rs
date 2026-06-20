@@ -1,12 +1,6 @@
 mod fmt;
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    iter::once,
-    path::PathBuf,
-    str::FromStr,
-    sync::OnceLock,
-};
+use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr};
 
 use anyhow::anyhow;
 use mc_launchermeta::{
@@ -45,15 +39,11 @@ const VERSIONS_URL: &str =
 
 pub struct NeoforgeManager {
     http: Client,
-    versions: OnceLock<BTreeSet<Version>>,
 }
 
 impl NeoforgeManager {
     pub fn new(http: Client) -> Self {
-        Self {
-            http,
-            versions: OnceLock::new(),
-        }
+        Self { http }
     }
 
     pub fn index_cache_path() -> anyhow::Result<PathBuf> {
@@ -100,22 +90,6 @@ impl NeoforgeManager {
         Ok(())
     }
 
-    pub async fn list_version(&self) -> anyhow::Result<&BTreeSet<Version>> {
-        if let Some(versions) = self.versions.get() {
-            return Ok(versions);
-        }
-
-        let versions = self
-            .get_index()
-            .await?
-            .keys()
-            .map(|VersionRev(v, _)| v)
-            .cloned()
-            .collect();
-
-        Ok(self.versions.get_or_init(|| versions))
-    }
-
     pub async fn get_index(&self) -> anyhow::Result<Index> {
         let cache = Self::index_cache_path()?;
 
@@ -134,10 +108,6 @@ impl NeoforgeManager {
 }
 
 impl Creeper {
-    pub async fn list_neoforge_version(&self) -> anyhow::Result<&BTreeSet<Version>> {
-        self.neoforge.list_version().await
-    }
-
     pub async fn update_neoforge(&self) -> anyhow::Result<()> {
         self.neoforge.update().await
     }

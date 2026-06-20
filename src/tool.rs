@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
-use crate::{Creeper, cmd::Execute};
+use crate::{Creeper, Id, cmd::Execute, index::VersionRev};
 use anyhow::ensure;
 use clap::Parser;
 use colored::Colorize;
@@ -200,8 +200,14 @@ pub struct ListNeoforgeVersion;
 
 impl Execute for ListNeoforgeVersion {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let versions = lib.list_neoforge_version().await?;
-        let json = serde_json::to_string(versions)?;
+        let index = lib.blocking_get_index(&Id::neoforge())?;
+
+        let versions = index
+            .into_keys()
+            .map(|VersionRev(version, _rev)| version)
+            .collect::<BTreeSet<_>>();
+
+        let json = serde_json::to_string(&versions)?;
         println!("{json}");
         Ok(())
     }

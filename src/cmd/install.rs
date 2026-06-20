@@ -2,6 +2,7 @@ use std::iter::once;
 
 use clap::Parser;
 use tokio::fs::{create_dir_all, write};
+use tracing::info;
 
 use crate::{cmd::Execute, lock::Lock};
 
@@ -19,8 +20,13 @@ impl Execute for Install {
         let lock = lib.game.lock().await?;
 
         let dep = match lock {
-            Some(lock) if lock.satisfies(package.node.dep.clone()) && !self.update => lock.package,
+            Some(lock) if lock.satisfies(package.node.dep.clone()) && !self.update => {
+                info!("using package lock file");
+                lock.package
+            }
             _ => {
+                info!("ignoring package lock file");
+
                 lib.update_all().await?;
                 let sol = lib.resolve(package.node.dep.clone())?;
 

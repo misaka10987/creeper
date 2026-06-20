@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use sqlx::{query, query_as};
-use tokio::fs::{File, create_dir_all, metadata, remove_file, symlink, try_exists};
+use tokio::fs::{File, copy, create_dir_all, metadata, remove_file, symlink, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -467,6 +467,15 @@ impl Creeper {
         let len = metadata.len();
 
         let art = Artifact::new(b3, name.into(), None, len);
+
+        if !self.artifact.has_storage(&art.blake3).await? {
+            let storage = art.path()?;
+            create_dir_all(storage.parent().unwrap()).await?;
+            copy(file, &storage).await?;
+            set_readonly(&storage).await?;
+        }
+
+        self.artifact.add(&art).await?;
 
         Ok(art)
     }

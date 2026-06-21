@@ -18,6 +18,7 @@ mod pubgrub;
 mod registry;
 mod tool;
 // mod user;
+mod builtin;
 mod maven;
 mod util;
 mod vanilla;

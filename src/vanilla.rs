@@ -2,10 +2,10 @@ use std::{collections::HashMap, path::PathBuf, sync::OnceLock};
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, MavenCoord,
-    index::{Index, IndexLine, VersionRev},
+    builtin::{SyncBuiltinIndex, UpdateIndex},
+    index::{Index, VersionRev},
     mc::{check_class, check_os},
     pack::PackNode,
-    path::creeper_cache_dir,
 };
 
 use anyhow::anyhow;
@@ -52,17 +52,14 @@ impl VanillaManager {
             version: RwLock::new(HashMap::new()),
         }
     }
+}
 
-    fn index_cache_path() -> anyhow::Result<PathBuf> {
-        let path = creeper_cache_dir()?
-            .join("builtin")
-            .join("index")
-            .join(Id::vanilla().indexed_path())
-            .with_added_extension("jsonl");
-        Ok(path)
+impl SyncBuiltinIndex for VanillaManager {
+    fn package(&self) -> Id {
+        Id::vanilla()
     }
 
-    pub async fn update(&self) -> anyhow::Result<()> {
+    async fn sync_index(&self) -> anyhow::Result<Index> {
         info!("updating vanilla metadata");
 
         let req = self.http.get(VERSION_MANIFEST_URL).build()?;
@@ -89,24 +86,13 @@ impl VanillaManager {
 
         let index = vanilla_index(versions);
 
-        let cache = Self::index_cache_path()?;
-        IndexLine::write(cache, &Id::minecraft(), index).await?;
-
-        Ok(())
-    }
-
-    pub fn blocking_get_index(&self) -> anyhow::Result<Index> {
-        let cache = Self::index_cache_path()?;
-
-        let index = IndexLine::blocking_read(cache)?;
-
         Ok(index)
     }
 }
 
 impl Creeper {
     pub async fn update_vanilla(&self) -> anyhow::Result<()> {
-        self.vanilla.update().await
+        self.vanilla.update_index().await
     }
 
     pub(crate) async fn vanilla_lib(

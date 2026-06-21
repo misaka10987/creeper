@@ -21,7 +21,8 @@ use walkdir::WalkDir;
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, MavenCoord,
-    index::{Index, IndexLine, VersionRev},
+    builtin::{SyncBuiltinIndex, UpdateIndex},
+    index::{Index, VersionRev},
     neoforge::fmt::maven_coord_format,
     pack::PackNode,
     path::creeper_cache_dir,
@@ -45,16 +46,14 @@ impl NeoforgeManager {
     pub fn new(http: Client) -> Self {
         Self { http }
     }
+}
 
-    pub fn index_cache_path() -> anyhow::Result<PathBuf> {
-        let path = creeper_cache_dir()?
-            .join("index")
-            .join(Id::neoforge().indexed_path())
-            .with_added_extension("jsonl");
-        Ok(path)
+impl SyncBuiltinIndex for NeoforgeManager {
+    fn package(&self) -> Id {
+        Id::neoforge()
     }
 
-    pub async fn update(&self) -> anyhow::Result<()> {
+    async fn sync_index(&self) -> anyhow::Result<Index> {
         info!("updating NeoForge metadata");
 
         let req = self.http.get(VERSIONS_URL).build()?;
@@ -83,33 +82,13 @@ impl NeoforgeManager {
             index.len()
         );
 
-        let cache = Self::index_cache_path()?;
-
-        IndexLine::write(&cache, &Id::neoforge(), index).await?;
-
-        Ok(())
-    }
-
-    pub async fn get_index(&self) -> anyhow::Result<Index> {
-        let cache = Self::index_cache_path()?;
-
-        let index = IndexLine::read(cache).await?;
-
-        Ok(index)
-    }
-
-    pub fn blocking_get_index(&self) -> anyhow::Result<Index> {
-        let cache = Self::index_cache_path()?;
-
-        let index = IndexLine::blocking_read(cache)?;
-
         Ok(index)
     }
 }
 
 impl Creeper {
     pub async fn update_neoforge(&self) -> anyhow::Result<()> {
-        self.neoforge.update().await
+        self.neoforge.update_index().await
     }
 
     async fn neoforge_installer_jar(&self, version: &Version) -> anyhow::Result<Artifact> {

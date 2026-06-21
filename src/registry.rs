@@ -132,6 +132,18 @@ impl Registry {
         Ok(pack)
     }
 
+    pub async fn get_index(&self, package: &Id) -> anyhow::Result<Index> {
+        let path = self
+            .index_cache_path()?
+            .join("index")
+            .join(package.indexed_path())
+            .with_added_extension("jsonl");
+
+        let pack = IndexLine::read(path).await?;
+
+        Ok(pack)
+    }
+
     pub async fn get(&self, id: &Id, version: &Version, rev: u32) -> anyhow::Result<Package> {
         if let Some(pack) = self.cache.read().unwrap().get(id) {
             if let Some(pack) = pack.get(&VersionRev(version.clone(), rev)) {

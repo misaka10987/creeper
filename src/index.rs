@@ -16,7 +16,11 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::{Creeper, Id, Package, pack::PackNode};
+use crate::{
+    Creeper, Id, Package,
+    builtin::{BlockingGetIndex, GetIndex},
+    pack::PackNode,
+};
 
 pub type Index = BTreeMap<VersionRev, PackNode>;
 
@@ -196,6 +200,30 @@ impl IndexCache {
 }
 
 impl Creeper {
+    pub async fn get_index(&self, package: &Id) -> anyhow::Result<Index> {
+        if let Some(index) = self.index_cache.map.read().unwrap().get(package) {
+            return Ok(index.clone());
+        }
+
+        let index = if !package.is_regular() {
+            match package.as_str() {
+                "vanilla" => self.vanilla.get_index().await?,
+                "neoforge" => self.neoforge.get_index().await?,
+                _ => todo!(),
+            }
+        } else {
+            self.registry.get_index(package).await?
+        };
+
+        self.index_cache
+            .map
+            .write()
+            .unwrap()
+            .insert(package.clone(), index.clone());
+
+        Ok(index)
+    }
+
     pub fn blocking_get_index(&self, package: &Id) -> anyhow::Result<Index> {
         if let Some(index) = self.index_cache.map.read().unwrap().get(package) {
             return Ok(index.clone());
@@ -203,8 +231,8 @@ impl Creeper {
 
         let index = if !package.is_regular() {
             match package.as_str() {
-                "vanilla" => self.vanilla.blocking_get_index()?.clone(),
-                "neoforge" => self.neoforge.blocking_get_index()?.clone(),
+                "vanilla" => self.vanilla.blocking_get_index()?,
+                "neoforge" => self.neoforge.blocking_get_index()?,
                 _ => todo!(),
             }
         } else {

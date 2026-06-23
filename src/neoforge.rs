@@ -150,7 +150,7 @@ impl Creeper {
         }
 
         let vanilla_install = {
-            let version = required_mc_version(version);
+            let version = nf_required_mc_version(version);
 
             let cache = creeper_cache_dir()?
                 .join("install")
@@ -414,12 +414,12 @@ pub fn decode_neoforge_version(version: &Version) -> String {
     version
 }
 
-fn required_mc_version(nf_version: &Version) -> Version {
-    if nf_version.major >= 26 {
-        let high = nf_version.patch >> 32;
-        Version::new(nf_version.major, nf_version.minor, high)
+fn nf_required_mc_version(version: &Version) -> Version {
+    if version.major >= 26 {
+        let high = version.patch >> 32;
+        Version::new(version.major, version.minor, high)
     } else {
-        Version::new(1, nf_version.major, nf_version.minor)
+        Version::new(1, version.major, version.minor)
     }
 }
 
@@ -442,14 +442,10 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
     versions
         .into_iter()
         .map(|version| {
-            let req = if version.major >= 26 {
-                format!("{}.{}", version.major, version.minor)
-            } else {
-                format!("1.{}.{}", version.major, version.minor)
-            };
-            let dep = Some((Id::vanilla(), req.parse().unwrap()))
-                .into_iter()
-                .collect();
+            let req = nf_required_mc_version(&version);
+            let req = format!("={}", req).parse().unwrap();
+
+            let dep = Some((Id::vanilla(), req)).into_iter().collect();
             let node = PackNode { dep };
             (VersionRev(version, 0), node)
         })

@@ -1,5 +1,5 @@
 use tokio::{
-    fs::{create_dir_all, read_to_string, symlink, try_exists},
+    fs::{create_dir_all, read_to_string},
     process::Command,
 };
 
@@ -25,13 +25,7 @@ impl Creeper {
 
         for (path, art) in install.java_lib_class {
             let path = lib_path.join(path);
-            create_dir_all(path.parent().unwrap()).await?;
-
-            if !(try_exists(&path).await? && art.verify(&path).await?) {
-                let art = self.retrieve_artifact(&art).await?;
-                symlink(&art, &path).await?;
-            }
-
+            self.retrieve_artifact_to(&art, &path).await?;
             cp.push(path.display().to_string());
         }
 
@@ -56,29 +50,18 @@ impl Creeper {
 
         for (path, art) in install.java_lib_mod {
             let path = lib_path.join(path);
-            create_dir_all(path.parent().unwrap()).await?;
-
-            if !(try_exists(&path).await? && art.verify(&path).await?) {
-                let art = self.retrieve_artifact(&art).await?;
-                symlink(&art, &path).await?;
-            }
-
+            self.retrieve_artifact_to(&art, &path).await?;
             p.push(path.display().to_string());
-        }
-
-        for (path, art) in install.java_lib_file {
-            let path = lib_path.join(path);
-            create_dir_all(path.parent().unwrap()).await?;
-
-            if !(try_exists(&path).await? && art.verify(&path).await?) {
-                let art = self.retrieve_artifact(&art).await?;
-                symlink(&art, &path).await?;
-            }
         }
 
         let p = p.join(":");
         if !p.is_empty() {
             cmd.arg("--module-path").arg(p);
+        }
+
+        for (path, art) in install.java_lib_file {
+            let path = lib_path.join(path);
+            self.retrieve_artifact_to(&art, &path).await?;
         }
 
         cmd.arg(format!("-DlibraryDirectory={}", lib_path.display()));

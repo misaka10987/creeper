@@ -2,12 +2,14 @@ use std::{collections::HashMap, iter::once, path::PathBuf};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use serde_inline_default::serde_inline_default;
 use tokio::fs::{create_dir_all, read_to_string, try_exists, write};
 use tracing::debug;
 
 use crate::{Artifact, Creeper, Id, Package, path::creeper_cache_dir};
 
 /// Things installed to the game instance by a package.
+#[serde_inline_default]
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Install {
@@ -41,6 +43,16 @@ pub struct Install {
     /// Minecraft client `.jar` file override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mc_jar: Option<Artifact>,
+
+    /// Whether to disable the minecraft main client `.jar` file, as specified in [`Self::mc_jar`].
+    /// Note that setting this value to `false` does nothing,
+    /// while setting it to `true` will (irreversibly) disable the minecraft main client `.jar` file in the current game instance.
+    ///
+    /// The option is present because some packages implement a substitution for the client `.jar` file.
+    /// For example, neoforge uses its custom class loader and place the game under java libraries.
+    #[serde_inline_default(false)]
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub disable_mc_jar: bool,
 
     /// Command line options passed to the Minecraft game program.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -80,6 +92,7 @@ impl Extend<Self> for Install {
                 native,
                 java_flag,
                 mc_jar,
+                disable_mc_jar,
                 mc_flag,
                 mc_asset_index,
                 mc_mod,
@@ -91,6 +104,7 @@ impl Extend<Self> for Install {
             self.native.extend(native);
             self.java_flag.extend(java_flag);
             self.mc_jar = mc_jar.or(self.mc_jar.take());
+            self.disable_mc_jar = self.disable_mc_jar || disable_mc_jar;
             self.mc_flag.extend(mc_flag);
             self.mc_asset_index = mc_asset_index.or(self.mc_asset_index.take());
             self.mc_mod.extend(mc_mod);

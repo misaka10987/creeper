@@ -299,6 +299,8 @@ impl Creeper {
 
         install.simplify();
 
+        install.disable_mc_jar = true;
+
         Ok(install)
     }
 

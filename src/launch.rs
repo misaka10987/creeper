@@ -35,10 +35,17 @@ impl Creeper {
             cp.push(path.display().to_string());
         }
 
-        if let Some(mc_jar) = install.mc_jar {
-            let art = self.retrieve_artifact(&mc_jar).await?;
-            cp.push(art.display().to_string());
-        }
+        // if let Some(mc_jar) = install.mc_jar {
+        //     let path = self
+        //         .game_dir()
+        //         .await?
+        //         .join(".creeper")
+        //         .join("minecraft.jar");
+        //     self.retrieve_artifact_to(&mc_jar, &path).await?;
+
+        //     // let art = self.retrieve_artifact(&mc_jar).await?;
+        //     cp.push(path.display().to_string());
+        // }
 
         let cp = cp.join(":");
         if !cp.is_empty() {

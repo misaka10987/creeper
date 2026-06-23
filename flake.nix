@@ -18,7 +18,7 @@
       devShells.${system}.default =
         let
           fhs = pkgs.buildFHSEnv {
-            name = "fhs-devshell";
+            name = "fhs";
 
             targetPkgs =
               pkgs: with pkgs; [
@@ -52,14 +52,12 @@
                 fontconfig
                 freetype
               ];
-
-            runScript = "nu";
           };
         in
         pkgs.mkShell {
-          packages = [ fhs ];
-
-          shellHook = "fhs-devshell";
+          packages = [
+            fhs
+          ];
         };
     };
 }

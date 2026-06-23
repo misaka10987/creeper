@@ -114,11 +114,16 @@ pub struct CreeperConfig {
     /// If not specified, would recursively look up parent directory from current directory until a `creeper.toml` is found.
     #[arg(name = "dir", short, long)]
     pub working_dir: Option<PathBuf>,
+
     /// URL to the package registry.
     ///
     /// Note that only `file://` URLs are supported for now.
     #[arg(long, default_value = "https://creeper-registry.pages.dev/")]
     pub registry: Url,
+
+    /// Limit number of parallel downloads.
+    #[arg(long, default_value_t = 4)]
+    pub parallel_download: usize,
 }
 
 pub const CREEPER_TEXT_ART: &str = r#"

@@ -121,7 +121,7 @@ impl Creeper {
                     .map(|a| (art.path.into(), a))
                 }
             })
-            .buffer_unordered(4)
+            .buffer_unordered(self.args.parallel_download)
             .try_collect::<HashMap<_, _>>()
             .await?;
 

@@ -9,6 +9,7 @@ use crate::{
 };
 
 use anyhow::anyhow;
+use futures::{StreamExt, TryStreamExt, stream};
 use mc_launchermeta::{
     VERSION_MANIFEST_URL,
     version::{
@@ -21,8 +22,8 @@ use mc_launchermeta::{
 use reqwest::Client;
 use semver::Version;
 
-use tokio::{sync::RwLock, task::JoinSet};
-use tracing::{Instrument, debug, info, trace};
+use tokio::sync::RwLock;
+use tracing::{debug, info, trace};
 
 fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
     versions
@@ -103,36 +104,26 @@ impl Creeper {
 
         info!("downloading {} library artifacts", arts.len());
 
-        let mut set = JoinSet::new();
+        let lib = stream::iter(arts.clone())
+            .map(|art| {
+                let name = MavenCoord::from_path(&art.path)
+                    .map(|c| c.to_string())
+                    .unwrap_or(art.path.clone());
 
-        for art in arts {
-            let path = art.path.clone();
-
-            let name = MavenCoord::from_path(&art.path)
-                .map(|c| c.to_string())
-                .unwrap_or(art.path);
-
-            let creeper = self.clone();
-            let fut = async move {
-                creeper
-                    .download(
+                async move {
+                    self.download(
                         name,
                         art.url,
                         Some(art.size),
                         Some(Checksum::sha1(art.sha1)),
                     )
                     .await
-                    .map(|a| (path, a))
-            };
-            set.spawn(fut.in_current_span());
-        }
-
-        let mut lib = HashMap::new();
-
-        while let Some(res) = set.join_next().await {
-            let (k, v) = res??;
-            lib.insert(k.into(), v);
-        }
+                    .map(|a| (art.path.into(), a))
+                }
+            })
+            .buffer_unordered(4)
+            .try_collect::<HashMap<_, _>>()
+            .await?;
 
         Ok(lib)
     }

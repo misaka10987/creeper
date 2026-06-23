@@ -196,6 +196,17 @@ impl Creeper {
         info!("running neoforge install processors");
 
         for proc in install_profile.processors {
+            if !proc
+                .sides
+                .as_ref()
+                .is_none_or(|x| x.contains(&"client".into()))
+            {
+                debug!("skipping a processor because side mismatch: {proc}");
+                continue;
+            }
+
+            info!("running processor: {proc}");
+
             let jar = java_lib_file
                 .get(&proc.jar.parse::<MavenCoord>()?.path())
                 .ok_or(anyhow!(
@@ -496,6 +507,8 @@ pub struct NfInstallProfile {
 }
 
 pub mod install_profile {
+    use std::fmt::Display;
+
     use serde::{Deserialize, Serialize};
 
     #[derive(Clone, Serialize, Deserialize)]
@@ -514,5 +527,11 @@ pub mod install_profile {
         pub jar: String,
         pub classpath: Vec<String>,
         pub args: Vec<String>,
+    }
+
+    impl Display for Processor {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{} {}", self.jar, self.args.join(" "))
+        }
     }
 }

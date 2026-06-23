@@ -7,18 +7,22 @@ use crate::{Creeper, Install};
 
 impl Creeper {
     pub async fn launch(&self) -> anyhow::Result<Command> {
-        let path = self.game_dir().await?.join(".creeper").join("install.json");
+        let game_dir = self.game_dir().await?;
+
+        let path = game_dir.join(".creeper").join("install.json");
         let json = read_to_string(path).await?;
 
         let install = serde_json::from_str::<Install>(&json)?;
 
         let mut cmd = Command::new("java");
 
+        cmd.current_dir(game_dir);
+
         for flag in install.java_flag {
             cmd.arg(flag);
         }
 
-        let lib_path = self.game_dir().await?.join(".creeper").join("lib");
+        let lib_path = game_dir.join(".creeper").join("lib");
         create_dir_all(&lib_path).await?;
 
         let mut cp = vec![];
@@ -69,7 +73,7 @@ impl Creeper {
             cmd.arg(flag);
         }
 
-        cmd.arg("--gameDir").arg(self.game_dir().await?);
+        cmd.arg("--gameDir").arg(game_dir);
 
         Ok(cmd)
     }

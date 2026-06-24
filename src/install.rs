@@ -58,9 +58,8 @@ pub struct Install {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mc_flag: Vec<String>,
 
-    /// Minecraft asset index JSON file override.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mc_asset_index: Option<Artifact>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub mc_asset: HashMap<PathBuf, Artifact>,
 
     /// Minecraft mod files to be added to the `mods` folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -94,7 +93,7 @@ impl Extend<Self> for Install {
                 mc_jar,
                 disable_mc_jar,
                 mc_flag,
-                mc_asset_index,
+                mc_asset,
                 mc_mod,
             } = next;
             self.java_lib_class.extend(java_lib_class);
@@ -106,7 +105,7 @@ impl Extend<Self> for Install {
             self.mc_jar = mc_jar.or(self.mc_jar.take());
             self.disable_mc_jar = self.disable_mc_jar || disable_mc_jar;
             self.mc_flag.extend(mc_flag);
-            self.mc_asset_index = mc_asset_index.or(self.mc_asset_index.take());
+            self.mc_asset.extend(mc_asset);
             self.mc_mod.extend(mc_mod);
         }
 

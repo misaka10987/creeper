@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, sync::OnceLock};
+use std::{collections::HashMap, iter::once, path::PathBuf, sync::OnceLock};
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, MavenCoord,
@@ -8,7 +8,7 @@ use crate::{
     pack::PackNode,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, ensure};
 use futures::{StreamExt, TryStreamExt, stream};
 use mc_launchermeta::{
     VERSION_MANIFEST_URL,
@@ -22,7 +22,8 @@ use mc_launchermeta::{
 use reqwest::Client;
 use semver::Version;
 
-use tokio::sync::RwLock;
+use serde::{Deserialize, Serialize};
+use tokio::{fs::read_to_string, sync::RwLock};
 use tracing::{debug, info, trace};
 
 fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
@@ -168,6 +169,7 @@ impl Creeper {
 
     pub async fn vanilla_install(&self, version: Version) -> anyhow::Result<Install> {
         let mc_version = self.vanilla_version(version.clone()).await?;
+
         let client = mc_version.downloads.client;
         let client = self
             .download(
@@ -178,6 +180,7 @@ impl Creeper {
             )
             .await?;
         let lib = self.vanilla_lib(mc_version.libraries).await?;
+
         let asset_index = mc_version.asset_index;
         let asset_index = self
             .download(
@@ -187,16 +190,55 @@ impl Creeper {
                 Some(Checksum::sha1(asset_index.sha1)),
             )
             .await?;
+
+        let asset_index = self.retrieve_artifact(&asset_index).await?;
+        let json = read_to_string(asset_index).await?;
+
+        let asset_index = serde_json::from_str::<AssetIndex>(&json)?;
+        let mc_asset = self.download_mc_asset(asset_index).await?;
+
         let install = Install {
             java_lib_class: lib,
             java_main_class: Some(mc_version.main_class),
             mc_jar: Some(client),
-            mc_asset_index: Some(asset_index),
+            mc_asset,
             mc_flag: vec!["--version".into(), version.to_string()],
             ..Default::default()
         };
         Ok(install)
     }
+
+    async fn download_mc_asset(
+        &self,
+        index: AssetIndex,
+    ) -> anyhow::Result<HashMap<PathBuf, Artifact>> {
+        stream::iter(index.objects)
+            .map(|(path, art)| {
+                let name = PathBuf::from(".minecraft")
+                    .join("assets")
+                    .join(&path)
+                    .display()
+                    .to_string();
+
+                async move {
+                    let src = asset_url(&art.sha1)?;
+
+                    self.download(name, src, Some(art.size), once(Checksum::sha1(art.sha1)))
+                        .await
+                        .map(|a| (path, a))
+                }
+            })
+            .buffer_unordered(self.args.parallel_download)
+            .try_collect::<HashMap<_, _>>()
+            .await
+    }
+}
+
+fn asset_url(sha1: &str) -> anyhow::Result<String> {
+    ensure!(sha1.len() == 40, "invalid sha1 length");
+    let first2 = &sha1[0..2];
+    let url = format!("https://resources.download.minecraft.net/{first2}/{sha1}");
+    Ok(url)
 }
 
 fn filter_lib(lib: impl IntoIterator<Item = Library>) -> Vec<McArtifact> {
@@ -230,4 +272,37 @@ fn filter_lib(lib: impl IntoIterator<Item = Library>) -> Vec<McArtifact> {
         .into_iter()
         .map(|(_k, v)| v)
         .collect()
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AssetIndex {
+    pub objects: HashMap<PathBuf, Object>,
+}
+
+impl AssetIndex {
+    pub fn from_map(map: HashMap<PathBuf, Artifact>) -> anyhow::Result<Self> {
+        let mut objects = HashMap::new();
+
+        for (path, art) in map {
+            let sha1 = art
+                .sha1
+                .ok_or(anyhow!("missing SHA-1 checksum in asset index"))?;
+            objects.insert(
+                path,
+                Object {
+                    sha1,
+                    size: art.len,
+                },
+            );
+        }
+
+        Ok(Self { objects })
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Object {
+    #[serde(rename = "hash")]
+    pub sha1: String,
+    pub size: u64,
 }

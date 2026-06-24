@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use sqlx::{query, query_as};
-use tokio::fs::{File, copy, create_dir_all, metadata, remove_file, symlink, try_exists};
+use tokio::fs::{File, copy, create_dir_all, metadata, symlink, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -201,9 +201,16 @@ impl ArtifactManager {
     }
 
     async fn add_or_update(&self, art: Artifact) -> anyhow::Result<()> {
-        if let Some(mut a) = self.find(&art.blake3).await? {
-            a.try_extend(once(art))?;
-            self.update(&a).await
+        if let Some(a) = self.find(&art.blake3).await? {
+            let mut new = a.clone();
+            new.try_extend(once(art))?;
+
+            if a == new {
+                trace!("nothing to update for artifact {}", a.blake3);
+                return Ok(());
+            }
+
+            self.update(&new).await
         } else {
             self.add(&art).await
         }
@@ -399,8 +406,11 @@ impl Creeper {
     /// Retrieve an artifact and create a soft link to it at the specified path.
     /// Creating parent directories if necessary.
     ///
-    /// This function will **remove** `path` first if it is an existing soft link so that repeated calls will get the same result.
-    /// However, if `path` is existing but not a soft link, the function will fail.
+    /// If `path` exists and is a soft link matching the specified artifact, this function does only update the artifact database.
+    /// Repeated calls to this function is guaranteed idempotent.
+    ///
+    /// If `path` exists and is a soft link that does not match the specified artifact,
+    /// **or** if `path` exists and is not a soft link, the function fails.
     ///
     /// See [`Self::retrieve_artifact`] for details and caveats.
     pub async fn retrieve_artifact_to(
@@ -415,14 +425,35 @@ impl Creeper {
             dst.display()
         );
 
+        if dst.exists() {
+            if !dst.is_symlink() {
+                bail!(
+                    "can not retrieve artifact to {} because it already exists and is not a soft link",
+                    dst.display()
+                );
+            }
+
+            if !art.verify(dst).await? {
+                bail!(
+                    "can not retrieve artifact to {}, refusing to overwrite",
+                    dst.display()
+                );
+            }
+
+            trace!(
+                "found valid artifact at {}, skipping retrieval",
+                dst.display()
+            );
+
+            self.artifact.add_or_update(art.clone()).await?;
+
+            return Ok(());
+        }
+
         let src = self.retrieve_artifact(art).await?;
 
         if let Some(parent) = dst.parent() {
             create_dir_all(parent).await?;
-        }
-
-        if dst.is_symlink() {
-            remove_file(dst).await?;
         }
 
         symlink(src, dst).await?;

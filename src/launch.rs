@@ -63,8 +63,6 @@ impl Creeper {
             self.retrieve_artifact_to(&art, &path).await?;
         }
 
-        cmd.arg(format!("-DlibraryDirectory={}", lib_path.display()));
-
         if let Some(java_main_class) = install.java_main_class {
             cmd.arg(java_main_class);
         }

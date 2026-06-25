@@ -53,4 +53,4 @@ strfmt = "0.2.5"
 tokio-util = { version = "0.7.18", features = ["compat"] }
 futures = "0.3.32"
 parse-display = "0.11.0"
-uuid = "1.23.4"
+uuid = { version = "1.23.4", features = ["serde"] }

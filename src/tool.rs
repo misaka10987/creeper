@@ -7,6 +7,7 @@ use colored::Colorize;
 use indexmap::IndexMap;
 use semver::Version;
 use stop::fatal;
+use url::Url;
 
 /// Collection of CLI tools basically for development use.
 #[derive(Clone, Debug, Parser)]
@@ -19,6 +20,7 @@ pub enum Tool {
     ListNeoforgeVersion(ListNeoforgeVersion),
     GetInstall(GetInstall),
     GetUserInstall(GetUserInstall),
+    DiscoverYggdrasil(DiscoverYggdrasil),
 }
 
 impl Execute for Tool {
@@ -34,6 +36,7 @@ impl Execute for Tool {
             }
             Tool::GetInstall(get_install) => lib.execute(get_install).await,
             Tool::GetUserInstall(get_user_install) => lib.execute(get_user_install).await,
+            Tool::DiscoverYggdrasil(discover_yggdrasil) => lib.execute(discover_yggdrasil).await,
         }
     }
 }
@@ -224,6 +227,22 @@ impl Execute for GetUserInstall {
 
         let json = serde_json::to_string(&install)?;
         println!("{json}");
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Parser)]
+pub struct DiscoverYggdrasil {
+    #[arg(value_name = "URL")]
+    pub url: Url,
+}
+
+impl Execute for DiscoverYggdrasil {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let url = lib.user.discover_yggdrasil(self.url).await?;
+
+        println!("{url}");
+
         Ok(())
     }
 }

@@ -79,10 +79,11 @@ impl Creeper {
         init_creeper_dirs().await?;
         let http = Client::default();
         let registry = Registry::new(args.registry.clone(), http.clone())?;
-        let inst = GameManager::new(args.working_dir.clone());
+        let game = GameManager::new(args.working_dir.clone());
         let neoforge = NeoforgeManager::new(http.clone());
         let vanilla = VanillaManager::new(http.clone());
         let artifact = ArtifactManager::new(http.clone()).await?;
+        let user = UserManager::new(http.clone());
         let val = CreeperInner {
             args,
             artifact,
@@ -91,8 +92,8 @@ impl Creeper {
             registry,
             index_cache: IndexCache::new(),
             neoforge,
-            game: inst,
-            user: UserManager::new(),
+            game,
+            user,
         };
         Ok(Self(Arc::new(val)))
     }

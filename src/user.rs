@@ -2,8 +2,9 @@ use std::{iter::repeat_n, path::PathBuf};
 
 use inquire::{Select, Text};
 use parse_display::Display;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, info, warn};
 use url::Url;
 use uuid::Uuid;
 
@@ -16,13 +17,13 @@ pub enum User {
     Offline { name: String },
 
     #[display("Microsoft Account {account} ({uuid})")]
-    Microsoft { account: String, uuid: String },
+    Microsoft { account: String, uuid: Uuid },
 
     #[display("authlib-injector Account {account} ({uuid}) on {server}")]
     AuthlibInjector {
-        account: String,
         server: Url,
-        uuid: String,
+        account: String,
+        uuid: Uuid,
     },
 }
 
@@ -42,12 +43,14 @@ fn config_path() -> anyhow::Result<PathBuf> {
 }
 
 pub struct UserManager {
+    http: Client,
     config: TomlFile<UserConfig>,
 }
 
 impl UserManager {
-    pub fn new() -> Self {
+    pub fn new(http: Client) -> Self {
         Self {
+            http,
             config: TomlFile::new(),
         }
     }
@@ -69,33 +72,53 @@ impl UserManager {
         Ok(())
     }
 
+    fn install_offline(&self, name: String) -> anyhow::Result<Install> {
+        let uuid = format!("OfflinePlayer: {name}");
+
+        // to ensure sufficient length
+        let uuid = uuid + &repeat_n('\0', 16).collect::<String>();
+        let uuid = &uuid[..16];
+
+        let uuid = Uuid::from_slice(uuid.as_bytes())?;
+
+        let install = Install {
+            mc_flag: vec![
+                "--username".into(),
+                name,
+                "--uuid".into(),
+                uuid.as_simple().to_string(),
+                "--accessToken".into(),
+                "0".into(),
+            ],
+            ..Default::default()
+        };
+
+        Ok(install)
+    }
+
     pub async fn install(&self, user: User) -> anyhow::Result<Install> {
         let install = match user {
-            User::Offline { name } => {
-                let uuid = format!("OfflinePlayer: {name}");
-
-                // to ensure sufficient length
-                let uuid = uuid + &repeat_n('\0', 16).collect::<String>();
-                let uuid = &uuid[..16];
-
-                let uuid = Uuid::from_slice(uuid.as_bytes())?;
-
-                Install {
-                    mc_flag: vec![
-                        "--username".into(),
-                        name,
-                        "--uuid".into(),
-                        uuid.as_simple().to_string(),
-                        "--accessToken".into(),
-                        "0".into(),
-                    ],
-                    ..Default::default()
-                }
-            }
+            User::Offline { name } => self.install_offline(name)?,
             _ => todo!(),
         };
 
         Ok(install)
+    }
+
+    pub async fn discover_yggdrasil(&self, url: Url) -> anyhow::Result<Url> {
+        let res = self.http.get(url.clone()).send().await?;
+
+        if let Some(ali) = res.headers().get("X-Authlib-Injector-API-Location") {
+            let new = url.join(ali.to_str()?)?;
+
+            info!("following Yggdrasil ALI redirect: {url} -> {new}");
+
+            return Ok(new);
+        }
+
+        debug!("no Yggdrasil ALI redirect from {url}, using original URL");
+
+        Ok(url)
     }
 }
 
@@ -165,5 +188,9 @@ impl Creeper {
         let install = self.user.install(user).await?;
 
         Ok(install)
+    }
+
+    pub async fn discover_yggdrasil(&self, url: Url) -> anyhow::Result<Url> {
+        self.user.discover_yggdrasil(url).await
     }
 }

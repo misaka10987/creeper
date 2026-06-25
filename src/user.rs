@@ -1,12 +1,13 @@
-use std::path::PathBuf;
+use std::{iter::repeat_n, path::PathBuf};
 
 use inquire::{Select, Text};
 use parse_display::Display;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use url::Url;
+use uuid::Uuid;
 
-use crate::{Creeper, path::creeper_config_dir, util::TomlFile};
+use crate::{Creeper, Install, path::creeper_config_dir, util::TomlFile};
 
 #[derive(Clone, PartialEq, Eq, Display, Serialize, Deserialize)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "kebab-case")]
@@ -67,6 +68,35 @@ impl UserManager {
 
         Ok(())
     }
+
+    pub async fn install(&self, user: User) -> anyhow::Result<Install> {
+        let install = match user {
+            User::Offline { name } => {
+                let uuid = format!("OfflinePlayer: {name}");
+
+                // to ensure sufficient length
+                let uuid = uuid + &repeat_n('\0', 16).collect::<String>();
+                let uuid = &uuid[..16];
+
+                let uuid = Uuid::from_slice(uuid.as_bytes())?;
+
+                Install {
+                    mc_flag: vec![
+                        "--username".into(),
+                        name,
+                        "--uuid".into(),
+                        uuid.as_simple().to_string(),
+                        "--accessToken".into(),
+                        "0".into(),
+                    ],
+                    ..Default::default()
+                }
+            }
+            _ => todo!(),
+        };
+
+        Ok(install)
+    }
 }
 
 impl Creeper {
@@ -105,11 +135,35 @@ impl Creeper {
             .collect::<Vec<_>>();
 
         if users.is_empty() {
+            eprintln!("No user found in config, please create a new user.");
             return self.prompt_new_user().await;
         }
 
         let select = Select::new("Select a user:", users).prompt()?;
 
         Ok(select)
+    }
+
+    pub async fn prompt_decide_user(&self) -> anyhow::Result<User> {
+        let config = self
+            .user
+            .config
+            .read(config_path()?)
+            .await?
+            .unwrap_or_default();
+
+        if let Some(user) = config.default {
+            return Ok(user);
+        }
+
+        self.prompt_select_user().await
+    }
+
+    pub async fn user_install(&self) -> anyhow::Result<Install> {
+        let user = self.prompt_decide_user().await?;
+
+        let install = self.user.install(user).await?;
+
+        Ok(install)
     }
 }

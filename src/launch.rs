@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{iter::once, path::PathBuf};
 
 use anyhow::{anyhow, ensure};
 use tokio::{
@@ -15,7 +15,9 @@ impl Creeper {
         let path = game_dir.join(".creeper").join("install.json");
         let json = read_to_string(path).await?;
 
-        let install = serde_json::from_str::<Install>(&json)?;
+        let mut install = serde_json::from_str::<Install>(&json)?;
+
+        install.extend(once(self.user_install().await?));
 
         let mut cmd = Command::new("java");
 

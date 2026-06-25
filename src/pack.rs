@@ -44,6 +44,7 @@ pub struct Package {
     pub node: PackNode,
     #[serde(rename = "package")]
     pub meta: PackMeta,
+    #[serde(default)]
     pub install: Install,
 }
 

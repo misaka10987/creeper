@@ -18,6 +18,7 @@ pub enum Tool {
     GetPackage(GetPackage),
     ListNeoforgeVersion(ListNeoforgeVersion),
     GetInstall(GetInstall),
+    GetUserInstall(GetUserInstall),
 }
 
 impl Execute for Tool {
@@ -32,6 +33,7 @@ impl Execute for Tool {
                 lib.execute(list_neoforge_version).await
             }
             Tool::GetInstall(get_install) => lib.execute(get_install).await,
+            Tool::GetUserInstall(get_user_install) => lib.execute(get_user_install).await,
         }
     }
 }
@@ -208,6 +210,19 @@ impl Execute for ListNeoforgeVersion {
             .collect::<BTreeSet<_>>();
 
         let json = serde_json::to_string(&versions)?;
+        println!("{json}");
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Parser)]
+pub struct GetUserInstall;
+
+impl Execute for GetUserInstall {
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let install = lib.user_install().await?;
+
+        let json = serde_json::to_string(&install)?;
         println!("{json}");
         Ok(())
     }

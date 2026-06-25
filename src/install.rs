@@ -28,6 +28,10 @@ pub struct Install {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub java_lib_file: HashMap<PathBuf, Artifact>,
 
+    /// Java agent files and arguments.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub java_agent: Vec<(Artifact, Option<String>)>,
+
     /// Java main class override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub java_main_class: Option<String>,
@@ -87,6 +91,7 @@ impl Extend<Self> for Install {
                 java_lib_class,
                 java_lib_mod,
                 java_lib_file,
+                java_agent,
                 java_main_class,
                 native,
                 java_flag,
@@ -99,6 +104,7 @@ impl Extend<Self> for Install {
             self.java_lib_class.extend(java_lib_class);
             self.java_lib_mod.extend(java_lib_mod);
             self.java_lib_file.extend(java_lib_file);
+            self.java_agent.extend(java_agent);
             self.java_main_class = java_main_class.or(self.java_main_class.take());
             self.native.extend(native);
             self.java_flag.extend(java_flag);

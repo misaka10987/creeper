@@ -68,6 +68,18 @@ impl Creeper {
             self.retrieve_artifact_to(&art, &path).await?;
         }
 
+        for (file, arg) in install.java_agent {
+            let art = self.retrieve_artifact(&file).await?;
+
+            let arg = if let Some(arg) = arg {
+                format!("-javaagent:{}={arg}", art.display())
+            } else {
+                format!("-javaagent:{}", art.display())
+            };
+
+            cmd.arg(arg);
+        }
+
         if let Some(java_main_class) = install.java_main_class {
             cmd.arg(java_main_class);
         }

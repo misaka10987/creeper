@@ -1,4 +1,5 @@
 mod artifact;
+mod builtin;
 mod checksum;
 mod cmd;
 mod game;
@@ -8,6 +9,7 @@ mod install;
 mod java;
 mod launch;
 mod lock;
+mod maven;
 mod mc;
 mod neoforge;
 mod pack;
@@ -17,9 +19,7 @@ mod prelude;
 mod pubgrub;
 mod registry;
 mod tool;
-// mod user;
-mod builtin;
-mod maven;
+mod user;
 mod util;
 mod vanilla;
 mod zip;
@@ -43,6 +43,7 @@ use crate::{
     path::init_creeper_dirs,
     registry::Registry,
     tool::Tool,
+    user::UserManager,
     vanilla::VanillaManager,
 };
 
@@ -59,6 +60,7 @@ pub struct CreeperInner {
     index_cache: IndexCache,
     game: GameManager,
     neoforge: NeoforgeManager,
+    user: UserManager,
 }
 
 #[derive(Clone)]
@@ -90,6 +92,7 @@ impl Creeper {
             index_cache: IndexCache::new(),
             neoforge,
             game: inst,
+            user: UserManager::new(),
         };
         Ok(Self(Arc::new(val)))
     }
@@ -165,6 +168,7 @@ enum SubCommand {
     NeoForgeVersion(NeoForgeVersion),
     Install(cmd::install::Install),
     Nuke(cmd::nuke::Nuke),
+    Login(cmd::login::Login),
     #[clap(hide = true)]
     AwwMan,
 }
@@ -179,6 +183,7 @@ impl Execute for SubCommand {
             SubCommand::Install(install) => lib.execute(install).await,
             SubCommand::Launch(launch) => lib.execute(launch).await,
             SubCommand::Nuke(nuke) => lib.execute(nuke).await,
+            SubCommand::Login(login) => lib.execute(login).await,
         }
     }
 }

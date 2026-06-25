@@ -3,6 +3,7 @@ use crate::Creeper;
 pub mod build_index;
 pub mod install;
 pub mod launch;
+pub mod login;
 pub mod nf_version;
 pub mod nuke;
 

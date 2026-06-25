@@ -4,6 +4,13 @@ use anyhow::anyhow;
 use tokio::fs::create_dir_all;
 use tracing::debug;
 
+pub fn creeper_config_dir() -> anyhow::Result<PathBuf> {
+    let dir = dirs::config_dir()
+        .ok_or(anyhow!("missing config directory"))?
+        .join("creeper");
+    Ok(dir)
+}
+
 /// The local data storage directory for the app.
 pub fn creeper_data_dir() -> anyhow::Result<PathBuf> {
     let dir = dirs::data_local_dir()
@@ -29,7 +36,12 @@ pub fn creeper_mc_dir() -> anyhow::Result<PathBuf> {
 /// Initialize all necessary directories, creating if missing.
 pub async fn init_creeper_dirs() -> anyhow::Result<()> {
     debug!("creating creeper directories if missing");
-    for dir in [creeper_data_dir()?, creeper_cache_dir()?, creeper_mc_dir()?] {
+    for dir in [
+        creeper_config_dir()?,
+        creeper_data_dir()?,
+        creeper_cache_dir()?,
+        creeper_mc_dir()?,
+    ] {
         create_dir_all(dir).await?;
     }
     Ok(())

@@ -52,3 +52,4 @@ async_zip = { version = "0.0.18", features = ["full"] }
 strfmt = "0.2.5"
 tokio-util = { version = "0.7.18", features = ["compat"] }
 futures = "0.3.32"
+parse-display = "0.11.0"

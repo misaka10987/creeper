@@ -22,6 +22,7 @@ mod tool;
 mod user;
 mod util;
 mod vanilla;
+mod yggdrasil;
 mod zip;
 
 use clap::Parser;

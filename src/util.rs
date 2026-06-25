@@ -1,10 +1,14 @@
-use std::{collections::HashMap, path::Path, str::FromStr};
+use std::{collections::HashMap, path::Path, str::FromStr, sync::OnceLock};
 
 use anyhow::{anyhow, bail};
 use inquire::Confirm;
-use serde::{Deserialize, Serialize};
-use tokio::fs::{
-    File, copy, create_dir_all, metadata, remove_dir_all, remove_file, rename, set_permissions,
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use tokio::{
+    fs::{
+        File, copy, create_dir_all, metadata, read_to_string, remove_dir_all, remove_file, rename,
+        set_permissions, try_exists, write,
+    },
+    sync::RwLock,
 };
 use tracing::info;
 
@@ -94,4 +98,61 @@ pub async fn prompt_remove(path: impl AsRef<Path>) -> anyhow::Result<()> {
     info!("removing {}", path.display());
     remove_dir_all(path).await?;
     Ok(())
+}
+
+pub struct TomlFile<T>
+where
+    T: Clone + Serialize + DeserializeOwned,
+{
+    cache: RwLock<OnceLock<Option<T>>>,
+}
+
+impl<T> TomlFile<T>
+where
+    T: Clone + Serialize + DeserializeOwned,
+{
+    pub fn new() -> Self {
+        Self {
+            cache: RwLock::new(OnceLock::new()),
+        }
+    }
+
+    pub async fn read(&self, path: impl AsRef<Path>) -> anyhow::Result<Option<T>> {
+        if let Some(value) = self.cache.read().await.get() {
+            return Ok(value.clone());
+        }
+
+        let value = if try_exists(&path).await? {
+            let toml = read_to_string(&path).await?;
+            Some(toml::from_str(&toml)?)
+        } else {
+            None
+        };
+
+        let value = self.cache.write().await.get_or_init(|| value).clone();
+
+        Ok(value)
+    }
+
+    pub async fn write(&self, path: impl AsRef<Path>, value: Option<T>) -> anyhow::Result<()> {
+        let path = path.as_ref();
+
+        *self.cache.write().await = value.clone().into();
+
+        if let Some(value) = value {
+            let toml = toml::to_string(&value)?;
+
+            if let Some(parent) = path.parent() {
+                create_dir_all(parent).await?;
+            }
+
+            write(path, toml).await?;
+        } else {
+            if try_exists(path).await? {
+                remove_file(path).await?;
+            }
+        }
+
+        Ok(())
+    }
 }

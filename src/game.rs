@@ -5,17 +5,14 @@ use std::{
 };
 
 use anyhow::anyhow;
-use tokio::{
-    fs::{create_dir_all, read_to_string, remove_file, try_exists, write},
-    sync::RwLock,
-};
+use tokio::fs::try_exists;
 
-use crate::{Creeper, Package, lock::Lock};
+use crate::{Creeper, Package, lock::Lock, util::TomlFile};
 
 pub struct GameManager {
     dir: OnceLock<PathBuf>,
-    pack: OnceLock<Package>,
-    lock: RwLock<OnceLock<Option<Lock>>>,
+    pack: TomlFile<Package>,
+    lock: TomlFile<Lock>,
 }
 
 impl GameManager {
@@ -26,8 +23,8 @@ impl GameManager {
         }
         Self {
             dir: d,
-            pack: OnceLock::new(),
-            lock: RwLock::new(OnceLock::new()),
+            pack: TomlFile::new(),
+            lock: TomlFile::new(),
         }
     }
 
@@ -61,49 +58,30 @@ impl GameManager {
         Ok(dir.join("creeper.lock"))
     }
 
-    pub async fn pack(&self) -> anyhow::Result<&Package> {
-        if let Some(pack) = self.pack.get() {
-            return Ok(pack);
-        }
+    pub async fn pack(&self) -> anyhow::Result<Package> {
+        let path = self.pack_path().await?;
 
-        let toml = read_to_string(self.pack_path().await?).await?;
-        let pack = toml::from_str(&toml)?;
-        Ok(self.pack.get_or_init(|| pack))
+        let pack = self
+            .pack
+            .read(path)
+            .await?
+            .ok_or(anyhow!("missing creeper.toml"))?;
+
+        Ok(pack)
     }
 
     pub async fn lock(&self) -> anyhow::Result<Option<Lock>> {
-        if let Some(lock) = self.lock.read().await.get() {
-            return Ok(lock.clone());
-        }
-
         let path = self.lock_path().await?;
 
-        let lock = if try_exists(path).await? {
-            let toml = read_to_string(self.lock_path().await?).await?;
-            Some(toml::from_str(&toml)?)
-        } else {
-            None
-        };
-
-        let lock = self.lock.write().await.get_or_init(|| lock).clone();
+        let lock = self.lock.read(path).await?;
 
         Ok(lock)
     }
 
     pub async fn set_lock(&self, lock: Option<Lock>) -> anyhow::Result<()> {
-        *self.lock.write().await = lock.clone().into();
-
         let path = self.lock_path().await?;
 
-        if let Some(lock) = lock {
-            let toml = toml::to_string(&lock)?;
-            create_dir_all(path.parent().unwrap()).await?;
-            write(&path, toml).await?;
-        } else {
-            if try_exists(&path).await? {
-                remove_file(&path).await?;
-            }
-        }
+        self.lock.write(path, lock).await?;
 
         Ok(())
     }
@@ -114,7 +92,7 @@ impl Creeper {
         self.game.dir().await
     }
 
-    pub async fn game_pack(&self) -> anyhow::Result<&Package> {
+    pub async fn game_pack(&self) -> anyhow::Result<Package> {
         self.game.pack().await
     }
 

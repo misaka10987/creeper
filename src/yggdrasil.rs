@@ -1,6 +1,7 @@
 use std::{path::PathBuf, sync::OnceLock};
 
 use anyhow::{anyhow, bail, ensure};
+use inquire::Password;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
@@ -23,6 +24,10 @@ pub struct YggdrasilClient {
     client_token: RwLock<Option<String>>,
     selected_profile: RwLock<Option<Profile>>,
     available_profiles: RwLock<Vec<Profile>>,
+    /// Whether the current access token is valid.
+    ///
+    /// We assume the validity status does not change during the lifetime of the client, unless explicitly refreshed.
+    valid: RwLock<OnceLock<bool>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -58,6 +63,7 @@ impl YggdrasilClient {
             client_token: RwLock::new(None),
             selected_profile: RwLock::new(None),
             available_profiles: RwLock::new(vec![]),
+            valid: RwLock::new(OnceLock::new()),
         }
     }
 
@@ -115,7 +121,7 @@ impl YggdrasilClient {
     ///
     /// To select a player, the player must be known to the client,
     /// which means [`Self::login`] or [`Self::load`] shall be called first.
-    pub async fn select(&self, player: &Uuid) -> anyhow::Result<()> {
+    pub async fn select(&self, player: &Uuid) -> anyhow::Result<Profile> {
         let profile = self
             .available_profiles
             .read()
@@ -129,18 +135,14 @@ impl YggdrasilClient {
             bail!("multiple profiles found with the same UUID");
         }
 
-        if self
-            .selected_profile
-            .read()
-            .await
-            .as_ref()
-            .is_some_and(|x| x.id == *player)
-        {
-            debug!("already selected profile {player}, checking validity");
+        if let Some(selected_profile) = self.selected_profile.read().await.clone() {
+            if selected_profile.id == *player {
+                debug!("already selected profile {player}, checking validity");
 
-            if self.validate().await? {
-                debug!("token is valid, no need to select again");
-                return Ok(());
+                if self.validate().await? {
+                    debug!("token is valid, no need to select again");
+                    return Ok(selected_profile);
+                }
             }
         }
 
@@ -150,7 +152,7 @@ impl YggdrasilClient {
 
         let profile = profile.into_iter().next().unwrap();
 
-        self.refresh(Some(profile)).await?;
+        self.refresh(Some(profile.clone())).await?;
 
         ensure!(
             self.selected_profile
@@ -161,10 +163,45 @@ impl YggdrasilClient {
             "server failed to select player {player} after refresh"
         );
 
+        Ok(profile)
+    }
+
+    pub async fn load_or_prompt_login(&self) -> anyhow::Result<()> {
+        match self.load().await {
+            Ok(_) => {
+                if self.is_logged_in().await {
+                    info!("loaded Yggdrasil client state and already logged in");
+
+                    return Ok(());
+                }
+            }
+            Err(e) => debug!("failed to load Yggdrasil client state: {e}, prompting for login"),
+        };
+
+        let password = Password::new(&format!(
+            "Log in to {} at {} (no password echo):",
+            self.username, self.server
+        ))
+        .without_confirmation()
+        .prompt()?;
+
+        self.login(&password).await?;
+
         Ok(())
     }
 
-    async fn api(&self) -> anyhow::Result<&Url> {
+    pub async fn prefetch(&self) -> anyhow::Result<serde_json::Value> {
+        let res = self
+            .http
+            .get(self.api().await?.clone())
+            .send()
+            .await?
+            .json()
+            .await?;
+        Ok(res)
+    }
+
+    pub async fn api(&self) -> anyhow::Result<&Url> {
         if let Some(api) = self.api.get() {
             return Ok(api);
         }
@@ -193,7 +230,34 @@ impl YggdrasilClient {
         Ok(api)
     }
 
+    pub async fn get_token(&self) -> anyhow::Result<String> {
+        let token = self.access_token.read().await.clone().ok_or(anyhow!(
+            "client does not have access token, login or load state first"
+        ))?;
+
+        if self.validate().await? {
+            return Ok(token);
+        }
+
+        self.refresh(None).await?;
+
+        let token = self.access_token.read().await.clone().unwrap();
+
+        Ok(token)
+    }
+
+    /// Check whether the current access token is valid.
+    ///
+    /// # Note
+    ///
+    /// This function caches the validity status, and only requests the server the first time it is called.
+    ///
+    /// Though very unlikely, if the validity status changes during the lifetime of the client, this function may return a stale result.
     pub async fn validate(&self) -> anyhow::Result<bool> {
+        if let Some(valid) = self.valid.read().await.get() {
+            return Ok(*valid);
+        }
+
         let access_token = if let Some(token) = self.access_token.read().await.as_ref() {
             token.clone()
         } else {
@@ -209,6 +273,10 @@ impl YggdrasilClient {
         let url = self.api().await?.join("authserver/validate")?;
 
         let res = self.http.post(url).json(&req).send().await?.status();
+
+        let valid = res == StatusCode::NO_CONTENT;
+
+        *self.valid.write().await = valid.into();
 
         Ok(res == StatusCode::NO_CONTENT)
     }
@@ -247,6 +315,8 @@ impl YggdrasilClient {
         *self.client_token.write().await = Some(res.client_token);
         *self.selected_profile.write().await = res.selected_profile.clone();
 
+        *self.valid.write().await = true.into();
+
         Ok(res.selected_profile)
     }
 
@@ -264,6 +334,8 @@ impl YggdrasilClient {
             *self.access_token.write().await = None;
             *self.client_token.write().await = None;
             *self.selected_profile.write().await = None;
+
+            *self.valid.write().await = false.into();
 
             Ok(())
         } else {
@@ -318,6 +390,8 @@ impl YggdrasilClient {
         *self.client_token.write().await = Some(res.client_token);
         *self.available_profiles.write().await = res.available_profiles;
         *self.selected_profile.write().await = res.selected_profile.clone();
+
+        *self.valid.write().await = true.into();
 
         Ok(())
     }

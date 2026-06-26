@@ -4,7 +4,8 @@ use std::{
 };
 
 use anyhow::bail;
-use inquire::{Password, Select, Text};
+use base64::{Engine, prelude::BASE64_STANDARD};
+use inquire::{Select, Text};
 use parse_display::Display;
 use reqwest::Client;
 use semver::Version;
@@ -131,15 +132,7 @@ impl Creeper {
 
         let yggdrasil = YggdrasilClient::new(server.clone(), account.clone(), self.http.clone());
 
-        if yggdrasil.load().await.is_err() || !yggdrasil.is_logged_in().await {
-            let password = Password::new(&format!(
-                "Log in to your account {account} at {server} (no password echo):"
-            ))
-            .without_confirmation()
-            .prompt()?;
-
-            yggdrasil.login(&password).await?;
-        }
+        yggdrasil.load_or_prompt_login().await?;
 
         let available = yggdrasil.available_profiles().await;
 
@@ -238,16 +231,38 @@ impl Creeper {
         account: String,
         uuid: Uuid,
     ) -> anyhow::Result<Install> {
-        // let server = self.discover_yggdrasil(server).await?;
+        let yggdrasil = YggdrasilClient::new(server, account, self.http.clone());
+
+        yggdrasil.load_or_prompt_login().await?;
+
+        let name = yggdrasil.select(&uuid).await?.name;
+
+        let token = yggdrasil.get_token().await?;
+
+        let prefetch = yggdrasil.prefetch().await?;
+        let prefetch = BASE64_STANDARD.encode(serde_json::to_string(&prefetch)?);
+
+        let prefetch_arg = format!("-Dauthlibinjector.yggdrasil.prefetched={prefetch}");
+
+        let api = yggdrasil.api().await?;
+
+        yggdrasil.save().await?;
 
         let jar = self.latest_authlib_injector().await?;
 
         let install = Install {
-            java_agent: vec![(jar, None)],
+            java_agent: vec![(jar, Some(api.to_string()))],
+            java_flag: vec![prefetch_arg],
+            mc_flag: vec![
+                "--username".into(),
+                name,
+                "--uuid".into(),
+                uuid.as_simple().to_string(),
+                "--accessToken".into(),
+                token,
+            ],
             ..Default::default()
         };
-
-        todo!("retrieve access token");
 
         Ok(install)
     }

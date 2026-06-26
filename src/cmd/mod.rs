@@ -6,7 +6,6 @@ pub mod init;
 pub mod install;
 pub mod launch;
 pub mod login;
-pub mod nf_version;
 pub mod nuke;
 
 pub trait Execute {

@@ -37,7 +37,7 @@ use url::Url;
 
 use crate::{
     artifact::ArtifactManager,
-    cmd::{Execute, build_index::BuildIndex, launch::Launch, nf_version::NeoForgeVersion},
+    cmd::{Execute, build_index::BuildIndex, launch::Launch},
     game::GameManager,
     index::IndexCache,
     neoforge::NeoforgeManager,
@@ -166,8 +166,6 @@ enum SubCommand {
     Tool(Tool),
     Launch(Launch),
     BuildIndex(BuildIndex),
-    #[command(name = "nf-version")]
-    NeoForgeVersion(NeoForgeVersion),
     Install(cmd::install::Install),
     Nuke(cmd::nuke::Nuke),
     Login(cmd::login::Login),
@@ -183,7 +181,6 @@ impl Execute for SubCommand {
             SubCommand::Tool(tool) => lib.execute(tool).await,
             SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
             SubCommand::BuildIndex(build_index) => lib.execute(build_index).await,
-            SubCommand::NeoForgeVersion(nf_version) => lib.execute(nf_version).await,
             SubCommand::Install(install) => lib.execute(install).await,
             SubCommand::Launch(launch) => lib.execute(launch).await,
             SubCommand::Nuke(nuke) => lib.execute(nuke).await,

@@ -315,7 +315,9 @@ impl ArtifactManager {
             }
         }
 
-        let cache = creeper_cache_dir()?.join(BASE64_URL_SAFE.encode(&src));
+        let cache = creeper_cache_dir()?
+            .join("download")
+            .join(BASE64_URL_SAFE.encode(&src));
         trace!("download caching to {cache:?}");
         create_dir_all(cache.parent().unwrap()).await?;
 

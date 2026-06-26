@@ -2,6 +2,7 @@ mod artifact;
 mod builtin;
 mod checksum;
 mod cmd;
+mod dev;
 mod game;
 mod id;
 mod index;
@@ -38,6 +39,7 @@ use url::Url;
 use crate::{
     artifact::ArtifactManager,
     cmd::{Execute, build_index::BuildIndex, launch::Launch},
+    dev::Dev,
     game::GameManager,
     index::IndexCache,
     neoforge::NeoforgeManager,
@@ -171,6 +173,8 @@ enum SubCommand {
     Login(cmd::login::Login),
     Download(cmd::download::Download),
     Init(cmd::init::Init),
+    #[command(subcommand)]
+    Dev(Dev),
     #[clap(hide = true)]
     AwwMan,
 }

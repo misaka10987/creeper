@@ -13,7 +13,7 @@ use colored::Colorize;
 use indexmap::IndexMap;
 use stop::fatal;
 
-/// Collection of CLI tools basically for development use.
+/// Collection of CLI tools.
 #[derive(Clone, Debug, Parser)]
 pub enum Tool {
     LoadInst(LoadInst),

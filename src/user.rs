@@ -3,7 +3,8 @@ use std::{
     path::PathBuf,
 };
 
-use inquire::{Select, Text};
+use anyhow::bail;
+use inquire::{Password, Select, Text};
 use parse_display::Display;
 use reqwest::Client;
 use semver::Version;
@@ -12,7 +13,9 @@ use tracing::{debug, info, warn};
 use url::Url;
 use uuid::Uuid;
 
-use crate::{Artifact, Checksum, Creeper, Install, path::creeper_config_dir, util::TomlFile};
+use crate::{
+    Artifact, Checksum, Creeper, Install, YggdrasilClient, path::creeper_config_dir, util::TomlFile,
+};
 
 #[derive(Clone, PartialEq, Eq, Display, Serialize, Deserialize)]
 #[serde(tag = "type", deny_unknown_fields, rename_all = "kebab-case")]
@@ -126,19 +129,47 @@ impl Creeper {
         let account =
             Text::new(&format!("Your account at {server} (usually an email):")).prompt()?;
 
-        let uuid = Text::new("UUID of the player character:")
-            .prompt()?
-            .parse::<Uuid>()?;
+        let yggdrasil = YggdrasilClient::new(server.clone(), account.clone(), self.http.clone());
 
-        let user = User::AuthlibInjector {
-            server,
-            account,
-            uuid,
+        if yggdrasil.load().await.is_err() || !yggdrasil.is_logged_in().await {
+            let password = Password::new(&format!(
+                "Log in to your account {account} at {server} (no password echo):"
+            ))
+            .without_confirmation()
+            .prompt()?;
+
+            yggdrasil.login(&password).await?;
+        }
+
+        let available = yggdrasil.available_profiles().await;
+
+        if available.is_empty() {
+            bail!("no availble player for {account} at {server}, please create one first");
+        }
+
+        let available = available
+            .into_iter()
+            .map(|x| User::AuthlibInjector {
+                server: server.clone(),
+                account: account.clone(),
+                uuid: x.id,
+            })
+            .collect::<Vec<_>>();
+
+        let select = Select::new("Choose a player:", available).prompt()?;
+
+        let uuid = match &select {
+            User::AuthlibInjector { uuid, .. } => uuid,
+            _ => unreachable!(),
         };
 
-        self.user.add(user.clone()).await?;
+        yggdrasil.select(uuid).await?;
 
-        Ok(user)
+        yggdrasil.save().await?;
+
+        self.user.add(select.clone()).await?;
+
+        Ok(select)
     }
 
     pub async fn prompt_select_user(&self) -> anyhow::Result<User> {

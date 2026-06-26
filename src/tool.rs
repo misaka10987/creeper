@@ -5,20 +5,16 @@ use anyhow::ensure;
 use clap::Parser;
 use colored::Colorize;
 use indexmap::IndexMap;
-use semver::Version;
 use stop::fatal;
 
 /// Collection of CLI tools basically for development use.
 #[derive(Clone, Debug, Parser)]
 pub enum Tool {
     LoadInst(LoadInst),
-    FetchManifest(FetchManifest),
-    FetchMcVersion(FetchMcVersion),
     Resolve(Resolve),
     GetPackage(GetPackage),
     ListVersion(ListVersion),
     GetInstall(GetInstall),
-    GetUserInstall(GetUserInstall),
     DiscoverYggdrasil(DiscoverYggdrasil),
 }
 
@@ -26,12 +22,9 @@ impl Execute for Tool {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         match self {
             Tool::LoadInst(load_inst) => lib.execute(load_inst).await,
-            Tool::FetchManifest(fetch_manifest) => lib.execute(fetch_manifest).await,
-            Tool::FetchMcVersion(fetch_mc_version) => lib.execute(fetch_mc_version).await,
             Tool::Resolve(resolve) => lib.execute(resolve).await,
             Tool::GetPackage(get_package) => lib.execute(get_package).await,
             Tool::GetInstall(get_install) => lib.execute(get_install).await,
-            Tool::GetUserInstall(get_user_install) => lib.execute(get_user_install).await,
             Tool::DiscoverYggdrasil(discover_yggdrasil) => lib.execute(discover_yggdrasil).await,
             Tool::ListVersion(list_version) => lib.execute(list_version).await,
         }
@@ -51,41 +44,15 @@ impl Execute for LoadInst {
     }
 }
 
-/// Fetch the minecraft version manifest from online launcher metadata.
-#[derive(Clone, Debug, Parser)]
-pub struct FetchManifest;
-
-impl Execute for FetchManifest {
-    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let manifest = lib.vanilla_manifest().await?;
-        let json = serde_json::to_string(manifest)?;
-        println!("{json}");
-        Ok(())
-    }
-}
-
-/// Fetch the specified minecraft version description file according to the version manifest.
-#[derive(Clone, Debug, Parser)]
-pub struct FetchMcVersion {
-    /// The minecraft version to fetch description for.
-    #[arg(value_name = "VERSION")]
-    version: Version,
-}
-
-impl Execute for FetchMcVersion {
-    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let mc_version = lib.vanilla_version(self.version).await?;
-        let json = serde_json::to_string(&mc_version)?;
-        println!("{json}");
-        Ok(())
-    }
-}
-
+/// Resolve the dependencies of a set of requirements.
 #[derive(Clone, Debug, Parser)]
 pub struct Resolve {
+    /// The requirements in the `<package>@<version-req>` format.
     #[arg(long)]
     pub req: Vec<String>,
-    #[arg(long)]
+
+    /// Sort the resolved packages from dependencies to dependents.
+    #[arg(long, default_value_t = false)]
     pub sort: bool,
 }
 
@@ -197,8 +164,10 @@ impl Execute for GetInstall {
     }
 }
 
+/// List all versions available for the specified package.
 #[derive(Clone, Debug, Parser)]
 pub struct ListVersion {
+    /// The package.
     #[arg(value_name = "PACKAGE")]
     pub package: Id,
 }
@@ -213,19 +182,6 @@ impl Execute for ListVersion {
             .collect::<BTreeSet<_>>();
 
         let json = serde_json::to_string(&versions)?;
-        println!("{json}");
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Parser)]
-pub struct GetUserInstall;
-
-impl Execute for GetUserInstall {
-    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let install = lib.user_install().await?;
-
-        let json = serde_json::to_string(&install)?;
         println!("{json}");
         Ok(())
     }

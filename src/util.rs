@@ -10,7 +10,7 @@ use tokio::{
     },
     sync::RwLock,
 };
-use tracing::info;
+use tracing::{info, trace};
 
 pub async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
     if let Some(parent) = dst.as_ref().parent() {
@@ -38,6 +38,8 @@ pub async fn set_readonly(path: impl AsRef<Path>) -> anyhow::Result<()> {
     perm.set_readonly(true);
 
     set_permissions(path, perm).await?;
+
+    trace!("set {} to readonly", path.display());
 
     Ok(())
 }

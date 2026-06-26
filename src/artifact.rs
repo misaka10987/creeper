@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{AssertSqlSafe, query, query_as};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
-use tokio::fs::{File, copy, create_dir_all, metadata, symlink, try_exists};
+use tokio::fs::{File, copy, create_dir_all, metadata, remove_file, symlink, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -321,6 +321,11 @@ impl ArtifactManager {
         trace!("download caching to {cache:?}");
         create_dir_all(cache.parent().unwrap()).await?;
 
+        if try_exists(&cache).await? {
+            // TODO: continue download if the file is incomplete
+            remove_file(&cache).await?;
+        }
+
         let mut writer = BufWriter::new(File::create(&cache).await?);
 
         let span = Span::current();
@@ -381,7 +386,9 @@ impl ArtifactManager {
 
         self.add_or_update(art.clone()).await?;
 
-        mv(&cache, &path).await?;
+        if !self.has_storage(&art.blake3).await? {
+            mv(&cache, &path).await?;
+        }
 
         Ok(art)
     }

@@ -6,7 +6,8 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
+use semver::{Version, VersionReq};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 /// A package identifier.
@@ -148,5 +149,59 @@ impl FromStr for Id {
 impl Display for Id {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
+pub struct IdVersion {
+    pub id: Id,
+    pub version: Version,
+}
+
+impl Display for IdVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.id, self.version)
+    }
+}
+
+impl FromStr for IdVersion {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let pieces = s.split('@').collect::<Vec<_>>();
+        ensure!(pieces.len() == 2, "expected <id>@<version>, found {s}");
+
+        let (id, version) = (pieces[0].parse()?, pieces[1].parse()?);
+
+        let value = Self { id, version };
+
+        Ok(value)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
+pub struct IdVersionReq {
+    pub id: Id,
+    pub version_req: VersionReq,
+}
+
+impl Display for IdVersionReq {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.id, self.version_req)
+    }
+}
+
+impl FromStr for IdVersionReq {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let pieces = s.split('@').collect::<Vec<_>>();
+        ensure!(pieces.len() == 2, "expected <id>@<version-req>, found {s}");
+
+        let (id, version_req) = (pieces[0].parse()?, pieces[1].parse()?);
+
+        let value = Self { id, version_req };
+
+        Ok(value)
     }
 }

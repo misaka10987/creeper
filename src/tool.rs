@@ -1,12 +1,13 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use crate::{
     Creeper, Id, YggdrasilClient,
     cmd::Execute,
+    id::{IdVersion, IdVersionReq},
     index::VersionRev,
     neoforge::{decode_neoforge_version, parse_neoforge_version},
 };
-use anyhow::{anyhow, ensure};
+use anyhow::anyhow;
 use clap::Parser;
 use colored::Colorize;
 use indexmap::IndexMap;
@@ -55,9 +56,9 @@ impl Execute for LoadInst {
 /// Resolve the dependencies of a set of requirements.
 #[derive(Clone, Debug, Parser)]
 pub struct Resolve {
-    /// The requirements in the `<package>@<version-req>` format.
-    #[arg(long)]
-    pub req: Vec<String>,
+    /// The requirements.
+    #[arg(long, value_name = "PACKAGE@VERSION_REQ")]
+    pub req: Vec<IdVersionReq>,
 
     /// Sort the resolved packages from dependencies to dependents.
     #[arg(long, default_value_t = false)]
@@ -66,17 +67,11 @@ pub struct Resolve {
 
 impl Execute for Resolve {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let mut req = HashMap::new();
-        for s in self.req {
-            let parts = s.split("@").collect::<Vec<_>>();
-            if parts.len() != 2 {
-                fatal!(
-                    "invalid requirement {}, expected <package>@<version-req>",
-                    s
-                );
-            }
-            req.insert(parts[0].parse()?, parts[1].parse()?);
-        }
+        let req = self
+            .req
+            .into_iter()
+            .map(|x| (x.id, x.version_req))
+            .collect();
 
         lib.update_all().await?;
 
@@ -111,9 +106,10 @@ impl Execute for Resolve {
 /// Query the package registry for a specific package version, printing its metadata.
 #[derive(Clone, Debug, Parser)]
 pub struct GetPackage {
-    /// The package in the `<id>@<version>` format.
-    #[arg(value_name = "PACKAGE")]
-    pub package: String,
+    /// The specified package and version.
+    #[arg(value_name = "PACKAGE@VERSION")]
+    pub package: IdVersion,
+
     /// The revision number of this version, defaults to 0.
     #[arg(long, default_value_t = 0)]
     pub rev: u32,
@@ -121,14 +117,9 @@ pub struct GetPackage {
 
 impl Execute for GetPackage {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let pieces = self.package.split('@').collect::<Vec<_>>();
-        ensure!(
-            pieces.len() == 2,
-            "invalid package version {}, expected <id>@<version>",
-            self.package
-        );
-        let (id, version) = (pieces[0].parse()?, pieces[1].parse()?);
-        let package = lib.query_registry(&id, &version, self.rev).await?;
+        let package = lib
+            .query_registry(&self.package.id, &self.package.version, self.rev)
+            .await?;
         let toml = toml::to_string_pretty(&package)?;
         println!("{toml}");
         Ok(())
@@ -138,9 +129,10 @@ impl Execute for GetPackage {
 /// Get the installation performed by the specific package.
 #[derive(Clone, Debug, Parser)]
 pub struct GetInstall {
-    /// The package in the `<id>@<version>` format.
-    #[arg(value_name = "PACKAGE")]
-    pub package: String,
+    /// The specified package and version.
+    #[arg(value_name = "PACKAGE@VERSION")]
+    pub package: IdVersion,
+
     /// The revision number of this version, defaults to 0.
     #[arg(long, default_value_t = 0)]
     pub rev: u32,
@@ -151,19 +143,13 @@ pub struct GetInstall {
 
 impl Execute for GetInstall {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let pieces = self.package.split('@').collect::<Vec<_>>();
-        ensure!(
-            pieces.len() == 2,
-            "invalid package version {}, expected <id>@<version>",
-            self.package
-        );
-        let (id, version) = (pieces[0].parse()?, pieces[1].parse()?);
-
         let install = if self.recursive {
-            let package = lib.query_registry(&id, &version, 0).await?;
+            let package = lib
+                .query_registry(&self.package.id, &self.package.version, 0)
+                .await?;
             lib.recursive_install(package).await?
         } else {
-            lib.install(&id, version).await?
+            lib.install(&self.package.id, self.package.version).await?
         };
 
         let json = serde_json::to_string(&install)?;

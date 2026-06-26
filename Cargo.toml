@@ -1,6 +1,6 @@
 [package]
 name = "creeper"
-version = "1.0.0-alpha.1"
+version = "1.0.0-alpha.2"
 edition = "2024"
 authors = ["misaka10987 <misaka10987@outlook.com>"]
 description = "Minecraft Package Manager"
@@ -12,8 +12,8 @@ keywords = ["minecraft", "launcher", "mc", "package", "manager"]
 license = "MIT"
 
 [dependencies]
-anyhow = "1.0.102"
-clap = { version = "4.6.0", features = ["derive"] }
+anyhow = "1.0.103"
+clap = { version = "4.6.1", features = ["derive"] }
 colored = "3.1.1"
 semver = { version = "1.0.28", features = ["serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
@@ -21,7 +21,7 @@ toml = "1.1.2"
 stop = "0.2.0"
 walkdir = "2.5.0"
 serde-inline-default = "1.0.1"
-tokio = { version = "1.51.0", features = [
+tokio = { version = "1.52.3", features = [
     "fs",
     "rt-multi-thread",
     "tracing",
@@ -31,15 +31,15 @@ mc-launchermeta = "0.1.1"
 dirs = "6.0.0"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
-serde_json = "1.0.149"
-reqwest = { version = "0.13.2", features = ["json"] }
+serde_json = "1.0.150"
+reqwest = { version = "0.13.4", features = ["json"] }
 ring = "0.17.14"
-const-hex = "1.18.1"
+const-hex = "1.19.1"
 tracing-indicatif = "0.3.14"
 indicatif = "0.18.4"
-blake3 = "1.8.4"
-sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
-serde_with = "3.18.0"
+blake3 = "1.8.5"
+sqlx = { version = "0.9.0", features = ["sqlite", "runtime-tokio"] }
+serde_with = "3.21.0"
 spdx = "0.13.4"
 url = { version = "2.5.8", features = ["serde"] }
 pubgrub = "0.3.0"

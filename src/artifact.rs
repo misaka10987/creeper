@@ -5,8 +5,8 @@ use anyhow::{anyhow, bail, ensure};
 use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use sqlx::{AssertSqlSafe, query, query_as};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
-use sqlx::{query, query_as};
 use tokio::fs::{File, copy, create_dir_all, metadata, symlink, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace, warn};
@@ -141,7 +141,7 @@ impl ArtifactManager {
     async fn find_checksum(&self, checksum: &Checksum) -> anyhow::Result<Option<Artifact>> {
         // column names can not be parameters
         let query = format!("SELECT * FROM artifact WHERE {} = ?", checksum.function);
-        let found = query_as(&query)
+        let found = query_as(AssertSqlSafe(query))
             .bind(&checksum.hex_hash)
             .fetch_optional(&self.index)
             .await?;

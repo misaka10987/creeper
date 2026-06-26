@@ -57,7 +57,7 @@ impl Execute for LoadInst {
 #[derive(Clone, Debug, Parser)]
 pub struct Resolve {
     /// The requirements.
-    #[arg(long, value_name = "PACKAGE@VERSION_REQ")]
+    #[arg(long, value_name = "<PACKAGE>[@<VERSION_REQ>]")]
     pub req: Vec<IdVersionReq>,
 
     /// Sort the resolved packages from dependencies to dependents.
@@ -111,7 +111,7 @@ impl Execute for Resolve {
 #[derive(Clone, Debug, Parser)]
 pub struct GetPackage {
     /// The specified package and version.
-    #[arg(value_name = "PACKAGE@VERSION")]
+    #[arg(value_name = "<PACKAGE>@<VERSION>")]
     pub package: IdVersion,
 
     /// The revision number of this version, defaults to 0.
@@ -134,7 +134,7 @@ impl Execute for GetPackage {
 #[derive(Clone, Debug, Parser)]
 pub struct GetInstall {
     /// The specified package and version.
-    #[arg(value_name = "PACKAGE@VERSION")]
+    #[arg(value_name = "<PACKAGE>@<VERSION>")]
     pub package: IdVersion,
 
     /// The revision number of this version, defaults to 0.

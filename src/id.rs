@@ -152,6 +152,7 @@ impl Display for Id {
     }
 }
 
+/// `<PACKAGE>@<VERSION>`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct IdVersion {
     pub id: Id,
@@ -169,7 +170,7 @@ impl FromStr for IdVersion {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let pieces = s.split('@').collect::<Vec<_>>();
-        ensure!(pieces.len() == 2, "expected <id>@<version>, found {s}");
+        ensure!(pieces.len() == 2, "expected <PACKAGE>@<VERSION>, found {s}");
 
         let (id, version) = (pieces[0].parse()?, pieces[1].parse()?);
 
@@ -179,6 +180,7 @@ impl FromStr for IdVersion {
     }
 }
 
+/// `<PACKAGE>[@<VERSION_REQ>]`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct IdVersionReq {
     pub id: Id,
@@ -196,9 +198,12 @@ impl FromStr for IdVersionReq {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let pieces = s.split('@').collect::<Vec<_>>();
-        ensure!(pieces.len() == 2, "expected <id>@<version-req>, found {s}");
 
-        let (id, version_req) = (pieces[0].parse()?, pieces[1].parse()?);
+        let (id, version_req) = match pieces.len() {
+            1 => (pieces[0].parse()?, VersionReq::STAR),
+            2 => (pieces[0].parse()?, pieces[1].parse()?),
+            _ => bail!("expected <PACKAGE>[@<VERSION_REQ>], found {s}"),
+        };
 
         let value = Self { id, version_req };
 

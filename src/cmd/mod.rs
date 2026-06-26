@@ -2,6 +2,7 @@ use crate::Creeper;
 
 pub mod build_index;
 pub mod download;
+pub mod init;
 pub mod install;
 pub mod launch;
 pub mod login;

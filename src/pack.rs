@@ -9,7 +9,7 @@ use spdx::Expression;
 use crate::{Id, Install};
 
 /// The package node in the dependency graph, containing only metadata needed for dependency resolution.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct PackNode {
     /// Dependencies.

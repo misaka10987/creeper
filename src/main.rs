@@ -172,6 +172,7 @@ enum SubCommand {
     Nuke(cmd::nuke::Nuke),
     Login(cmd::login::Login),
     Download(cmd::download::Download),
+    Init(cmd::init::Init),
     #[clap(hide = true)]
     AwwMan,
 }
@@ -188,6 +189,7 @@ impl Execute for SubCommand {
             SubCommand::Nuke(nuke) => lib.execute(nuke).await,
             SubCommand::Login(login) => lib.execute(login).await,
             SubCommand::Download(download) => lib.execute(download).await,
+            SubCommand::Init(init) => lib.execute(init).await,
         }
     }
 }

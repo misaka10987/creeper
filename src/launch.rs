@@ -1,8 +1,8 @@
 use std::{iter::once, path::PathBuf};
 
-use anyhow::{anyhow, ensure};
+use anyhow::{anyhow, bail, ensure};
 use tokio::{
-    fs::{create_dir_all, read_to_string, write},
+    fs::{create_dir_all, read_link, read_to_string, remove_dir_all, symlink, try_exists, write},
     process::Command,
 };
 
@@ -12,8 +12,7 @@ impl Creeper {
     pub async fn launch(&self) -> anyhow::Result<Command> {
         let game_dir = self.game_dir().await?;
 
-        let path = game_dir.join(".creeper").join("install.json");
-        let json = read_to_string(path).await?;
+        let json = read_to_string(self.game_env_dir().await?.join("install.json")).await?;
 
         let mut install = serde_json::from_str::<Install>(&json)?;
 
@@ -27,7 +26,7 @@ impl Creeper {
             cmd.arg(flag);
         }
 
-        let lib_path = game_dir.join(".creeper").join("lib");
+        let lib_path = self.game_env_dir().await?.join("lib");
         create_dir_all(&lib_path).await?;
 
         let mut cp = vec![];
@@ -116,6 +115,33 @@ impl Creeper {
         }
 
         cmd.arg("--gameDir").arg(game_dir);
+
+        let mod_dir = game_dir.join(".creeper").join("mod");
+        if try_exists(&mod_dir).await? {
+            remove_dir_all(&mod_dir).await?;
+        }
+        create_dir_all(&mod_dir).await?;
+
+        let count = install.mc_mod.len();
+        let max_digit = count.to_string().len();
+
+        for (idx, art) in install.mc_mod.into_iter().enumerate() {
+            let file = format!("{:0width$}.jar", idx, width = max_digit);
+            let path = mod_dir.join(file);
+            self.retrieve_artifact_to(&art, &path).await?;
+        }
+
+        let game_mod_dir = self.game_mod_dir().await?;
+        if try_exists(&game_mod_dir).await? {
+            if !game_mod_dir.is_symlink() {
+                bail!("mod directory not managed by creeper, please remove it");
+            }
+            if read_link(game_mod_dir).await? != mod_dir {
+                bail!("mod directory not managed by creeper, please remove it");
+            }
+        } else {
+            symlink(&mod_dir, &game_mod_dir).await?;
+        }
 
         Ok(cmd)
     }

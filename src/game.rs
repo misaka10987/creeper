@@ -92,6 +92,16 @@ impl Creeper {
         self.game.dir().await
     }
 
+    pub async fn game_env_dir(&self) -> anyhow::Result<PathBuf> {
+        let dir = self.game_dir().await?.join(".creeper");
+        Ok(dir)
+    }
+
+    pub async fn game_mod_dir(&self) -> anyhow::Result<PathBuf> {
+        let dir = self.game_dir().await?.join("mods");
+        Ok(dir)
+    }
+
     pub async fn game_pack(&self) -> anyhow::Result<Package> {
         self.game.pack().await
     }

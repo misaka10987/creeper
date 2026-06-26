@@ -2,11 +2,14 @@
   description = "devshell";
 
   inputs = {
-    nixpkgs.url = "git+https://mirrors.nju.edu.cn/git/nixpkgs.git?ref=nixos-unstable&shallow=1";
+    system.url = "path:/etc/nixos";
+    nixpkgs.follows = "system/nixpkgs";
+
+    # nixpkgs.url = "git+https://mirrors.nju.edu.cn/git/nixpkgs.git?ref=nixos-unstable&shallow=1";
   };
 
   outputs =
-    { self, nixpkgs }:
+    { self, nixpkgs, ... }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {

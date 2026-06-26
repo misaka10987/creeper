@@ -16,7 +16,7 @@ pub enum Tool {
     FetchMcVersion(FetchMcVersion),
     Resolve(Resolve),
     GetPackage(GetPackage),
-    ListNeoforgeVersion(ListNeoforgeVersion),
+    ListVersion(ListVersion),
     GetInstall(GetInstall),
     GetUserInstall(GetUserInstall),
     DiscoverYggdrasil(DiscoverYggdrasil),
@@ -30,12 +30,10 @@ impl Execute for Tool {
             Tool::FetchMcVersion(fetch_mc_version) => lib.execute(fetch_mc_version).await,
             Tool::Resolve(resolve) => lib.execute(resolve).await,
             Tool::GetPackage(get_package) => lib.execute(get_package).await,
-            Tool::ListNeoforgeVersion(list_neoforge_version) => {
-                lib.execute(list_neoforge_version).await
-            }
             Tool::GetInstall(get_install) => lib.execute(get_install).await,
             Tool::GetUserInstall(get_user_install) => lib.execute(get_user_install).await,
             Tool::DiscoverYggdrasil(discover_yggdrasil) => lib.execute(discover_yggdrasil).await,
+            Tool::ListVersion(list_version) => lib.execute(list_version).await,
         }
     }
 }
@@ -200,11 +198,14 @@ impl Execute for GetInstall {
 }
 
 #[derive(Clone, Debug, Parser)]
-pub struct ListNeoforgeVersion;
+pub struct ListVersion {
+    #[arg(value_name = "PACKAGE")]
+    pub package: Id,
+}
 
-impl Execute for ListNeoforgeVersion {
+impl Execute for ListVersion {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let index = lib.blocking_get_index(&Id::neoforge())?;
+        let index = lib.get_index(&self.package).await?;
 
         let versions = index
             .into_keys()

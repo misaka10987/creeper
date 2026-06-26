@@ -1,13 +1,12 @@
 use std::collections::{BTreeSet, HashMap};
 
-use crate::{Creeper, Id, cmd::Execute, index::VersionRev};
+use crate::{Creeper, Id, YggdrasilClient, cmd::Execute, index::VersionRev};
 use anyhow::ensure;
 use clap::Parser;
 use colored::Colorize;
 use indexmap::IndexMap;
 use semver::Version;
 use stop::fatal;
-use url::Url;
 
 /// Collection of CLI tools basically for development use.
 #[derive(Clone, Debug, Parser)]
@@ -231,15 +230,19 @@ impl Execute for GetUserInstall {
     }
 }
 
+/// Discover a Yggdrasil service at the game server, following the authlib API Location Indication (ALI).
 #[derive(Clone, Debug, Parser)]
 pub struct DiscoverYggdrasil {
-    #[arg(value_name = "URL")]
-    pub url: Url,
+    /// The server to connect. Can be either a hostname or a URL.
+    #[arg(value_name = "SERVER")]
+    pub server: String,
 }
 
 impl Execute for DiscoverYggdrasil {
-    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let url = lib.user.discover_yggdrasil(self.url).await?;
+    async fn execute(self, _lib: &Creeper) -> anyhow::Result<()> {
+        let client = YggdrasilClient::new(self.server, "".into(), Default::default())?;
+
+        let url = client.api().await?;
 
         println!("{url}");
 

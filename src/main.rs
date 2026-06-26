@@ -84,7 +84,7 @@ impl Creeper {
         let neoforge = NeoforgeManager::new(http.clone());
         let vanilla = VanillaManager::new(http.clone());
         let artifact = ArtifactManager::new(http.clone()).await?;
-        let user = UserManager::new(http.clone());
+        let user = UserManager::new();
         let val = CreeperInner {
             args,
             artifact,

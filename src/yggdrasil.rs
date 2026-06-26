@@ -53,8 +53,16 @@ impl YggdrasilClient {
         Ok(path)
     }
 
-    pub fn new(server: Url, username: String, http: Client) -> Self {
-        Self {
+    pub fn new(server: String, username: String, http: Client) -> anyhow::Result<Self> {
+        let server = if !server.contains(":") {
+            format!("https://{server}")
+        } else {
+            server
+        };
+
+        let server = server.parse()?;
+
+        let value = Self {
             server,
             username,
             http,
@@ -64,7 +72,9 @@ impl YggdrasilClient {
             selected_profile: RwLock::new(None),
             available_profiles: RwLock::new(vec![]),
             valid: RwLock::new(OnceLock::new()),
-        }
+        };
+
+        Ok(value)
     }
 
     pub async fn load(&self) -> anyhow::Result<()> {

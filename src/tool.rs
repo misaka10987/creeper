@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::{
     Creeper, Id, YggdrasilClient,
@@ -7,7 +7,7 @@ use crate::{
     index::VersionRev,
     neoforge::{decode_neoforge_version, parse_neoforge_version},
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use clap::Parser;
 use colored::Colorize;
 use indexmap::IndexMap;
@@ -71,7 +71,11 @@ impl Execute for Resolve {
             .req
             .into_iter()
             .map(|x| (x.id, x.version_req))
-            .collect();
+            .collect::<HashMap<_, _>>();
+
+        if req.len() == 0 {
+            bail!("nothing to resolve, please specify at least one requirement");
+        }
 
         lib.update_all().await?;
 

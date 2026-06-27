@@ -155,7 +155,7 @@ impl Creeper {
 
         let res = pubgrub::resolve(&resolve, Id::root(), Version::new(0, 0, 0));
 
-        let mut sol = res.map_err(|e| match e {
+        let sol = res.map_err(|e| match e {
             pubgrub::PubGrubError::NoSolution(derivation_tree) => {
                 let report = DefaultStringReporter::report(&derivation_tree);
                 anyhow!("no solution:\n{report}")
@@ -175,10 +175,10 @@ impl Creeper {
             }
         })?;
 
-        sol.remove(&Id::root());
-
         // PubGrub uses non-default hasher, convert to standard before returning
-        let sol = sol.into_iter().collect();
+        let mut sol = sol.into_iter().collect::<HashMap<_, _>>();
+
+        sol.remove(&Id::root());
 
         Ok(sol)
     }

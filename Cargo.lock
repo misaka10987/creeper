@@ -571,9 +571,9 @@ dependencies = [
 
 [[package]]
 name = "creeper-semver-pubgrub"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88167549f2b30800aaaba563b40700c916dad7acf8b1de9095141b414a87375a"
+checksum = "573ce8faed138b9a7268894a30a55d7d865f542c221df8b777b18da7ae7a5b39"
 dependencies = [
  "pubgrub",
  "semver",
@@ -1961,9 +1961,9 @@ dependencies = [
 
 [[package]]
 name = "pubgrub"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f5df7e552bc7edd075f5783a87fbfc21d6a546e32c16985679c488c18192d83"
+checksum = "a1c3256d319f1ed35251223140ab8f29fd6b0528a1216344efd904c651fecd5e"
 dependencies = [
  "indexmap 2.14.0",
  "log",

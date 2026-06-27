@@ -1,3 +1,5 @@
+mod pack_nf_mod;
+
 use std::collections::{BTreeSet, HashMap};
 
 use crate::{
@@ -24,6 +26,8 @@ pub enum Tool {
     DiscoverYggdrasil(DiscoverYggdrasil),
     #[command(name = "nf-version")]
     NeoForgeVersion(NeoForgeVersion),
+    #[command(name = "pack-nf-mod")]
+    PackageNeoforgeMod(pack_nf_mod::PackageNeoforgeMod),
 }
 
 impl Execute for Tool {
@@ -36,6 +40,9 @@ impl Execute for Tool {
             Tool::DiscoverYggdrasil(discover_yggdrasil) => lib.execute(discover_yggdrasil).await,
             Tool::ListVersion(list_version) => lib.execute(list_version).await,
             Tool::NeoForgeVersion(nf_version) => lib.execute(nf_version).await,
+            Tool::PackageNeoforgeMod(package_neoforge_mod) => {
+                lib.execute(package_neoforge_mod).await
+            }
         }
     }
 }

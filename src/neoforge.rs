@@ -11,8 +11,7 @@ use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
-use serde_with::{DisplayFromStr, serde_as};
-use spdx::Expression;
+use serde_with::serde_as;
 use strfmt::Format;
 use tokio::process::Command;
 use tracing::{debug, error, info, trace};
@@ -562,8 +561,13 @@ pub struct NeoforgeMods {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub loader_version: String,
 
-    #[serde_as(as = "DisplayFromStr")]
-    pub license: Expression,
+    /// This field should be a valid SPDX license expression,
+    /// but since many mods like Sodium violate this rule,
+    /// the field is typed as a `String`.
+    // #[serde_as(as = "DisplayFromStr")]
+    // pub license: Expression,
+    pub license: String,
+
     #[serde_inline_default(false)]
     pub show_as_resource_pack: bool,
 
@@ -581,6 +585,14 @@ pub struct NeoforgeMods {
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mods: Vec<neoforge_mods::Mod>,
+
+    /// NeoForge does not document the type of a property, so we use `serde_json::Value` to represent it.
+    #[serde(
+        rename = "modproperties",
+        default,
+        skip_serializing_if = "HashMap::is_empty"
+    )]
+    pub mod_properties: HashMap<String, HashMap<String, serde_json::Value>>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub access_transformers: Vec<neoforge_mods::AccessTransformer>,
@@ -643,6 +655,11 @@ pub mod neoforge_mods {
 
         #[serde(skip_serializing_if = "Option::is_none")]
         pub feature_flags: Option<PathBuf>,
+
+        /// The field is not NeoForge standard but used by Sodium.
+        /// It is here to avoid error.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub _provides: Vec<String>,
     }
 
     #[derive(Clone, Serialize, Deserialize)]

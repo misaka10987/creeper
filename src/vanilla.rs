@@ -167,7 +167,7 @@ impl Creeper {
         Ok(mc_version)
     }
 
-    pub async fn vanilla_install(&self, version: Version) -> anyhow::Result<Install> {
+    pub(crate) async fn vanilla_install(&self, version: &Version) -> anyhow::Result<Install> {
         let mc_version = self.vanilla_version(version.clone()).await?;
 
         let client = mc_version.downloads.client;

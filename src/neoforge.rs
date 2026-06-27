@@ -14,10 +14,7 @@ use serde_inline_default::serde_inline_default;
 use serde_with::{DisplayFromStr, serde_as};
 use spdx::Expression;
 use strfmt::Format;
-use tokio::{
-    fs::{create_dir_all, read_to_string, try_exists, write},
-    process::Command,
-};
+use tokio::process::Command;
 use tracing::{debug, error, info, trace};
 use url::Url;
 use walkdir::WalkDir;
@@ -116,7 +113,7 @@ impl Creeper {
         Ok(installer)
     }
 
-    pub async fn neoforge_install(&self, version: &Version) -> anyhow::Result<Install> {
+    pub(crate) async fn neoforge_install(&self, version: &Version) -> anyhow::Result<Install> {
         let installer = self.neoforge_installer_jar(version).await?;
 
         let installer = self.retrieve_artifact(&installer).await?;
@@ -152,23 +149,14 @@ impl Creeper {
         }
 
         let vanilla_install = {
+            // repeat code from [`Self::install`] to avoid async recursion
             let version = nf_required_mc_version(version);
-
-            let cache = creeper_cache_dir()?
-                .join("install")
-                .join(Id::vanilla().indexed_path())
-                .join(version.to_string())
-                .with_added_extension("json");
-
-            if try_exists(&cache).await? {
-                let json = read_to_string(&cache).await?;
-                let install = serde_json::from_str(&json)?;
+            if let Some(install) = self.get_install_cache(&Id::vanilla(), &version).await? {
                 install
             } else {
-                let install = self.vanilla_install(version).await?;
-                let json = serde_json::to_string(&install)?;
-                create_dir_all(cache.parent().unwrap()).await?;
-                write(&cache, json).await?;
+                let install = self.vanilla_install(&version).await?;
+                self.set_install_cache(&Id::vanilla(), &version, Some(&install))
+                    .await?;
                 install
             }
         };

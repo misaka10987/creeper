@@ -3,7 +3,7 @@ use std::{collections::HashMap, iter::once, path::PathBuf};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
-use tokio::fs::{create_dir_all, read_to_string, try_exists, write};
+use tokio::fs::{create_dir_all, read_to_string, remove_file, try_exists, write};
 use tracing::debug;
 
 use crate::{Artifact, Creeper, Id, Package, path::creeper_cache_dir};
@@ -125,19 +125,60 @@ fn cache_path() -> anyhow::Result<PathBuf> {
 }
 
 impl Creeper {
-    /// Retrieve the installation data for a specific version of package.
-    ///
-    /// Note that this does not install the dependencies of the package.
-    /// Use [`Self::recursive_install`] for that.
-    pub async fn install(&self, package: &Id, version: Version) -> anyhow::Result<Install> {
+    // pub(crate) because [`Self::neoforge_install`] needs it to avoid async recursion
+    pub(crate) async fn get_install_cache(
+        &self,
+        package: &Id,
+        version: &Version,
+    ) -> anyhow::Result<Option<Install>> {
         let cache = cache_path()?
             .join(package.indexed_path())
             .join(version.to_string())
             .with_added_extension("json");
 
-        if try_exists(&cache).await? {
-            let json = read_to_string(&cache).await?;
-            let install = serde_json::from_str(&json)?;
+        if !try_exists(&cache).await? {
+            return Ok(None);
+        }
+
+        let json = read_to_string(&cache).await?;
+        let install = serde_json::from_str(&json)?;
+
+        Ok(Some(install))
+    }
+
+    pub(crate) async fn set_install_cache(
+        &self,
+        package: &Id,
+        version: &Version,
+        value: Option<&Install>,
+    ) -> anyhow::Result<()> {
+        let cache = cache_path()?
+            .join(package.indexed_path())
+            .join(version.to_string())
+            .with_added_extension("json");
+
+        let install = if let Some(x) = value {
+            x
+        } else {
+            if try_exists(&cache).await? {
+                remove_file(&cache).await?;
+            }
+            return Ok(());
+        };
+
+        let json = serde_json::to_string(install)?;
+        create_dir_all(cache.parent().unwrap()).await?;
+        write(&cache, json).await?;
+
+        Ok(())
+    }
+
+    /// Retrieve the installation data for a specific version of package.
+    ///
+    /// Note that this does not install the dependencies of the package.
+    /// Use [`Self::recursive_install`] for that.
+    pub async fn install(&self, package: &Id, version: &Version) -> anyhow::Result<Install> {
+        if let Some(install) = self.get_install_cache(package, version).await? {
             debug!("using cached install {package}@{version}");
             return Ok(install);
         }
@@ -145,17 +186,16 @@ impl Creeper {
         let install = if !package.is_regular() {
             match package.as_str() {
                 "vanilla" => self.vanilla_install(version).await?,
-                "neoforge" => self.neoforge_install(&version).await?,
+                "neoforge" => self.neoforge_install(version).await?,
                 _ => todo!(),
             }
         } else {
-            let package = self.query_registry(package, &version, 0).await?;
+            let package = self.query_registry(package, version, 0).await?;
             package.install
         };
 
-        let json = serde_json::to_string(&install)?;
-        create_dir_all(cache.parent().unwrap()).await?;
-        write(&cache, json).await?;
+        self.set_install_cache(package, version, Some(&install))
+            .await?;
 
         Ok(install)
     }
@@ -169,7 +209,7 @@ impl Creeper {
         let mut install = Install::default();
 
         for (id, version) in packages {
-            let package = self.install(&id, version).await?;
+            let package = self.install(&id, &version).await?;
             install.extend(once(package));
         }
 
@@ -184,7 +224,7 @@ impl Creeper {
         let mut install = Install::default();
 
         for (id, version) in sorted {
-            let package = self.install(&id, version).await?;
+            let package = self.install(&id, &version).await?;
             install.extend(once(package));
         }
 

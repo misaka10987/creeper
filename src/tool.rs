@@ -153,7 +153,7 @@ impl Execute for GetInstall {
                 .await?;
             lib.recursive_install(package).await?
         } else {
-            lib.install(&self.package.id, self.package.version).await?
+            lib.install(&self.package.id, &self.package.version).await?
         };
 
         let json = serde_json::to_string(&install)?;

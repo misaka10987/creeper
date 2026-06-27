@@ -10,6 +10,9 @@ use mc_launchermeta::{
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use serde_inline_default::serde_inline_default;
+use serde_with::{DisplayFromStr, serde_as};
+use spdx::Expression;
 use strfmt::Format;
 use tokio::{
     fs::{create_dir_all, read_to_string, try_exists, write},
@@ -559,5 +562,170 @@ pub mod install_profile {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{} {}", self.jar, self.args.join(" "))
         }
+    }
+}
+
+#[serde_inline_default]
+#[serde_as]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct NeoforgeMods {
+    #[serde_inline_default("javafml".into())]
+    pub mod_loader: String,
+
+    // TODO: serde with maven version range
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub loader_version: String,
+
+    #[serde_as(as = "DisplayFromStr")]
+    pub license: Expression,
+    #[serde_inline_default(false)]
+    pub show_as_resource_pack: bool,
+
+    #[serde_inline_default(false)]
+    pub show_as_data_pack: bool,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub properties: HashMap<String, String>,
+
+    #[serde(rename = "issueTrackerURL", skip_serializing_if = "Option::is_none")]
+    pub issue_tracker_url: Option<Url>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mods: Vec<neoforge_mods::Mod>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub access_transformers: Vec<neoforge_mods::AccessTransformer>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mixins: Vec<neoforge_mods::Mixin>,
+
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub dependencies: HashMap<String, Vec<neoforge_mods::Dependency>>,
+}
+
+pub mod neoforge_mods {
+    use std::path::PathBuf;
+
+    use serde::{Deserialize, Serialize};
+    use serde_inline_default::serde_inline_default;
+    use url::Url;
+
+    #[serde_inline_default]
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    pub struct Mod {
+        pub mod_id: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub namespace: Option<String>,
+
+        #[serde_inline_default("1".into())]
+        pub version: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub display_name: Option<String>,
+
+        #[serde_inline_default(r#"'''MISSING DESCRIPTION '''"#.into())]
+        pub description: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub logo_file: Option<PathBuf>,
+
+        #[serde_inline_default(true)]
+        pub logo_blur: bool,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub update_json_url: Option<Url>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub mod_url: Option<Url>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub credits: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub authors: Option<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub display_url: Option<Url>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub enum_extensions: Option<PathBuf>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub feature_flags: Option<PathBuf>,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    pub struct AccessTransformer {
+        pub file: PathBuf,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    pub struct Mixin {
+        pub config: PathBuf,
+
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub required_mods: Vec<String>,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub behavior_version: Option<String>,
+    }
+
+    #[serde_inline_default]
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    pub struct Dependency {
+        pub mod_id: String,
+
+        #[serde_inline_default(DependencyType::Required)]
+        #[serde(rename = "type")]
+        pub dependency_type: DependencyType,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub reason: Option<String>,
+
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        pub version_range: String,
+
+        #[serde_inline_default(Ordering::None)]
+        pub ordering: Ordering,
+
+        #[serde_inline_default(Side::Both)]
+        pub side: Side,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub refferal_url: Option<Url>,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    pub enum DependencyType {
+        Required,
+        Optional,
+        Incompatible,
+        Discouraged,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "SCREAMING_SNAKE_CASE")]
+    pub enum Ordering {
+        Before,
+        After,
+        None,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "SCREAMING_SNAKE_CASE")]
+    pub enum Side {
+        Both,
+        Client,
+        Server,
     }
 }

@@ -132,7 +132,6 @@ impl Creeper {
 
         let tmp_dir = cache_path()?.join("tmp").join(version.to_string());
         let tmp_lib_dir = tmp_dir.join("lib");
-        let tmp_root_dir = tmp_dir.join("root");
 
         let install_profile = extract_zip(&installer, "install_profile.json").await?;
         let install_profile = serde_json::from_str::<NfInstallProfile>(&install_profile)?;
@@ -186,8 +185,6 @@ impl Creeper {
             .map(|(k, v)| (k, v.client))
             .chain(once(("SIDE".into(), "client".into())))
             .chain(once(("MINECRAFT_JAR".into(), mc_jar.display().to_string())))
-            .chain(once(("ROOT".into(), tmp_root_dir.display().to_string())))
-            .chain(once(("INSTALLER".into(), installer.display().to_string())))
             .collect::<HashMap<_, _>>();
 
         // special case: BINPATCH /data/client.lzma is packaged in the installer jar

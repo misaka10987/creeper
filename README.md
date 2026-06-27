@@ -2,6 +2,16 @@
 
 现代的 Minecraft 包管理器。
 
+```shell
+creeper init ${path-to-new-game}
+cd ${path-to-new-game}
+creeper add vanilla@=1.21.1 mekanism@10
+creeper launch
+```
+
+<img width="1920" height="1080" alt="2026-06-27_11 28 40" src="https://github.com/user-attachments/assets/95ec2257-f373-47a7-83ff-b44546529c90" />
+<p align="center">creeper 启动的 Minecraft 1.21.1 + NeoForge 21.1.234 + Mekanism 10.7.19</p>
+
 ## 为什么有这个项目？
 
 现在已经有了很多 Minecraft 第三方启动器，包括国内的 *HMCL* , *PCL* , *BakaXL* , 国外的 *Prism Launcher* 等。这些启动器编写得很完善，各种功能齐全，看似编写一个新的启动器已经是没有多少价值的重复劳动。然而，我们认为，即使第三方启动器的技术和规范已经很成熟，对模组玩家来说，仍有三个大问题亟须解决：

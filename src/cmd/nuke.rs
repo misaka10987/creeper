@@ -11,7 +11,7 @@ use crate::{
 pub struct Nuke {
     /// Skip the confirmation prompt.
     #[arg(long, default_value_t = false)]
-    confirm: bool,
+    pub confirm: bool,
 }
 
 impl Execute for Nuke {

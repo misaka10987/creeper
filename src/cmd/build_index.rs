@@ -17,12 +17,12 @@ use crate::{
 pub struct BuildIndex {
     /// Package registry directory.
     #[arg(value_name = "INPUT")]
-    input: PathBuf,
+    pub input: PathBuf,
     /// Output directory to write the index to.
     ///
     /// If not specified, will only perform a validation on the input.
     #[arg(short, long)]
-    output: Option<PathBuf>,
+    pub output: Option<PathBuf>,
 }
 
 impl Execute for BuildIndex {

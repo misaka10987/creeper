@@ -10,7 +10,7 @@ use crate::{cmd::Execute, lock::Lock};
 #[derive(Clone, Debug, Parser)]
 pub struct Install {
     #[arg(long, default_value_t = false)]
-    update: bool,
+    pub update: bool,
 }
 
 impl Execute for Install {

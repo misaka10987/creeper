@@ -37,17 +37,9 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 use crate::{
-    artifact::ArtifactManager,
-    cmd::{Execute, build_index::BuildIndex, launch::Launch},
-    dev::Dev,
-    game::GameManager,
-    index::IndexCache,
-    neoforge::NeoforgeManager,
-    path::init_creeper_dirs,
-    registry::Registry,
-    tool::Tool,
-    user::UserManager,
-    vanilla::VanillaManager,
+    artifact::ArtifactManager, cmd::Execute, dev::Dev, game::GameManager, index::IndexCache,
+    neoforge::NeoforgeManager, path::init_creeper_dirs, registry::Registry, tool::Tool,
+    user::UserManager, vanilla::VanillaManager,
 };
 
 pub use prelude::*;
@@ -166,13 +158,14 @@ struct Args {
 enum SubCommand {
     #[command(subcommand)]
     Tool(Tool),
-    Launch(Launch),
-    BuildIndex(BuildIndex),
-    Install(cmd::install::Install),
-    Nuke(cmd::nuke::Nuke),
-    Login(cmd::login::Login),
-    Download(cmd::download::Download),
-    Init(cmd::init::Init),
+    Add(cmd::Add),
+    Launch(cmd::Launch),
+    BuildIndex(cmd::BuildIndex),
+    Install(cmd::Install),
+    Nuke(cmd::Nuke),
+    Login(cmd::Login),
+    Download(cmd::Download),
+    Init(cmd::Init),
     #[command(subcommand)]
     Dev(Dev),
     #[clap(hide = true)]
@@ -191,6 +184,8 @@ impl Execute for SubCommand {
             SubCommand::Login(login) => lib.execute(login).await,
             SubCommand::Download(download) => lib.execute(download).await,
             SubCommand::Init(init) => lib.execute(init).await,
+            SubCommand::Add(add) => lib.execute(add).await,
+            SubCommand::Dev(_dev) => todo!(),
         }
     }
 }

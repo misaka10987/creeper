@@ -7,7 +7,7 @@ use crate::{Creeper, cmd::Execute};
 pub struct Launch {
     /// To preview the launch command without executing it.
     #[arg(long, default_value_t = false)]
-    preview: bool,
+    pub preview: bool,
 }
 
 impl Execute for Launch {

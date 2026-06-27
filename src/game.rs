@@ -70,6 +70,14 @@ impl GameManager {
         Ok(pack)
     }
 
+    pub async fn set_pack(&self, pack: Package) -> anyhow::Result<()> {
+        let path = self.pack_path().await?;
+
+        self.pack.write(path, Some(pack)).await?;
+
+        Ok(())
+    }
+
     pub async fn lock(&self) -> anyhow::Result<Option<Lock>> {
         let path = self.lock_path().await?;
 
@@ -104,6 +112,10 @@ impl Creeper {
 
     pub async fn game_pack(&self) -> anyhow::Result<Package> {
         self.game.pack().await
+    }
+
+    pub async fn set_game_pack(&self, pack: Package) -> anyhow::Result<()> {
+        self.game.set_pack(pack).await
     }
 
     pub async fn game_lock(&self) -> anyhow::Result<Option<Lock>> {

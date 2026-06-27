@@ -127,6 +127,10 @@ impl Registry {
             .join(package.indexed_path())
             .with_added_extension("jsonl");
 
+        if !path.exists() {
+            bail!("package {package} does not exist or missing from cache");
+        }
+
         let pack = IndexLine::blocking_read(path)?;
 
         Ok(pack)
@@ -138,6 +142,10 @@ impl Registry {
             .join("index")
             .join(package.indexed_path())
             .with_added_extension("jsonl");
+
+        if !try_exists(&path).await? {
+            bail!("package {package} does not exist or missing from cache");
+        }
 
         let pack = IndexLine::read(path).await?;
 

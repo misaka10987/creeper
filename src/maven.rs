@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, ensure};
-use semver::Version;
+use semver::{Version, VersionReq};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use tracing::warn;
 
@@ -296,6 +296,24 @@ pub enum MavenVersionRange {
     Multiple(Vec<MavenVersionRange>),
 }
 
+impl TryFrom<MavenVersionRange> for VersionReq {
+    type Error = anyhow::Error;
+
+    fn try_from(value: MavenVersionRange) -> Result<Self, Self::Error> {
+        match value {
+            MavenVersionRange::Exact(v) => Ok(format!("={v}").parse()?),
+            MavenVersionRange::LE(v) => Ok(format!("<={v}").parse()?),
+            MavenVersionRange::LT(v) => Ok(format!("<{v}").parse()?),
+            MavenVersionRange::GE(v) => Ok(format!(">={v}").parse()?),
+            MavenVersionRange::GT(v) => Ok(format!(">{v}").parse()?),
+            MavenVersionRange::NE(_) => bail!("does not support not-equal-to operator"),
+            MavenVersionRange::Open(l, r) => Ok(format!(">{l}, <{r}").parse()?),
+            MavenVersionRange::Closed(l, r) => Ok(format!(">={l}, <={r}").parse()?),
+            MavenVersionRange::Multiple(_) => bail!("does not support union of intervals"),
+        }
+    }
+}
+
 impl Display for MavenVersionRange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -416,10 +434,12 @@ impl FromStr for MavenVersionRange {
 
 #[cfg(test)]
 mod test {
+    use semver::VersionReq;
+
     use crate::maven::MavenVersionRange;
 
     #[test]
-    fn parse_version_range() {
+    fn maven_version_range() {
         let mut data = vec![];
 
         data.push(("1.0", MavenVersionRange::GE("1.0".into())));
@@ -447,14 +467,20 @@ mod test {
         data.push(("(,1.1),(1.1,)", MavenVersionRange::NE("1.1".into())));
 
         for (s, v) in data {
+            eprintln!("Testing {s}");
+
             assert_eq!(v, s.parse().unwrap());
 
             // special case for 1.0 because it is normalized to [1.0,)
             if s == "1.0" {
                 assert_eq!("[1.0,)", v.to_string());
-                continue;
+            } else {
+                assert_eq!(s, v.to_string());
             }
-            assert_eq!(s, v.to_string());
+
+            if s != "(,1.0],[1.2,)" && s != "(,1.1),(1.1,)" {
+                assert!(VersionReq::try_from(v).is_ok());
+            }
         }
     }
 }

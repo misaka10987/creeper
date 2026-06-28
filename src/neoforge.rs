@@ -11,7 +11,7 @@ use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
-use serde_with::serde_as;
+use serde_with::{NoneAsEmptyString, serde_as};
 use strfmt::Format;
 use tokio::process::Command;
 use tracing::{debug, error, info, trace};
@@ -19,7 +19,7 @@ use url::Url;
 use walkdir::WalkDir;
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install, MavenCoord,
+    Artifact, Checksum, Creeper, Id, Install, MavenCoord, MavenVersionRange,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
     neoforge::fmt::maven_coord_format,
@@ -558,8 +558,9 @@ pub struct NeoforgeMods {
     pub mod_loader: String,
 
     // TODO: serde with maven version range
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub loader_version: String,
+    #[serde_as(as = "NoneAsEmptyString")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader_version: Option<MavenVersionRange>,
 
     /// This field should be a valid SPDX license expression,
     /// but since many mods like Sodium violate this rule,
@@ -609,7 +610,10 @@ pub mod neoforge_mods {
 
     use serde::{Deserialize, Serialize};
     use serde_inline_default::serde_inline_default;
+    use serde_with::{NoneAsEmptyString, serde_as};
     use url::Url;
+
+    use crate::MavenVersionRange;
 
     #[serde_inline_default]
     #[derive(Clone, Serialize, Deserialize)]
@@ -681,6 +685,7 @@ pub mod neoforge_mods {
     }
 
     #[serde_inline_default]
+    #[serde_as]
     #[derive(Clone, Serialize, Deserialize)]
     #[serde(deny_unknown_fields, rename_all = "camelCase")]
     pub struct Dependency {
@@ -693,8 +698,9 @@ pub mod neoforge_mods {
         #[serde(skip_serializing_if = "Option::is_none")]
         pub reason: Option<String>,
 
-        #[serde(default, skip_serializing_if = "String::is_empty")]
-        pub version_range: String,
+        #[serde_as(as = "NoneAsEmptyString")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub version_range: Option<MavenVersionRange>,
 
         #[serde_inline_default(Ordering::None)]
         pub ordering: Ordering,

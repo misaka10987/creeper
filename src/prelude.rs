@@ -6,5 +6,5 @@ pub use super::artifact::Artifact;
 pub use super::install::Install;
 pub use super::pack::Package;
 // pub use super::user::User;
-pub use super::maven::MavenCoord;
+pub use super::maven::{MavenCoord, MavenVersionRange};
 pub use super::yggdrasil::YggdrasilClient;

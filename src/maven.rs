@@ -48,7 +48,8 @@ pub fn is_valid_maven_artifact(name: &str) -> bool {
 // }
 
 /// A maven coordinate defined as `<groupId>:<artifactId>:<version>`.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
+#[cfg_attr(test, derive(Debug))]
 pub struct MavenCoord {
     /// The group id.
     ///
@@ -70,20 +71,6 @@ pub struct MavenCoord {
 
     /// The classifier.
     pub classifier: Option<String>,
-}
-
-#[cfg(test)]
-#[test]
-fn test() {
-    const COORD: &str = "net.neoforged:neoform:1.21.1-20240808.144430:mappings-merged@txt";
-    const PATH: &str = "net/neoforged/neoform/1.21.1-20240808.144430/neoform-1.21.1-20240808.144430-mappings-merged.txt";
-
-    let x = COORD.parse::<MavenCoord>().unwrap();
-    let y = MavenCoord::from_path(PATH).unwrap();
-
-    assert!(x == y);
-    assert!(x.path() == *PATH);
-    assert!(y.to_string() == COORD);
 }
 
 impl MavenCoord {
@@ -436,7 +423,20 @@ impl FromStr for MavenVersionRange {
 mod test {
     use semver::VersionReq;
 
-    use crate::maven::MavenVersionRange;
+    use crate::{MavenCoord, MavenVersionRange};
+
+    #[test]
+    fn maven_coord() {
+        const COORD: &str = "net.neoforged:neoform:1.21.1-20240808.144430:mappings-merged@txt";
+        const PATH: &str = "net/neoforged/neoform/1.21.1-20240808.144430/neoform-1.21.1-20240808.144430-mappings-merged.txt";
+
+        let x = COORD.parse::<MavenCoord>().unwrap();
+        let y = MavenCoord::from_path(PATH).unwrap();
+
+        assert_eq!(x, y);
+        assert_eq!(x.path(), *PATH);
+        assert_eq!(y.to_string(), COORD);
+    }
 
     #[test]
     fn maven_version_range() {

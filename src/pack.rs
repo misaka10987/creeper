@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    iter::once,
+};
 
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -22,6 +25,35 @@ pub struct PackNode {
 
     #[serde(default, rename = "conflicts", skip_serializing_if = "Vec::is_empty")]
     pub conflict: Vec<HashMap<Id, VersionReq>>,
+
+    #[serde(
+        default,
+        rename = "either-dependency",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub either_dep: Vec<HashMap<Id, VersionReq>>,
+}
+
+impl PackNode {
+    pub fn neighbours(self) -> HashSet<Id> {
+        self.dep
+            .into_keys()
+            .chain(self.conflict.into_iter().flat_map(|grp| grp.into_keys()))
+            .chain(self.either_dep.into_iter().flat_map(|grp| grp.into_keys()))
+            .collect()
+    }
+
+    pub fn conflict_clause(
+        self,
+        id: Id,
+        version: Version,
+    ) -> impl IntoIterator<Item = BTreeMap<Id, VersionReq>> {
+        self.conflict.into_iter().map(move |grp| {
+            grp.into_iter()
+                .chain(once((id.clone(), format!("={version}").parse().unwrap())))
+                .collect()
+        })
+    }
 }
 
 #[allow(unused)] // used by `#[serde(skip_serializing_if = "is_zero")]`

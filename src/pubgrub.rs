@@ -11,8 +11,8 @@ use anyhow::anyhow;
 use creeper_semver_pubgrub::SemverPubgrub;
 use petgraph::{algo::toposort, graph::DiGraph};
 use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
-use semver::{Version, VersionReq};
-use tracing::{debug, error, trace};
+use semver::{BuildMetadata, Prerelease, Version, VersionReq};
+use tracing::{debug, error, info, trace};
 
 use crate::{Creeper, Id, index::VersionRev, pack::PackNode};
 
@@ -42,11 +42,12 @@ impl std::error::Error for Error {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 enum Package {
     Normal(Id),
     Root,
     OneHot(BTreeMap<Id, VersionReq>),
+    Either(BTreeMap<Id, VersionReq>),
 }
 
 impl Display for Package {
@@ -62,7 +63,21 @@ impl Display for Package {
                     .join(" ");
                 write!(f, "<onehot: {data}>")
             }
+            Package::Either(btree_map) => {
+                let data = btree_map
+                    .iter()
+                    .map(|(k, v)| format!("{k}@{v}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                write!(f, "<either: {data}>")
+            }
         }
+    }
+}
+
+impl Debug for Package {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
     }
 }
 
@@ -116,6 +131,28 @@ impl Resolve {
             conflict: RwLock::new(Conflict::new()),
         }
     }
+
+    fn prepare(&self) -> anyhow::Result<()> {
+        let reachable = self
+            .lib
+            .blocking_get_reachable_package(self.root.clone().neighbours())?;
+
+        let mut clause = vec![];
+
+        for id in reachable {
+            let index = self.lib.blocking_get_index(&id)?;
+            for (VersionRev(v, _), node) in index {
+                let new = node.conflict_clause(id.clone(), v);
+                clause.extend(new);
+            }
+        }
+
+        debug!("prepared {} conflict clauses", clause.len());
+
+        self.conflict.write().unwrap().extend(clause);
+
+        Ok(())
+    }
 }
 
 impl DependencyProvider for Resolve {
@@ -143,6 +180,7 @@ impl DependencyProvider for Resolve {
             Package::Normal(id) => id,
             Package::Root => return Reverse(usize::MAX),
             Package::OneHot(btree_map) => return Reverse(btree_map.len()),
+            Package::Either(btree_map) => return Reverse(btree_map.len()),
         };
 
         trace!("determining priority for {package}");
@@ -177,13 +215,14 @@ impl DependencyProvider for Resolve {
                 .filter(|v| range.contains(v))
                 .collect::<BTreeSet<_>>(),
             Package::Root => return Ok(Some(Version::new(0, 0, 0))),
-            Package::OneHot(map) => {
-                // self.conflict.write().unwrap().add(map.clone());
-                (1..=map.len())
-                    .map(|i| Version::new(i as u64, 0, 0))
-                    .filter(|v| range.contains(v))
-                    .collect::<BTreeSet<_>>()
-            }
+            Package::OneHot(map) => (1..=map.len())
+                .map(|i| Version::new(i as u64, 0, 0))
+                .filter(|v| range.contains(v))
+                .collect::<BTreeSet<_>>(),
+            Package::Either(map) => (1..=map.len())
+                .map(|i| Version::new(i as u64, 0, 0))
+                .filter(|v| range.contains(v))
+                .collect::<BTreeSet<_>>(),
         };
 
         let highest = available.last();
@@ -215,6 +254,24 @@ impl DependencyProvider for Resolve {
                 ));
             }
             Package::OneHot(_) => return Ok(Dependencies::Available(Default::default())),
+            Package::Either(map) => {
+                if version.major > map.len() as u64
+                    || version.minor != 0
+                    || version.patch != 0
+                    || version.pre != Prerelease::EMPTY
+                    || version.build != BuildMetadata::EMPTY
+                {
+                    return Err(
+                        anyhow!("invalid version {version} for virtual package {package}").into(),
+                    );
+                }
+
+                let (id, req) = map.iter().nth(version.major as usize - 1).unwrap();
+
+                let dep = once((Package::Normal(id.clone()), SemverPubgrub::from(req))).collect();
+
+                return Ok(Dependencies::Available(dep));
+            }
         };
 
         let index = self.lib.blocking_get_index(package)?;
@@ -230,19 +287,14 @@ impl DependencyProvider for Resolve {
             conflict.extend(once(clause));
         }
 
-        // self.conflict
-        //     .write()
-        //     .unwrap()
-        //     .extend(node.conflict.clone().into_iter().map(|map| {
-        //         map.into_iter()
-        //             .chain(once((
-        //                 package.clone(),
-        //                 ,
-        //             )))
-        //             .collect()
-        //     }));
-
         let conflict = conflict.get_dependencies(package, version);
+
+        let mut either_dep = vec![];
+
+        for grp in node.either_dep.clone() {
+            let clause = grp.into_iter().collect::<BTreeMap<_, _>>();
+            either_dep.push((Package::Either(clause), VersionReq::STAR));
+        }
 
         let dep = node
             .dep
@@ -251,6 +303,7 @@ impl DependencyProvider for Resolve {
             .chain(
                 conflict
                     .into_iter()
+                    .chain(either_dep)
                     .map(|(k, v)| (k, SemverPubgrub::from(&v))),
             )
             .collect();
@@ -261,7 +314,7 @@ impl DependencyProvider for Resolve {
 
 impl Creeper {
     pub fn resolve(&self, req: HashMap<Id, VersionReq>) -> anyhow::Result<HashMap<Id, Version>> {
-        debug!("resolving {} required packages", req.len());
+        info!("resolving {} required packages", req.len());
 
         let resolve = Resolve::new(
             self.clone(),
@@ -270,6 +323,8 @@ impl Creeper {
                 ..Default::default()
             },
         );
+
+        resolve.prepare()?;
 
         let res = pubgrub::resolve(&resolve, Package::Root, Version::new(0, 0, 0));
 
@@ -293,14 +348,24 @@ impl Creeper {
             }
         })?;
 
+        let sol = sol.into_iter();
+
+        let all = sol.len();
+
         // PubGrub uses non-default hasher, convert to standard before returning
         let sol = sol
-            .into_iter()
             .filter_map(|(k, v)| match k {
                 Package::Normal(id) => Some((id, v)),
                 _ => None,
             })
             .collect::<HashMap<_, _>>();
+
+        let real = sol.len();
+
+        info!(
+            "resolved {all} packages, of which {real} real and {} virtual",
+            all - real
+        );
 
         Ok(sol)
     }

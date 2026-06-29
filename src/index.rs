@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     io::BufRead,
     path::Path,
     str::FromStr,
@@ -200,6 +200,31 @@ impl IndexCache {
 }
 
 impl Creeper {
+    pub fn blocking_get_reachable_package(
+        &self,
+        origin: impl IntoIterator<Item = Id>,
+    ) -> anyhow::Result<HashSet<Id>> {
+        let mut found = origin
+            .into_iter()
+            .map(|id| (id, false))
+            .collect::<HashMap<_, _>>();
+
+        while !found.values().all(|x| *x) {
+            for (k, _) in found.clone().into_iter().filter(|(_k, v)| !v) {
+                let index = self.blocking_get_index(&k)?;
+                let new = index.into_values().flat_map(|node| node.neighbours());
+
+                for id in new {
+                    found.entry(id).or_insert(false);
+                }
+
+                found.insert(k, true);
+            }
+        }
+
+        Ok(found.into_keys().collect())
+    }
+
     pub async fn get_index(&self, package: &Id) -> anyhow::Result<Index> {
         if let Some(index) = self.index_cache.map.read().unwrap().get(package) {
             return Ok(index.clone());

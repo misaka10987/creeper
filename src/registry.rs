@@ -18,6 +18,7 @@ use url::Url;
 
 use crate::{
     Creeper, Id, Package,
+    cmd::BuildIndex,
     index::{Index, IndexLine, VersionRev},
     path::creeper_cache_dir,
 };
@@ -55,6 +56,12 @@ impl Registry {
     }
 
     async fn index_url(&self) -> anyhow::Result<Url> {
+        if self.url.scheme() == "file" {
+            let path = self.index_cache_path()?;
+            let url = format!("file://{}", path.display()).parse()?;
+            return Ok(url);
+        }
+
         let url_cache = self.cache_path()?.join("package-index.url");
 
         if try_exists(&url_cache).await? {
@@ -77,47 +84,6 @@ impl Registry {
         file.write_all(url.as_str().as_bytes()).await?;
 
         Ok(url)
-    }
-
-    async fn update(&self) -> anyhow::Result<()> {
-        info!("updating registry {}", self.url);
-
-        let cache = self.index_cache_path()?;
-        let url = self.index_url().await?;
-        match url.scheme() {
-            "file" => return Ok(()),
-            "git+https" => {
-                if !try_exists(&cache).await? {
-                    let url = url.as_str().strip_prefix("git+").unwrap().parse::<Url>()?;
-                    debug!("downloading registry: {url}");
-                    let status = Command::new("git")
-                        .arg("clone")
-                        .arg("--depth")
-                        .arg("1")
-                        .arg(url.as_str())
-                        .arg(&cache)
-                        .spawn()?
-                        .wait()
-                        .await?;
-                    if !status.success() {
-                        bail!("unable to download registry, command run failed");
-                    }
-                    return Ok(());
-                }
-                debug!("updating registry {}", url);
-                let status = Command::new("git")
-                    .current_dir(&cache)
-                    .arg("pull")
-                    .spawn()?
-                    .wait()
-                    .await?;
-                if !status.success() {
-                    bail!("unable to update registry, command run failed");
-                }
-                Ok(())
-            }
-            s => panic!("unsupported registry URL scheme: {s}"),
-        }
     }
 
     pub fn blocking_get_index(&self, package: &Id) -> anyhow::Result<Index> {
@@ -186,7 +152,52 @@ impl Registry {
 
 impl Creeper {
     pub async fn update_registry(&self) -> anyhow::Result<()> {
-        self.registry.update().await
+        info!("updating registry {}", self.registry.url);
+
+        let cache = self.registry.index_cache_path()?;
+        let url = self.registry.index_url().await?;
+
+        match url.scheme() {
+            "file" => {
+                let cmd = BuildIndex {
+                    input: self.registry.url.path().into(),
+                    output: Some(cache.join("index")),
+                };
+
+                self.execute(cmd).await
+            }
+            "git+https" => {
+                if !try_exists(&cache).await? {
+                    let url = url.as_str().strip_prefix("git+").unwrap().parse::<Url>()?;
+                    debug!("downloading registry: {url}");
+                    let status = Command::new("git")
+                        .arg("clone")
+                        .arg("--depth")
+                        .arg("1")
+                        .arg(url.as_str())
+                        .arg(&cache)
+                        .spawn()?
+                        .wait()
+                        .await?;
+                    if !status.success() {
+                        bail!("unable to download registry, command run failed");
+                    }
+                    return Ok(());
+                }
+                debug!("updating registry {}", url);
+                let status = Command::new("git")
+                    .current_dir(&cache)
+                    .arg("pull")
+                    .spawn()?
+                    .wait()
+                    .await?;
+                if !status.success() {
+                    bail!("unable to update registry, command run failed");
+                }
+                Ok(())
+            }
+            s => panic!("unsupported registry URL scheme: {s}"),
+        }
     }
 
     pub async fn query_registry(

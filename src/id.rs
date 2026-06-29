@@ -21,7 +21,9 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 /// - consists only of lowercase letters `a-z`, digits `0-9`, hyphens `-`, and underscores `_`; and
 ///
 /// - does not end with a hyphen `-` or underscore `_`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeDisplay, DeserializeFromStr,
+)]
 pub struct Id(String);
 
 impl Id {

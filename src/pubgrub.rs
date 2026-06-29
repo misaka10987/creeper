@@ -1,8 +1,10 @@
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::{Debug, Display},
     hash::Hash,
+    iter::once,
+    sync::RwLock,
 };
 
 use anyhow::anyhow;
@@ -44,7 +46,7 @@ impl std::error::Error for Error {
 enum Package {
     Normal(Id),
     Root,
-    Xor(BTreeMap<Id, VersionReq>),
+    OneHot(BTreeMap<Id, VersionReq>),
 }
 
 impl Display for Package {
@@ -52,14 +54,50 @@ impl Display for Package {
         match self {
             Package::Normal(id) => write!(f, "{id}"),
             Package::Root => write!(f, "<root>"),
-            Package::Xor(btree_map) => {
+            Package::OneHot(btree_map) => {
                 let data = btree_map
                     .iter()
                     .map(|(k, v)| format!("{k}@{v}"))
                     .collect::<Vec<_>>()
                     .join(" ");
-                write!(f, "<xor: {data}>")
+                write!(f, "<onehot: {data}>")
             }
+        }
+    }
+}
+
+struct Conflict {
+    clause: HashSet<BTreeMap<Id, VersionReq>>,
+}
+
+impl Conflict {
+    fn new() -> Self {
+        Self {
+            clause: HashSet::new(),
+        }
+    }
+
+    fn get_dependencies(&self, package: &Id, version: &Version) -> HashMap<Package, VersionReq> {
+        let mut deps = HashMap::new();
+
+        for clause in &self.clause {
+            if let Some(req) = clause.get(package)
+                && req.matches(version)
+            {
+                let pos = clause.keys().position(|k| k == package).unwrap() + 1;
+                let package = Package::OneHot(clause.clone());
+                deps.insert(package, pos.to_string().parse().unwrap());
+            }
+        }
+
+        deps
+    }
+}
+
+impl Extend<BTreeMap<Id, VersionReq>> for Conflict {
+    fn extend<T: IntoIterator<Item = BTreeMap<Id, VersionReq>>>(&mut self, iter: T) {
+        for i in iter {
+            self.clause.insert(i);
         }
     }
 }
@@ -67,6 +105,17 @@ impl Display for Package {
 struct Resolve {
     lib: Creeper,
     root: PackNode,
+    conflict: RwLock<Conflict>,
+}
+
+impl Resolve {
+    fn new(lib: Creeper, root: PackNode) -> Self {
+        Self {
+            lib,
+            root,
+            conflict: RwLock::new(Conflict::new()),
+        }
+    }
 }
 
 impl DependencyProvider for Resolve {
@@ -93,7 +142,7 @@ impl DependencyProvider for Resolve {
         let package = match package {
             Package::Normal(id) => id,
             Package::Root => return Reverse(usize::MAX),
-            Package::Xor(btree_map) => return Reverse(btree_map.len()),
+            Package::OneHot(btree_map) => return Reverse(btree_map.len()),
         };
 
         trace!("determining priority for {package}");
@@ -119,19 +168,23 @@ impl DependencyProvider for Resolve {
         package: &Self::P,
         range: &Self::VS,
     ) -> Result<Option<Self::V>, Self::Err> {
-        let package = match package {
-            Package::Normal(id) => id,
+        let available = match package {
+            Package::Normal(id) => self
+                .lib
+                .blocking_get_index(id)?
+                .into_keys()
+                .map(|VersionRev(v, _)| v)
+                .filter(|v| range.contains(v))
+                .collect::<BTreeSet<_>>(),
             Package::Root => return Ok(Some(Version::new(0, 0, 0))),
-            Package::Xor(_) => todo!(),
+            Package::OneHot(map) => {
+                // self.conflict.write().unwrap().add(map.clone());
+                (1..=map.len())
+                    .map(|i| Version::new(i as u64, 0, 0))
+                    .filter(|v| range.contains(v))
+                    .collect::<BTreeSet<_>>()
+            }
         };
-
-        let index = self.lib.blocking_get_index(package)?;
-
-        let available = index
-            .keys()
-            .map(|VersionRev(v, _)| v)
-            .filter(|v| range.contains(v))
-            .collect::<BTreeSet<_>>();
 
         let highest = available.last();
 
@@ -141,9 +194,10 @@ impl DependencyProvider for Resolve {
             trace!("no available version for {package} in {range}");
         };
 
-        Ok(highest.cloned().cloned())
+        Ok(highest.cloned())
     }
 
+    // TODO: add conflict virtual packages to dependencies
     fn get_dependencies(
         &self,
         package: &Self::P,
@@ -160,7 +214,7 @@ impl DependencyProvider for Resolve {
                         .collect(),
                 ));
             }
-            Package::Xor(_) => todo!(),
+            Package::OneHot(_) => return Ok(Dependencies::Available(Default::default())),
         };
 
         let index = self.lib.blocking_get_index(package)?;
@@ -168,10 +222,37 @@ impl DependencyProvider for Resolve {
         // TODO: support revision number instead of defaulting to 0
         let node = &index[&VersionRev(version.clone(), 0)];
 
+        let mut conflict = self.conflict.write().unwrap();
+
+        for grp in node.conflict.clone() {
+            let mut clause = grp.into_iter().collect::<BTreeMap<_, _>>();
+            clause.insert(package.clone(), format!("={version}").parse().unwrap());
+            conflict.extend(once(clause));
+        }
+
+        // self.conflict
+        //     .write()
+        //     .unwrap()
+        //     .extend(node.conflict.clone().into_iter().map(|map| {
+        //         map.into_iter()
+        //             .chain(once((
+        //                 package.clone(),
+        //                 ,
+        //             )))
+        //             .collect()
+        //     }));
+
+        let conflict = conflict.get_dependencies(package, version);
+
         let dep = node
             .dep
             .iter()
             .map(|(k, v)| (Package::Normal(k.clone()), SemverPubgrub::from(v)))
+            .chain(
+                conflict
+                    .into_iter()
+                    .map(|(k, v)| (k, SemverPubgrub::from(&v))),
+            )
             .collect();
 
         Ok(Dependencies::Available(dep))
@@ -182,13 +263,13 @@ impl Creeper {
     pub fn resolve(&self, req: HashMap<Id, VersionReq>) -> anyhow::Result<HashMap<Id, Version>> {
         debug!("resolving {} required packages", req.len());
 
-        let resolve = Resolve {
-            lib: self.clone(),
-            root: PackNode {
+        let resolve = Resolve::new(
+            self.clone(),
+            PackNode {
                 dep: req,
                 ..Default::default()
             },
-        };
+        );
 
         let res = pubgrub::resolve(&resolve, Package::Root, Version::new(0, 0, 0));
 

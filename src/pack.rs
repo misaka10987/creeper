@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     iter::once,
 };
 
@@ -9,7 +9,7 @@ use serde_inline_default::serde_inline_default;
 use serde_with::{DisplayFromStr, serde_as};
 use spdx::Expression;
 
-use crate::{Id, Install};
+use crate::{Id, Install, pubgrub::Conflict};
 
 /// The package node in the dependency graph, containing only metadata needed for dependency resolution.
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -43,16 +43,15 @@ impl PackNode {
             .collect()
     }
 
-    pub fn conflict_clause(
-        self,
-        id: Id,
-        version: Version,
-    ) -> impl IntoIterator<Item = BTreeMap<Id, VersionReq>> {
-        self.conflict.into_iter().map(move |grp| {
-            grp.into_iter()
-                .chain(once((id.clone(), format!("={version}").parse().unwrap())))
-                .collect()
-        })
+    pub fn conflict_clause(self, id: Id, version: Version) -> impl IntoIterator<Item = Conflict> {
+        self.conflict
+            .into_iter()
+            .map(move |grp| {
+                grp.into_iter()
+                    .chain(once((id.clone(), format!("={version}").parse().unwrap())))
+                    .collect()
+            })
+            .map(Conflict)
     }
 }
 

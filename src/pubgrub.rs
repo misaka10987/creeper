@@ -4,6 +4,7 @@ use std::{
     fmt::{Debug, Display},
     hash::Hash,
     iter::once,
+    ops::Deref,
     sync::RwLock,
 };
 
@@ -12,7 +13,7 @@ use creeper_semver_pubgrub::SemverPubgrub;
 use petgraph::{algo::toposort, graph::DiGraph};
 use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
 use semver::{BuildMetadata, Prerelease, Version, VersionReq};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{Creeper, Id, index::VersionRev, pack::PackNode};
 
@@ -46,7 +47,7 @@ impl std::error::Error for Error {
 enum Package {
     Normal(Id),
     Root,
-    OneHot(BTreeMap<Id, VersionReq>),
+    OneHot(Conflict),
     Either(BTreeMap<Id, VersionReq>),
 }
 
@@ -55,14 +56,7 @@ impl Display for Package {
         match self {
             Package::Normal(id) => write!(f, "{id}"),
             Package::Root => write!(f, "<root>"),
-            Package::OneHot(btree_map) => {
-                let data = btree_map
-                    .iter()
-                    .map(|(k, v)| format!("{k}@{v}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                write!(f, "<onehot: {data}>")
-            }
+            Package::OneHot(clause) => write!(f, "{clause}"),
             Package::Either(btree_map) => {
                 let data = btree_map
                     .iter()
@@ -81,11 +75,61 @@ impl Debug for Package {
     }
 }
 
-struct Conflict {
-    clause: HashSet<BTreeMap<Id, VersionReq>>,
-}
+/// A conflict, or "onehot" clause.
+/// Denotes that at most one of the requirements can be satisfied at the same time.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Conflict(pub BTreeMap<Id, VersionReq>);
 
 impl Conflict {
+    pub fn versions(&self) -> impl Iterator<Item = Version> {
+        (1..=self.len()).map(|i| Version::new(i as u64, 0, 0))
+    }
+
+    /// If the clause is depended by the given package, returns the specific version being depended on.
+    /// Otherwise, return `None`.
+    pub fn dep_of(&self, package: &Id, version: &Version) -> Option<Version> {
+        self.iter()
+            .position(|(id, req)| id == package && req.matches(version))
+            .map(|i| Version::new(i as u64 + 1, 0, 0))
+    }
+}
+
+impl Deref for Conflict {
+    type Target = BTreeMap<Id, VersionReq>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<BTreeMap<Id, VersionReq>> for Conflict {
+    fn from(value: BTreeMap<Id, VersionReq>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Conflict> for BTreeMap<Id, VersionReq> {
+    fn from(value: Conflict) -> Self {
+        value.0
+    }
+}
+
+impl Display for Conflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let data = self
+            .iter()
+            .map(|(k, v)| format!("{k}@{v}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        write!(f, "<onehot: {data}>")
+    }
+}
+
+struct ConflictManager {
+    clause: HashSet<Conflict>,
+}
+
+impl ConflictManager {
     fn new() -> Self {
         Self {
             clause: HashSet::new(),
@@ -96,23 +140,29 @@ impl Conflict {
         let mut deps = HashMap::new();
 
         for clause in &self.clause {
-            if let Some(req) = clause.get(package)
-                && req.matches(version)
-            {
-                let pos = clause.keys().position(|k| k == package).unwrap() + 1;
-                let package = Package::OneHot(clause.clone());
-                deps.insert(package, pos.to_string().parse().unwrap());
+            if let Some(version) = clause.dep_of(package, version) {
+                deps.insert(
+                    Package::OneHot(clause.clone()),
+                    format!("={version}").parse().unwrap(),
+                );
             }
         }
 
         deps
     }
+
+    /// Simplify the conflict clauses logically, e.g. deduplication or removing clauses implied by others,
+    /// in order to improve performance.
+    // the function shall not exceed O(n^2) in time complexity
+    fn simp(&mut self) {
+        warn!("TODO: simplify conflict clauses to improve performance");
+    }
 }
 
-impl Extend<BTreeMap<Id, VersionReq>> for Conflict {
-    fn extend<T: IntoIterator<Item = BTreeMap<Id, VersionReq>>>(&mut self, iter: T) {
+impl Extend<Conflict> for ConflictManager {
+    fn extend<T: IntoIterator<Item = Conflict>>(&mut self, iter: T) {
         for i in iter {
-            self.clause.insert(i);
+            self.clause.insert(i.into());
         }
     }
 }
@@ -120,7 +170,7 @@ impl Extend<BTreeMap<Id, VersionReq>> for Conflict {
 struct Resolve {
     lib: Creeper,
     root: PackNode,
-    conflict: RwLock<Conflict>,
+    conflict: RwLock<ConflictManager>,
 }
 
 impl Resolve {
@@ -128,7 +178,7 @@ impl Resolve {
         Self {
             lib,
             root,
-            conflict: RwLock::new(Conflict::new()),
+            conflict: RwLock::new(ConflictManager::new()),
         }
     }
 
@@ -149,7 +199,11 @@ impl Resolve {
 
         debug!("prepared {} conflict clauses", clause.len());
 
-        self.conflict.write().unwrap().extend(clause);
+        let mut conflict = self.conflict.write().unwrap();
+
+        conflict.extend(clause);
+
+        conflict.simp();
 
         Ok(())
     }
@@ -215,8 +269,8 @@ impl DependencyProvider for Resolve {
                 .filter(|v| range.contains(v))
                 .collect::<BTreeSet<_>>(),
             Package::Root => return Ok(Some(Version::new(0, 0, 0))),
-            Package::OneHot(map) => (1..=map.len())
-                .map(|i| Version::new(i as u64, 0, 0))
+            Package::OneHot(clause) => clause
+                .versions()
                 .filter(|v| range.contains(v))
                 .collect::<BTreeSet<_>>(),
             Package::Either(map) => (1..=map.len())
@@ -279,15 +333,11 @@ impl DependencyProvider for Resolve {
         // TODO: support revision number instead of defaulting to 0
         let node = &index[&VersionRev(version.clone(), 0)];
 
-        let mut conflict = self.conflict.write().unwrap();
-
-        for grp in node.conflict.clone() {
-            let mut clause = grp.into_iter().collect::<BTreeMap<_, _>>();
-            clause.insert(package.clone(), format!("={version}").parse().unwrap());
-            conflict.extend(once(clause));
-        }
-
-        let conflict = conflict.get_dependencies(package, version);
+        let conflict = self
+            .conflict
+            .read()
+            .unwrap()
+            .get_dependencies(package, version);
 
         let mut either_dep = vec![];
 

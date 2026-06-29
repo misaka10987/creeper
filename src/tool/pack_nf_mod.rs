@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    iter::once,
+};
 
 use anyhow::bail;
 use clap::Parser;
@@ -130,16 +133,9 @@ impl Execute for PackageNeoforgeMod {
             .cloned()
             .unwrap_or_default();
 
-        for d in deps {
-            if d.dependency_type != DependencyType::Required {
-                // TODO
-                error!(
-                    "does not support specifying {} dependency {}",
-                    d.dependency_type, d.mod_id
-                );
-                continue;
-            }
+        let mut conflict = vec![];
 
+        for d in deps {
             let id = match d.mod_id.parse::<Id>() {
                 Ok(id) => id,
                 Err(_) => {
@@ -158,7 +154,26 @@ impl Execute for PackageNeoforgeMod {
                 VersionReq::STAR
             };
 
-            dep.insert(id, req);
+            match d.ordering {
+                crate::neoforge::neoforge_mods::Ordering::After
+                | crate::neoforge::neoforge_mods::Ordering::None => {}
+                ord => {
+                    error!("ignoring unsupported {ord} ordering for dependency {id}");
+                }
+            }
+
+            match d.dependency_type {
+                DependencyType::Required => {
+                    dep.insert(id, req);
+                }
+                DependencyType::Incompatible => {
+                    conflict.push(once((id, req)).collect());
+                }
+                t => {
+                    error!("does not support specifying {t} dependency {id}, skipping");
+                    continue;
+                }
+            };
         }
 
         let pack = Package {
@@ -166,10 +181,7 @@ impl Execute for PackageNeoforgeMod {
             version,
             rev: 0,
             meta,
-            node: PackNode {
-                dep,
-                ..Default::default()
-            },
+            node: PackNode { dep, conflict },
             install: Install {
                 mc_mod: vec![art],
                 ..Default::default()

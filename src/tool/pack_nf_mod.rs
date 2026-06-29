@@ -1,13 +1,18 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::bail;
 use clap::Parser;
 use inquire::{Confirm, Select, Text};
-use semver::Version;
+use semver::{Version, VersionReq};
+use tracing::{error, warn};
 use url::Url;
 
 use crate::{
-    Id, Package, cmd::Execute, neoforge::NeoforgeMods, pack::PackMeta, util::prompt_valid,
+    Id, Package,
+    cmd::Execute,
+    neoforge::{NeoforgeMods, neoforge_mods::DependencyType},
+    pack::{PackMeta, PackNode},
+    util::prompt_valid,
     zip::extract_zip,
 };
 
@@ -116,12 +121,51 @@ impl Execute for PackageNeoforgeMod {
             license: Some(license),
         };
 
+        let mut dep = HashMap::new();
+
+        let deps = mods
+            .dependencies
+            .get(&select_mod_id)
+            .cloned()
+            .unwrap_or_default();
+
+        for d in deps {
+            if d.dependency_type != DependencyType::Required {
+                // TODO
+                error!(
+                    "does not support specifying {} dependency {}",
+                    d.dependency_type, d.mod_id
+                );
+                continue;
+            }
+
+            let id = match d.mod_id.parse::<Id>() {
+                Ok(id) => id,
+                Err(_) => {
+                    prompt_valid::<Id>(&format!(
+                        "dependency {} is not valid package id, enter one instead:",
+                        d.mod_id
+                    ))
+                    .await?
+                }
+            };
+
+            let req = if let Some(rng) = d.version_range {
+                VersionReq::try_from(rng)?
+            } else {
+                warn!("dependency {id} does not specify version range, defaulting to *");
+                VersionReq::STAR
+            };
+
+            dep.insert(id, req);
+        }
+
         let pack = Package {
             id,
             version,
             rev: 0,
             meta,
-            node: Default::default(),
+            node: PackNode { dep },
             install: Default::default(),
         };
 

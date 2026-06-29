@@ -608,9 +608,10 @@ pub struct NeoforgeMods {
 pub mod neoforge_mods {
     use std::path::PathBuf;
 
+    use parse_display::{Display, FromStr};
     use serde::{Deserialize, Serialize};
     use serde_inline_default::serde_inline_default;
-    use serde_with::{NoneAsEmptyString, serde_as};
+    use serde_with::{DeserializeFromStr, NoneAsEmptyString, SerializeDisplay, serde_as};
     use url::Url;
 
     use crate::MavenVersionRange;
@@ -712,8 +713,8 @@ pub mod neoforge_mods {
         pub refferal_url: Option<Url>,
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    #[derive(Clone, PartialEq, Eq, Display, FromStr, SerializeDisplay, DeserializeFromStr)]
+    #[display(style = "camelCase")]
     pub enum DependencyType {
         Required,
         Optional,
@@ -721,16 +722,16 @@ pub mod neoforge_mods {
         Discouraged,
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "SCREAMING_SNAKE_CASE")]
+    #[derive(Clone, PartialEq, Eq, Display, FromStr, SerializeDisplay, DeserializeFromStr)]
+    #[display(style = "SNAKE_CASE")]
     pub enum Ordering {
         Before,
         After,
         None,
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "SCREAMING_SNAKE_CASE")]
+    #[derive(Clone, PartialEq, Eq, Display, FromStr, SerializeDisplay, DeserializeFromStr)]
+    #[display(style = "SNAKE_CASE")]
     pub enum Side {
         Both,
         Client,

@@ -330,6 +330,28 @@ impl YggdrasilClient {
         Ok(res.selected_profile)
     }
 
+    pub async fn invalidate(&self) -> anyhow::Result<()> {
+        let req = InvalidateRequest {
+            access_token: self
+                .access_token
+                .read()
+                .await
+                .clone()
+                .ok_or(anyhow!("no access token present, cannot invalidate"))?,
+            client_token: self.client_token.read().await.clone(),
+        };
+
+        let url = self.api().await?.join("authserver/invalidate")?;
+
+        let res = self.http.post(url).json(&req).send().await?;
+
+        if res.status() != StatusCode::NO_CONTENT {
+            bail!("failed to invalidate: server returned {}", res.status());
+        }
+
+        Ok(())
+    }
+
     pub async fn signout(&self, password: &str) -> anyhow::Result<()> {
         let req = SignoutRequest {
             username: self.username.clone(),

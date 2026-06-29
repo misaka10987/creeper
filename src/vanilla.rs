@@ -34,6 +34,7 @@ fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
                 VersionRev(version, 0),
                 PackNode {
                     dep: HashMap::new(),
+                    ..Default::default()
                 },
             )
         })

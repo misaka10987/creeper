@@ -40,13 +40,6 @@ impl Id {
             .join(&self.as_str())
     }
 
-    /// Used as the root placeholder package during dependency resolution.
-    ///
-    /// Intentionally contains invalid characters so that can only be constructed via this method.
-    pub fn root() -> Self {
-        Self("<root>".to_string())
-    }
-
     pub fn minecraft() -> Self {
         "minecraft".parse().unwrap()
     }

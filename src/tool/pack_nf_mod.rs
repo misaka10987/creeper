@@ -166,7 +166,10 @@ impl Execute for PackageNeoforgeMod {
             version,
             rev: 0,
             meta,
-            node: PackNode { dep },
+            node: PackNode {
+                dep,
+                ..Default::default()
+            },
             install: Install {
                 mc_mod: vec![art],
                 ..Default::default()

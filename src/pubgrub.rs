@@ -2,6 +2,7 @@ use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{Debug, Display},
+    hash::Hash,
 };
 
 use anyhow::anyhow;
@@ -11,9 +12,9 @@ use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter}
 use semver::{Version, VersionReq};
 use tracing::{debug, error, trace};
 
-use crate::{Creeper, Id, index::VersionRev};
+use crate::{Creeper, Id, index::VersionRev, pack::PackNode};
 
-pub struct Error(anyhow::Error);
+struct Error(anyhow::Error);
 
 impl From<anyhow::Error> for Error {
     fn from(value: anyhow::Error) -> Self {
@@ -39,121 +40,157 @@ impl std::error::Error for Error {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+enum Package {
+    Normal(Id),
+    Root,
+    Xor(BTreeMap<Id, VersionReq>),
+}
+
+impl Display for Package {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Package::Normal(id) => write!(f, "{id}"),
+            Package::Root => write!(f, "<root>"),
+            Package::Xor(btree_map) => {
+                let data = btree_map
+                    .iter()
+                    .map(|(k, v)| format!("{k}@{v}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                write!(f, "<xor: {data}>")
+            }
+        }
+    }
+}
+
+struct Resolve {
+    lib: Creeper,
+    root: PackNode,
+}
+
+impl DependencyProvider for Resolve {
+    type P = Package;
+
+    type V = Version;
+
+    type VS = SemverPubgrub<Version>;
+
+    type Priority = Reverse<usize>;
+
+    type M = String;
+
+    type Err = crate::pubgrub::Error;
+
+    fn prioritize(
+        &self,
+        package: &Self::P,
+        range: &Self::VS,
+        // TODO(konsti): Are we always refreshing the priorities when `PackageResolutionStatistics`
+        // changed for a package?
+        _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
+    ) -> Self::Priority {
+        let package = match package {
+            Package::Normal(id) => id,
+            Package::Root => return Reverse(usize::MAX),
+            Package::Xor(btree_map) => return Reverse(btree_map.len()),
+        };
+
+        trace!("determining priority for {package}");
+
+        let index = self.lib.blocking_get_index(package).unwrap_or_else(|e| {
+            error!("failed to prioritize package {package}: {e}");
+            error!("package resolution will continue with no available versions for this package");
+            BTreeMap::new()
+        });
+
+        let available = index
+            .keys()
+            .map(|VersionRev(v, _)| v)
+            .filter(|v| range.contains(v))
+            .count();
+
+        trace!("priority for {package} is {available} (smaller is higher)");
+        Reverse(available)
+    }
+
+    fn choose_version(
+        &self,
+        package: &Self::P,
+        range: &Self::VS,
+    ) -> Result<Option<Self::V>, Self::Err> {
+        let package = match package {
+            Package::Normal(id) => id,
+            Package::Root => return Ok(Some(Version::new(0, 0, 0))),
+            Package::Xor(_) => todo!(),
+        };
+
+        let index = self.lib.blocking_get_index(package)?;
+
+        let available = index
+            .keys()
+            .map(|VersionRev(v, _)| v)
+            .filter(|v| range.contains(v))
+            .collect::<BTreeSet<_>>();
+
+        let highest = available.last();
+
+        if let Some(version) = highest {
+            trace!("selected {package} {version}",);
+        } else {
+            trace!("no available version for {package} in {range}");
+        };
+
+        Ok(highest.cloned().cloned())
+    }
+
+    fn get_dependencies(
+        &self,
+        package: &Self::P,
+        version: &Self::V,
+    ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
+        let package = match package {
+            Package::Normal(id) => id,
+            Package::Root => {
+                return Ok(Dependencies::Available(
+                    self.root
+                        .dep
+                        .iter()
+                        .map(|(k, v)| (Package::Normal(k.clone()), SemverPubgrub::from(v)))
+                        .collect(),
+                ));
+            }
+            Package::Xor(_) => todo!(),
+        };
+
+        let index = self.lib.blocking_get_index(package)?;
+
+        // TODO: support revision number instead of defaulting to 0
+        let node = &index[&VersionRev(version.clone(), 0)];
+
+        let dep = node
+            .dep
+            .iter()
+            .map(|(k, v)| (Package::Normal(k.clone()), SemverPubgrub::from(v)))
+            .collect();
+
+        Ok(Dependencies::Available(dep))
+    }
+}
+
 impl Creeper {
     pub fn resolve(&self, req: HashMap<Id, VersionReq>) -> anyhow::Result<HashMap<Id, Version>> {
-        struct Resolve {
-            lib: Creeper,
-            req: HashMap<Id, VersionReq>,
-        }
-
-        impl DependencyProvider for Resolve {
-            type P = Id;
-
-            type V = Version;
-
-            type VS = SemverPubgrub<Version>;
-
-            type Priority = Reverse<usize>;
-
-            type M = String;
-
-            type Err = crate::pubgrub::Error;
-
-            fn prioritize(
-                &self,
-                package: &Self::P,
-                range: &Self::VS,
-                // TODO(konsti): Are we always refreshing the priorities when `PackageResolutionStatistics`
-                // changed for a package?
-                _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
-            ) -> Self::Priority {
-                if *package == Id::root() {
-                    return Reverse(usize::MAX);
-                }
-
-                trace!("determining priority for {package}");
-
-                let index = self.lib.blocking_get_index(package).unwrap_or_else(|e| {
-                    error!("failed to prioritize package {package}: {e}");
-                    error!("package resolution will continue with no available versions for this package");
-                    BTreeMap::new()
-                });
-
-                let available = index
-                    .keys()
-                    .map(|VersionRev(v, _)| v)
-                    .filter(|v| range.contains(v))
-                    .count();
-
-                trace!("priority for {package} is {available} (smaller is higher)");
-                Reverse(available)
-            }
-
-            fn choose_version(
-                &self,
-                package: &Self::P,
-                range: &Self::VS,
-            ) -> Result<Option<Self::V>, Self::Err> {
-                if *package == Id::root() {
-                    return Ok(Some(Version::new(0, 0, 0)));
-                }
-
-                let index = self.lib.blocking_get_index(package)?;
-
-                let available = index
-                    .keys()
-                    .map(|VersionRev(v, _)| v)
-                    .filter(|v| range.contains(v))
-                    .collect::<BTreeSet<_>>();
-
-                let highest = available.last();
-
-                if let Some(version) = highest {
-                    trace!("selected {package} {version}",);
-                } else {
-                    trace!("no available version for {package} in {range}");
-                };
-
-                Ok(highest.cloned().cloned())
-            }
-
-            fn get_dependencies(
-                &self,
-                package: &Self::P,
-                version: &Self::V,
-            ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
-                if *package == Id::root() {
-                    return Ok(Dependencies::Available(
-                        self.req
-                            .iter()
-                            .map(|(k, v)| (k.clone(), SemverPubgrub::from(v)))
-                            .collect(),
-                    ));
-                }
-
-                let index = self.lib.blocking_get_index(package)?;
-
-                // TODO: support revision number instead of defaulting to 0
-                let node = &index[&VersionRev(version.clone(), 0)];
-
-                let dep = node
-                    .dep
-                    .iter()
-                    .map(|(k, v)| (k.clone(), SemverPubgrub::from(v)))
-                    .collect();
-
-                Ok(Dependencies::Available(dep))
-            }
-        }
-
         debug!("resolving {} required packages", req.len());
 
         let resolve = Resolve {
             lib: self.clone(),
-            req,
+            root: PackNode {
+                dep: req,
+                ..Default::default()
+            },
         };
 
-        let res = pubgrub::resolve(&resolve, Id::root(), Version::new(0, 0, 0));
+        let res = pubgrub::resolve(&resolve, Package::Root, Version::new(0, 0, 0));
 
         let sol = res.map_err(|e| match e {
             pubgrub::PubGrubError::NoSolution(derivation_tree) => {
@@ -176,9 +213,13 @@ impl Creeper {
         })?;
 
         // PubGrub uses non-default hasher, convert to standard before returning
-        let mut sol = sol.into_iter().collect::<HashMap<_, _>>();
-
-        sol.remove(&Id::root());
+        let sol = sol
+            .into_iter()
+            .filter_map(|(k, v)| match k {
+                Package::Normal(id) => Some((id, v)),
+                _ => None,
+            })
+            .collect::<HashMap<_, _>>();
 
         Ok(sol)
     }

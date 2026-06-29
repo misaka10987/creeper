@@ -463,7 +463,10 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
             let req = format!("={}", req).parse().unwrap();
 
             let dep = Some((Id::vanilla(), req)).into_iter().collect();
-            let node = PackNode { dep };
+            let node = PackNode {
+                dep,
+                ..Default::default()
+            };
             (VersionRev(version, 0), node)
         })
         .collect()

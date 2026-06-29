@@ -19,6 +19,9 @@ pub struct PackNode {
         skip_serializing_if = "HashMap::is_empty"
     )]
     pub dep: HashMap<Id, VersionReq>,
+
+    #[serde(default, rename = "conflicts", skip_serializing_if = "Vec::is_empty")]
+    pub conflict: Vec<HashMap<Id, VersionReq>>,
 }
 
 #[allow(unused)] // used by `#[serde(skip_serializing_if = "is_zero")]`

@@ -2,13 +2,14 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::bail;
 use clap::Parser;
+use colored::Colorize;
 use inquire::{Confirm, Select, Text};
 use semver::{Version, VersionReq};
 use tracing::{error, warn};
 use url::Url;
 
 use crate::{
-    Id, Package,
+    Id, Install, Package,
     cmd::Execute,
     neoforge::{NeoforgeMods, neoforge_mods::DependencyType},
     pack::{PackMeta, PackNode},
@@ -166,13 +167,18 @@ impl Execute for PackageNeoforgeMod {
             rev: 0,
             meta,
             node: PackNode { dep },
-            install: Default::default(),
+            install: Install {
+                mc_mod: vec![art],
+                ..Default::default()
+            },
         };
 
         let toml = toml::to_string(&pack)?;
 
+        eprintln!("{} {}@{}", "Packaged".bold().green(), pack.id, pack.version);
+
         println!("{toml}");
 
-        todo!()
+        Ok(())
     }
 }

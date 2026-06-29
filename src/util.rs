@@ -1,7 +1,13 @@
-use std::{collections::HashMap, path::Path, str::FromStr, sync::OnceLock};
+use std::{
+    collections::HashMap, fmt::Display, marker::PhantomData, path::Path, str::FromStr,
+    sync::OnceLock,
+};
 
 use anyhow::{anyhow, bail};
-use inquire::Confirm;
+use inquire::{
+    Confirm, Text,
+    validator::{StringValidator, Validation},
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
     fs::{
@@ -9,6 +15,7 @@ use tokio::{
         set_permissions, try_exists, write,
     },
     sync::RwLock,
+    task::spawn_blocking,
 };
 use tracing::{info, trace};
 
@@ -157,4 +164,56 @@ where
 
         Ok(())
     }
+}
+
+pub async fn prompt_valid<T>(message: &str) -> anyhow::Result<T>
+where
+    T: FromStr + Send + 'static,
+    <T as FromStr>::Err: Display,
+{
+    let message = message.to_string();
+    let value = spawn_blocking(move || blocking_prompt_valid::<T>(&message)).await??;
+    Ok(value)
+}
+
+pub fn blocking_prompt_valid<T>(message: &str) -> anyhow::Result<T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    struct Validator<T>(PhantomData<T>);
+
+    impl<T> Clone for Validator<T> {
+        fn clone(&self) -> Self {
+            Self(self.0.clone())
+        }
+    }
+
+    impl<T> StringValidator for Validator<T>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: Display,
+    {
+        fn validate(
+            &self,
+            input: &str,
+        ) -> Result<inquire::validator::Validation, inquire::CustomUserError> {
+            let valid = match input.parse::<T>() {
+                Ok(_) => Validation::Valid,
+                Err(e) => Validation::Invalid(e.to_string().into()),
+            };
+            Ok(valid)
+        }
+    }
+
+    let valid = Validator::<T>(PhantomData);
+
+    let value = Text::new(message)
+        .with_validator(valid)
+        .prompt()?
+        .parse()
+        .map_err(|_| unreachable!())
+        .unwrap();
+
+    Ok(value)
 }

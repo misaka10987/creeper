@@ -15,6 +15,14 @@ creeper launch
 <p align="center">creeper 启动的 Minecraft 1.21.1 + Mekanism 10.7.19 + BSL 10.1.3</p>
 <p align="center">自动解析和安装 NeoForge 21.1.234, Sodium 0.6.13 和 Iris 1.8.8</p>
 
+## 安装
+
+```shell
+cargo install --git https://github.com/misaka10987/creeper
+```
+
+或者在 [Releases](https://github.com/misaka10987/creeper/releases) 下载相应构建。
+
 ## 为什么有这个项目？
 
 现在已经有了很多 Minecraft 第三方启动器，包括国内的 *HMCL* , *PCL* , *BakaXL* , 国外的 *Prism Launcher* 等。这些启动器编写得很完善，各种功能齐全，看似编写一个新的启动器已经是没有多少价值的重复劳动。然而，我们认为，即使第三方启动器的技术和规范已经很成熟，对模组玩家来说，仍有三个大问题亟须解决：

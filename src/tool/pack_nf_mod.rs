@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     iter::once,
+    path::PathBuf,
 };
 
 use anyhow::bail;
@@ -8,6 +9,7 @@ use clap::Parser;
 use colored::Colorize;
 use inquire::{Confirm, Select, Text};
 use semver::{Version, VersionReq};
+use tokio::fs::{create_dir_all, write};
 use tracing::{error, warn};
 use url::Url;
 
@@ -137,6 +139,7 @@ impl Execute for PackageNeoforgeMod {
 
         for d in deps {
             let id = match d.mod_id.parse::<Id>() {
+                Ok(id) if id == Id::minecraft() => Id::vanilla(),
                 Ok(id) => id,
                 Err(_) => {
                     prompt_valid::<Id>(&format!(
@@ -197,6 +200,29 @@ impl Execute for PackageNeoforgeMod {
         eprintln!("{} {}@{}", "Packaged".bold().green(), pack.id, pack.version);
 
         println!("{toml}");
+
+        let save = Confirm::new("Save to file?").with_default(false).prompt()?;
+
+        if save {
+            let path = pack
+                .id
+                .indexed_path()
+                .as_ref()
+                .join(pack.version.to_string())
+                .join("0.toml");
+
+            let path = Text::new("Enter the path to save to:")
+                .with_default(&path.display().to_string())
+                .prompt()?;
+
+            let path = PathBuf::from(path);
+
+            if let Some(parent) = path.parent() {
+                create_dir_all(&parent).await?;
+            }
+
+            write(&path, toml).await?;
+        }
 
         Ok(())
     }

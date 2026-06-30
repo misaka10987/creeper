@@ -258,7 +258,7 @@ impl Creeper {
             match package.as_str() {
                 "vanilla" => self.vanilla.blocking_get_index()?,
                 "neoforge" => self.neoforge.blocking_get_index()?,
-                _ => todo!(),
+                s => todo!("builtin package {s}"),
             }
         } else {
             self.registry.blocking_get_index(package)?

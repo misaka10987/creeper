@@ -1,3 +1,4 @@
+mod download;
 mod pack_nf_mod;
 
 use std::collections::{BTreeSet, HashMap};
@@ -28,6 +29,7 @@ pub enum Tool {
     NeoForgeVersion(NeoForgeVersion),
     #[command(name = "pack-nf-mod")]
     PackageNeoforgeMod(pack_nf_mod::PackageNeoforgeMod),
+    Download(download::Download),
 }
 
 impl Execute for Tool {
@@ -43,6 +45,7 @@ impl Execute for Tool {
             Tool::PackageNeoforgeMod(package_neoforge_mod) => {
                 lib.execute(package_neoforge_mod).await
             }
+            Tool::Download(download) => lib.execute(download).await,
         }
     }
 }

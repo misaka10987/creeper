@@ -164,7 +164,6 @@ enum SubCommand {
     Install(cmd::Install),
     Nuke(cmd::Nuke),
     Login(cmd::Login),
-    Download(cmd::Download),
     Init(cmd::Init),
     #[command(subcommand)]
     Dev(Dev),
@@ -182,7 +181,6 @@ impl Execute for SubCommand {
             SubCommand::Launch(launch) => lib.execute(launch).await,
             SubCommand::Nuke(nuke) => lib.execute(nuke).await,
             SubCommand::Login(login) => lib.execute(login).await,
-            SubCommand::Download(download) => lib.execute(download).await,
             SubCommand::Init(init) => lib.execute(init).await,
             SubCommand::Add(add) => lib.execute(add).await,
             SubCommand::Dev(_dev) => todo!(),

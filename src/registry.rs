@@ -9,7 +9,7 @@ use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use semver::Version;
 use tokio::{
-    fs::{File, create_dir_all, read_to_string as async_read_to_string, try_exists},
+    fs::{File, create_dir_all, read_to_string, try_exists},
     io::AsyncWriteExt,
     process::Command,
 };
@@ -65,7 +65,7 @@ impl Registry {
         let url_cache = self.cache_path()?.join("package-index.url");
 
         if try_exists(&url_cache).await? {
-            let url = async_read_to_string(&url_cache).await?;
+            let url = read_to_string(&url_cache).await?;
             let url = url.trim().parse()?;
             debug!("using cached index URL: {url}");
             return Ok(url);
@@ -123,6 +123,33 @@ impl Registry {
             if let Some(pack) = pack.get(&VersionRev(version.clone(), rev)) {
                 return Ok(pack.clone());
             }
+        }
+
+        if self.url.scheme() == "file" {
+            let path = self.url.path();
+
+            let path = PathBuf::from(path)
+                .join(id.indexed_path())
+                .join(version.to_string())
+                .join(rev.to_string())
+                .with_added_extension("toml");
+
+            if !try_exists(&path).await? {
+                bail!("{id}@{version} rev {rev} does not exist");
+            }
+
+            let toml = read_to_string(&path).await?;
+
+            let pack = toml::from_str::<Package>(&toml)?;
+
+            self.cache
+                .write()
+                .unwrap()
+                .entry(id.clone())
+                .or_default()
+                .insert(VersionRev(version.clone(), rev), pack.clone());
+
+            return Ok(pack);
         }
 
         let url = self

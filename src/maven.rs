@@ -281,6 +281,9 @@ pub enum MavenVersionRange {
 
     /// Disjoint union of multiple sets.
     Multiple(Vec<MavenVersionRange>),
+
+    /// Intervals of the form $[a, b)$.
+    LowerLimit(String, String),
 }
 
 impl TryFrom<MavenVersionRange> for VersionReq {
@@ -297,6 +300,7 @@ impl TryFrom<MavenVersionRange> for VersionReq {
             MavenVersionRange::Open(l, r) => Ok(format!(">{l}, <{r}").parse()?),
             MavenVersionRange::Closed(l, r) => Ok(format!(">={l}, <={r}").parse()?),
             MavenVersionRange::Multiple(_) => bail!("does not support union of intervals"),
+            MavenVersionRange::LowerLimit(l, r) => Ok(format!(">={l}, <{r}").parse()?),
         }
     }
 }
@@ -323,6 +327,7 @@ impl Display for MavenVersionRange {
                         .join(",")
                 )
             }
+            MavenVersionRange::LowerLimit(l, r) => write!(f, "[{l},{r})"),
         }
     }
 }
@@ -414,6 +419,7 @@ impl FromStr for MavenVersionRange {
 
             (start, Some(end), '(', ')') => Ok(Self::Open(start.into(), end.into())),
             (start, Some(end), '[', ']') => Ok(Self::Closed(start.into(), end.into())),
+            (start, Some(end), '[', ')') => Ok(Self::LowerLimit(start.into(), end.into())),
             (_, Some(_), _, _) => bail!("invalid interval {v}"),
         }
     }
@@ -465,6 +471,11 @@ mod test {
         ));
 
         data.push(("(,1.1),(1.1,)", MavenVersionRange::NE("1.1".into())));
+
+        data.push((
+            "[1.0,2.0)",
+            MavenVersionRange::LowerLimit("1.0".into(), "2.0".into()),
+        ));
 
         for (s, v) in data {
             eprintln!("Testing {s}");

@@ -110,6 +110,16 @@ impl Creeper {
         Ok(dir)
     }
 
+    pub async fn game_resource_dir(&self) -> anyhow::Result<PathBuf> {
+        let dir = self.game_dir().await?.join("resourcepacks");
+        Ok(dir)
+    }
+
+    pub async fn game_shader_dir(&self) -> anyhow::Result<PathBuf> {
+        let dir = self.game_dir().await?.join("shaderpacks");
+        Ok(dir)
+    }
+
     pub async fn game_pack(&self) -> anyhow::Result<Package> {
         self.game.pack().await
     }

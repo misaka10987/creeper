@@ -1,4 +1,7 @@
-use std::{iter::once, path::PathBuf};
+use std::{
+    iter::once,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, bail, ensure};
 use tokio::{
@@ -6,7 +9,7 @@ use tokio::{
     process::Command,
 };
 
-use crate::{Creeper, Install, vanilla::AssetIndex};
+use crate::{Artifact, Creeper, Install, vanilla::AssetIndex};
 
 impl Creeper {
     pub async fn launch(&self) -> anyhow::Result<Command> {
@@ -117,32 +120,82 @@ impl Creeper {
         cmd.arg("--gameDir").arg(game_dir);
 
         let mod_dir = game_dir.join(".creeper").join("mod");
+
         if try_exists(&mod_dir).await? {
             remove_dir_all(&mod_dir).await?;
         }
-        create_dir_all(&mod_dir).await?;
 
-        let count = install.mc_mod.len();
-        let max_digit = count.to_string().len();
+        self.retrieve_ordered(&mod_dir, &install.mc_mod, Some("jar"))
+            .await?;
 
-        for (idx, art) in install.mc_mod.into_iter().enumerate() {
-            let file = format!("{:0width$}.jar", idx, width = max_digit);
-            let path = mod_dir.join(file);
-            self.retrieve_artifact_to(&art, &path).await?;
+        try_symlink(&mod_dir, self.game_mod_dir().await?).await?;
+
+        let resource_dir = self.game_env_dir().await?.join("resource");
+
+        if try_exists(&resource_dir).await? {
+            remove_dir_all(&resource_dir).await?;
         }
 
-        let game_mod_dir = self.game_mod_dir().await?;
-        if try_exists(&game_mod_dir).await? {
-            if !game_mod_dir.is_symlink() {
-                bail!("mod directory not managed by creeper, please remove it");
-            }
-            if read_link(game_mod_dir).await? != mod_dir {
-                bail!("mod directory not managed by creeper, please remove it");
-            }
-        } else {
-            symlink(&mod_dir, &game_mod_dir).await?;
+        self.retrieve_ordered(&resource_dir, &install.resource_pack, Some("zip"))
+            .await?;
+
+        try_symlink(&resource_dir, self.game_resource_dir().await?).await?;
+
+        let shader_dir = self.game_env_dir().await?.join("shader");
+
+        if try_exists(&shader_dir).await? {
+            remove_dir_all(&shader_dir).await?;
         }
+
+        self.retrieve_ordered(&shader_dir, &install.shader_pack, Some("zip"))
+            .await?;
+
+        try_symlink(&shader_dir, self.game_shader_dir().await?).await?;
 
         Ok(cmd)
     }
+
+    async fn retrieve_ordered(
+        &self,
+        dir: impl AsRef<Path>,
+        art: impl IntoIterator<Item = &Artifact>,
+        ext: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let dir = dir.as_ref();
+
+        create_dir_all(dir).await?;
+
+        let art = art.into_iter().collect::<Vec<_>>();
+
+        let max_digit = art.len().to_string().len();
+
+        for (idx, art) in art.iter().enumerate() {
+            let file = format!("{idx:0max_digit$}");
+
+            let path = dir.join(file).with_added_extension(ext.unwrap_or(""));
+
+            self.retrieve_artifact_to(*art, path).await?;
+        }
+
+        Ok(())
+    }
+}
+
+async fn try_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+
+    if try_exists(dst).await? {
+        if !dst.is_symlink() {
+            bail!("{} not managed by creeper, please remove it", dst.display());
+        }
+
+        if read_link(dst).await? != src {
+            bail!("{} not managed by creeper, please remove it", dst.display());
+        }
+    } else {
+        symlink(src, dst).await?;
+    }
+
+    Ok(())
 }

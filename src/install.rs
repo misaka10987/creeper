@@ -68,6 +68,12 @@ pub struct Install {
     /// Minecraft mod files to be added to the `mods` folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mc_mod: Vec<Artifact>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_pack: Vec<Artifact>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shader_pack: Vec<Artifact>,
 }
 
 impl Install {
@@ -100,6 +106,8 @@ impl Extend<Self> for Install {
                 mc_flag,
                 mc_asset,
                 mc_mod,
+                resource_pack,
+                shader_pack,
             } = next;
             self.java_lib_class.extend(java_lib_class);
             self.java_lib_mod.extend(java_lib_mod);
@@ -113,6 +121,8 @@ impl Extend<Self> for Install {
             self.mc_flag.extend(mc_flag);
             self.mc_asset.extend(mc_asset);
             self.mc_mod.extend(mc_mod);
+            self.resource_pack.extend(resource_pack);
+            self.shader_pack.extend(shader_pack);
         }
 
         self.simplify();

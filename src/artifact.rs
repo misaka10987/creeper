@@ -7,12 +7,11 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{AssertSqlSafe, query, query_as};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
-use tokio::fs::{File, copy, create_dir_all, metadata, remove_file, symlink, try_exists};
+use tokio::fs::{File, copy, create_dir_all, metadata, remove_file, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::checksum;
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
 use crate::util::{mv, set_readonly};
@@ -20,6 +19,7 @@ use crate::{
     Checksum, Creeper,
     checksum::{HashFunc, blake3},
 };
+use crate::{checksum, symlink_auto};
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, FromRow)]
 #[serde(deny_unknown_fields)]
@@ -465,7 +465,7 @@ impl Creeper {
             create_dir_all(parent).await?;
         }
 
-        symlink(src, dst).await?;
+        symlink_auto(src, dst).await?;
 
         Ok(())
     }

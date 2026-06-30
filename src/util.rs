@@ -217,3 +217,43 @@ where
 
     Ok(value)
 }
+
+pub async fn symlink_auto(
+    original: impl AsRef<Path>,
+    link: impl AsRef<Path>,
+) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        use tokio::fs::symlink;
+
+        symlink(original, link).await?;
+
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    {
+        use tokio::fs::{symlink_dir, symlink_file};
+
+        let original = original.as_ref();
+
+        if !try_exists(original).await? {
+            bail!(
+                "cannot create symlink on windows: original path {} does not exist",
+                original.display()
+            );
+        }
+
+        let meta = metadata(original).await?;
+
+        if meta.is_dir() {
+            symlink_dir(original, link).await?;
+        } else if meta.is_file() {
+            symlink_file(original, link).await?;
+        } else {
+            panic!();
+        }
+
+        Ok(())
+    }
+}

@@ -5,11 +5,11 @@ use std::{
 
 use anyhow::{anyhow, bail, ensure};
 use tokio::{
-    fs::{create_dir_all, read_link, read_to_string, remove_dir_all, symlink, try_exists, write},
+    fs::{create_dir_all, read_link, read_to_string, remove_dir_all, try_exists, write},
     process::Command,
 };
 
-use crate::{Artifact, Creeper, Install, vanilla::AssetIndex};
+use crate::{Artifact, Creeper, Install, symlink_auto, vanilla::AssetIndex};
 
 impl Creeper {
     pub async fn launch(&self) -> anyhow::Result<Command> {
@@ -194,7 +194,7 @@ async fn try_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Re
             bail!("{} not managed by creeper, please remove it", dst.display());
         }
     } else {
-        symlink(src, dst).await?;
+        symlink_auto(src, dst).await?;
     }
 
     Ok(())

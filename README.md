@@ -1,5 +1,7 @@
 # creeper
 
+![Crates.io Version](https://img.shields.io/crates/v/creeper)
+
 现代的 Minecraft 包管理器。
 
 ```shell

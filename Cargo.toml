@@ -43,7 +43,7 @@ serde_with = "3.21.0"
 spdx = "0.13.4"
 url = { version = "2.5.8", features = ["serde"] }
 pubgrub = "0.4.0"
-creeper-semver-pubgrub = "0.3.0"
+creeper-semver-pubgrub = "0.4.0"
 inquire = { version = "0.9.4", features = ["editor"] }
 base64 = "0.22.1"
 petgraph = "0.8.3"

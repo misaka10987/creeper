@@ -22,7 +22,7 @@ pub fn check_class(class: &str) -> bool {
     match class {
         "natives-linux" => OS == "linux",
         "natives-windows" => OS == "windows",
-        "natives-macos" => OS == "macos",
+        "natives-macos" | "natives-osx" => OS == "macos",
         c => todo!("unknown classifier {c}"),
     }
 }

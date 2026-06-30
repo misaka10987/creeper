@@ -108,5 +108,6 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.version }}+build.${{ steps.meta.outputs.short_sha }}
           name: ${{ steps.meta.outputs.version }}+build.${{ steps.meta.outputs.short_sha }}
+          prerelease: true
           files: release-artifacts/*
           generate_release_notes: true

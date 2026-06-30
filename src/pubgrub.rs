@@ -380,7 +380,13 @@ impl Creeper {
 
         let sol = res.map_err(|e| match e {
             pubgrub::PubGrubError::NoSolution(derivation_tree) => {
-                let report = DefaultStringReporter::report(&derivation_tree);
+                let mut report = DefaultStringReporter::report(&derivation_tree);
+
+                // remove the ugly double newlines in the report
+                while report.find("\n\n").is_some() {
+                    report = report.replace("\n\n", "\n");
+                }
+
                 anyhow!("no solution:\n{report}")
             }
             pubgrub::PubGrubError::ErrorRetrievingDependencies {

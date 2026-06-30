@@ -441,14 +441,24 @@ impl Creeper {
         }
 
         for (package, version) in &dep {
-            let dep = self.blocking_get_node(package, version, 0)?.dep;
+            let node = self.blocking_get_node(package, version, 0)?;
+            let node_package = id_to_node[package];
 
-            for (d, _) in dep {
-                let node_package = id_to_node[package];
+            for (d, _) in node.dep {
                 let node_dep = id_to_node
                     .get(&d)
                     .ok_or(anyhow!("broken solution: dependency {d} not recorded"))?;
+
                 graph.add_edge(node_package, *node_dep, ());
+            }
+
+            for (d, _) in node.either_dep.into_iter().flatten() {
+                if let Some(node_dep) = id_to_node.get(&d) {
+                    error!(
+                        "TODO: avoid assuming {package} dependency on {d}, which may be incorrect"
+                    );
+                    graph.add_edge(node_package, *node_dep, ());
+                }
             }
         }
 

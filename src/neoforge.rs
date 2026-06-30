@@ -668,6 +668,11 @@ pub mod neoforge_mods {
         /// It is here to avoid error.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         pub _provides: Vec<String>,
+
+        /// The field is not NeoForge standard but used by Iris.
+        /// It is here to avoid error.
+        #[serde(rename = "sodium:options", default, skip_serializing)]
+        pub _sodium_options: serde_json::Value,
     }
 
     #[derive(Clone, Serialize, Deserialize)]

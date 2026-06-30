@@ -5,12 +5,13 @@
 ```shell
 creeper init ${path-to-new-game}
 cd ${path-to-new-game}
-creeper add vanilla@=1.21.1 mekanism@10
+creeper add vanilla@=1.21.1 mekanism@10 "bsl@*"
 creeper launch
 ```
 
-<img width="1920" height="1080" alt="2026-06-27_11 28 40" src="https://github.com/user-attachments/assets/95ec2257-f373-47a7-83ff-b44546529c90" />
-<p align="center">creeper 启动的 Minecraft 1.21.1 + NeoForge 21.1.234 + Mekanism 10.7.19</p>
+<img width="2408" height="1354" alt="2026-06-30_11 00 46" src="https://github.com/user-attachments/assets/920f1867-4a57-4a75-b32e-8c4d1b589f75" />
+<p align="center">creeper 启动的 Minecraft 1.21.1 + Mekanism 10.7.19 + BSL 10.1.3</p>
+<p align="center">自动解析和安装 NeoForge 21.1.234, Sodium 0.6.13 和 Iris 1.8.8</p>
 
 ## 为什么有这个项目？
 

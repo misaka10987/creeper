@@ -12,3 +12,10 @@ pub static PROGRESS_STYLE_DOWNLOAD: LazyLock<ProgressStyle> = LazyLock::new(|| {
         .with_key("eta", pb_eta)
         .progress_chars("=> ")
 });
+
+pub static PROGRESS_STYLE_DEFAULT: LazyLock<ProgressStyle> = LazyLock::new(|| {
+    ProgressStyle::with_template("{spinner:.green} {msg} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos:>6}/{len:<6} ETA {eta:<8}")
+        .unwrap()
+        .with_key("eta", pb_eta)
+        .progress_chars("=> ")
+});

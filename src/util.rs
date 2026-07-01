@@ -1,5 +1,9 @@
 use std::{
-    collections::HashMap, fmt::Display, marker::PhantomData, path::Path, str::FromStr,
+    collections::{BTreeSet, HashMap},
+    fmt::Display,
+    marker::PhantomData,
+    path::Path,
+    str::FromStr,
     sync::OnceLock,
 };
 
@@ -8,6 +12,7 @@ use inquire::{
     Confirm, Text,
     validator::{StringValidator, Validation},
 };
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
     fs::{
@@ -256,4 +261,39 @@ pub async fn symlink_auto(
 
         Ok(())
     }
+}
+
+pub fn rebuild_req(
+    versions: BTreeSet<Version>,
+    univ: BTreeSet<Version>,
+) -> anyhow::Result<VersionReq> {
+    if !versions.is_subset(&univ) {
+        bail!("versions not subset of universe");
+    }
+
+    if versions.is_empty() {
+        // empty set
+        let req = format!("<1.0.0, >=1.0.0").parse().unwrap();
+        return Ok(req);
+    }
+
+    let start = versions.first().unwrap();
+
+    let end = univ.range(start..).find(|v| !versions.contains(v));
+
+    let end = match end {
+        Some(v) => v,
+        None => {
+            let end = univ.last().unwrap();
+            return Ok(format!(">={start}, <={end}",).parse().unwrap());
+        }
+    };
+
+    if end < versions.last().unwrap() {
+        bail!("versions contains a gap");
+    }
+
+    let req = format!(">={start}, <{end}").parse().unwrap();
+
+    Ok(req)
 }

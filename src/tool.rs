@@ -1,5 +1,7 @@
-mod download;
-mod pack_nf_mod;
+pub mod download;
+pub mod index_fabric;
+pub mod pack_nf_mod;
+mod prelude;
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -16,6 +18,8 @@ use colored::Colorize;
 use indexmap::IndexMap;
 use stop::fatal;
 
+pub use prelude::*;
+
 /// Collection of CLI tools.
 #[derive(Clone, Debug, Parser)]
 pub enum Tool {
@@ -28,8 +32,9 @@ pub enum Tool {
     #[command(name = "nf-version")]
     NeoForgeVersion(NeoForgeVersion),
     #[command(name = "pack-nf-mod")]
-    PackageNeoforgeMod(pack_nf_mod::PackageNeoforgeMod),
-    Download(download::Download),
+    PackageNeoforgeMod(PackageNeoforgeMod),
+    Download(Download),
+    IndexFabric(IndexFabric),
 }
 
 impl Execute for Tool {
@@ -46,6 +51,7 @@ impl Execute for Tool {
                 lib.execute(package_neoforge_mod).await
             }
             Tool::Download(download) => lib.execute(download).await,
+            Tool::IndexFabric(index_fabric) => lib.execute(index_fabric).await,
         }
     }
 }

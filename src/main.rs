@@ -3,6 +3,7 @@ mod builtin;
 mod checksum;
 mod cmd;
 mod dev;
+mod fabric;
 mod game;
 mod id;
 mod index;

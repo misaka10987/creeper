@@ -106,7 +106,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.version }}+build.${{ steps.meta.outputs.short_sha }}
+          tag_name: nightly
           name: ${{ steps.meta.outputs.version }}+build.${{ steps.meta.outputs.short_sha }}
           prerelease: true
           files: release-artifacts/*

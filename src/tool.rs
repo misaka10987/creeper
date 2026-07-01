@@ -3,7 +3,7 @@ pub mod index_fabric;
 pub mod pack_nf_mod;
 mod prelude;
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     Creeper, Id, YggdrasilClient,
@@ -87,7 +87,7 @@ impl Execute for Resolve {
             .req
             .into_iter()
             .map(|x| (x.id, x.version_req))
-            .collect::<HashMap<_, _>>();
+            .collect::<BTreeMap<_, _>>();
 
         if req.len() == 0 {
             bail!("nothing to resolve, please specify at least one requirement");

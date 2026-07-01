@@ -363,7 +363,7 @@ impl DependencyProvider for Resolve {
 }
 
 impl Creeper {
-    pub fn resolve(&self, req: HashMap<Id, VersionReq>) -> anyhow::Result<HashMap<Id, Version>> {
+    pub fn resolve(&self, req: BTreeMap<Id, VersionReq>) -> anyhow::Result<HashMap<Id, Version>> {
         info!("resolving {} required packages", req.len());
 
         let resolve = Resolve::new(

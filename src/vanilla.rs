@@ -1,4 +1,9 @@
-use std::{collections::HashMap, iter::once, path::PathBuf, sync::OnceLock};
+use std::{
+    collections::{BTreeMap, HashMap},
+    iter::once,
+    path::PathBuf,
+    sync::OnceLock,
+};
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, MavenCoord,
@@ -20,6 +25,7 @@ use mc_launchermeta::{
     version_manifest::Manifest,
 };
 
+
 use reqwest::Client;
 use semver::Version;
 
@@ -34,7 +40,7 @@ fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
             (
                 VersionRev(version, 0),
                 PackNode {
-                    dep: HashMap::new(),
+                    dep: BTreeMap::new(),
                     ..Default::default()
                 },
             )

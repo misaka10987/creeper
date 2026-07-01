@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     iter::once,
     path::PathBuf,
 };
@@ -127,7 +127,7 @@ impl Execute for PackageNeoforgeMod {
             license: Some(license),
         };
 
-        let mut dep = HashMap::new();
+        let mut dep = BTreeMap::new();
 
         let deps = mods
             .dependencies

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     iter::once,
 };
 
@@ -19,19 +19,19 @@ pub struct PackNode {
     #[serde(
         default,
         rename = "dependencies",
-        skip_serializing_if = "HashMap::is_empty"
+        skip_serializing_if = "BTreeMap::is_empty"
     )]
-    pub dep: HashMap<Id, VersionReq>,
+    pub dep: BTreeMap<Id, VersionReq>,
 
     #[serde(default, rename = "conflicts", skip_serializing_if = "Vec::is_empty")]
-    pub conflict: Vec<HashMap<Id, VersionReq>>,
+    pub conflict: Vec<BTreeMap<Id, VersionReq>>,
 
     #[serde(
         default,
         rename = "either-dependency",
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub either_dep: Vec<HashMap<Id, VersionReq>>,
+    pub either_dep: Vec<BTreeMap<Id, VersionReq>>,
 }
 
 impl PackNode {

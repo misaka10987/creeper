@@ -38,9 +38,18 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 use crate::{
-    artifact::ArtifactManager, cmd::Execute, dev::Dev, game::GameManager, index::IndexCache,
-    neoforge::NeoforgeManager, path::init_creeper_dirs, registry::Registry, tool::Tool,
-    user::UserManager, vanilla::VanillaManager,
+    artifact::ArtifactManager,
+    cmd::Execute,
+    dev::Dev,
+    fabric::{FabricManager, IntermediaryManager},
+    game::GameManager,
+    index::IndexCache,
+    neoforge::NeoforgeManager,
+    path::init_creeper_dirs,
+    registry::Registry,
+    tool::Tool,
+    user::UserManager,
+    vanilla::VanillaManager,
 };
 
 pub use prelude::*;
@@ -56,6 +65,8 @@ pub struct CreeperInner {
     index_cache: IndexCache,
     game: GameManager,
     neoforge: NeoforgeManager,
+    fabric: FabricManager,
+    intermediary: IntermediaryManager,
     user: UserManager,
 }
 
@@ -80,6 +91,8 @@ impl Creeper {
         let vanilla = VanillaManager::new(http.clone());
         let artifact = ArtifactManager::new(http.clone()).await?;
         let user = UserManager::new();
+        let fabric = FabricManager::new(http.clone());
+        let intermediary = IntermediaryManager::new(http.clone());
         let val = CreeperInner {
             args,
             artifact,
@@ -90,6 +103,8 @@ impl Creeper {
             neoforge,
             game,
             user,
+            fabric,
+            intermediary,
         };
         Ok(Self(Arc::new(val)))
     }
@@ -102,6 +117,8 @@ impl Creeper {
         self.update_registry().await?;
         self.update_vanilla().await?;
         self.update_neoforge().await?;
+        self.update_fabric().await?;
+        self.update_intermediary().await?;
         Ok(())
     }
 }

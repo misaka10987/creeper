@@ -1,12 +1,75 @@
+use std::{
+    collections::HashMap,
+    iter::once,
+    path::PathBuf,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
 use reqwest::Client;
+use semver::{Version, VersionReq};
 use serde::de::DeserializeOwned;
+use tokio::fs::{create_dir_all, read_to_string, try_exists, write};
+use tracing::{Span, info, instrument};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 use url::Url;
 
-use crate::{Id, builtin::SyncBuiltinIndex};
+use crate::{
+    Creeper, Id,
+    builtin::{GetIndex, SyncBuiltinIndex, UpdateIndex},
+    index::VersionRev,
+    pack::PackNode,
+    path::creeper_cache_dir,
+    pbar::PROGRESS_STYLE_DEFAULT,
+    util::rebuild_req,
+};
 
 const META_API: &str = "https://meta.fabricmc.net/";
 
-pub struct FabricManager {}
+pub struct FabricManager {
+    http: Client,
+}
+
+impl FabricManager {
+    pub fn new(http: Client) -> Self {
+        Self { http }
+    }
+
+    fn cache_path() -> anyhow::Result<PathBuf> {
+        let path = creeper_cache_dir()?.join("builtin").join("fabric");
+        Ok(path)
+    }
+
+    async fn since_last_index_update(&self) -> anyhow::Result<Option<Duration>> {
+        let path = Self::cache_path()?.join("index-last-updated");
+
+        if !try_exists(&path).await? {
+            return Ok(None);
+        }
+
+        let time = read_to_string(path).await?.parse::<u64>()?;
+
+        let time = SystemTime::UNIX_EPOCH + Duration::from_secs(time);
+
+        let duration = time.elapsed().ok();
+
+        Ok(duration)
+    }
+
+    async fn renew_index_last_update(&self) -> anyhow::Result<()> {
+        let path = Self::cache_path()?.join("index-last-updated");
+
+        create_dir_all(path.parent().unwrap()).await?;
+
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        write(path, time.to_string()).await?;
+
+        Ok(())
+    }
+}
 
 impl SyncBuiltinIndex for FabricManager {
     fn package(&self) -> crate::prelude::Id {
@@ -14,7 +77,126 @@ impl SyncBuiltinIndex for FabricManager {
     }
 
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        todo!()
+        let client = FabricMetaClient::new(self.http.clone());
+
+        let games = client.game_versions().await?;
+
+        let games = games
+            .into_iter()
+            .filter_map(|fabric_meta::Game { version, stable }| stable.then_some(version))
+            .filter_map(|v| v.parse::<Version>().ok())
+            .collect::<Vec<_>>();
+
+        let mut map = HashMap::<Version, Vec<Version>>::new();
+
+        let span = Span::current();
+        span.pb_set_message("versions");
+        span.pb_set_style(&PROGRESS_STYLE_DEFAULT);
+        span.pb_set_length(games.len() as u64);
+
+        for v in &games {
+            let loaders = client.game_loader_versions(&v.to_string()).await?;
+
+            let loaders = loaders.into_iter().filter_map(
+                |fabric_meta::LoaderWithIntermediary { loader, .. }| {
+                    loader.version.parse::<Version>().ok()
+                },
+            );
+
+            for loader in loaders {
+                map.entry(loader).or_default().push(v.clone());
+            }
+
+            span.pb_inc(1);
+        }
+
+        let index = map
+            .into_iter()
+            .filter_map(|(k, v)| {
+                rebuild_req(v.into_iter().collect(), games.clone().into_iter().collect())
+                    .ok()
+                    .map(|v| (k, v))
+            })
+            .map(|(k, v)| {
+                (
+                    VersionRev(k, 0),
+                    PackNode {
+                        dep: [(Id::vanilla(), v), (Id::intermediary(), VersionReq::STAR)]
+                            .into_iter()
+                            .collect(),
+                        conflict: vec![once((Id::neoforge(), VersionReq::STAR)).collect()],
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+
+        self.renew_index_last_update().await?;
+
+        Ok(index)
+    }
+}
+
+impl Creeper {
+    #[instrument(skip(self))]
+    pub async fn update_fabric(&self) -> anyhow::Result<()> {
+        if self.fabric.get_index().await.is_ok()
+            && let Some(time) = self.fabric.since_last_index_update().await?
+            && time < Duration::from_secs(60 * 60 * 24 * 14)
+        {
+            info!("skipping slow fabric index update since already updated in 14 days");
+        } else {
+            self.fabric.update_index().await?;
+        }
+
+        Ok(())
+    }
+}
+
+pub struct IntermediaryManager {
+    http: Client,
+}
+
+impl IntermediaryManager {
+    pub fn new(http: Client) -> Self {
+        Self { http }
+    }
+}
+
+impl SyncBuiltinIndex for IntermediaryManager {
+    fn package(&self) -> Id {
+        Id::intermediary()
+    }
+
+    async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
+        let client = FabricMetaClient::new(self.http.clone());
+
+        let versions = client.intermediary_versions().await?;
+
+        let versions = versions
+            .into_iter()
+            .filter_map(|v| v.version.parse::<Version>().ok());
+
+        let index = versions
+            .map(|v| {
+                (
+                    VersionRev(v.clone(), 0),
+                    PackNode {
+                        dep: once((Id::vanilla(), format!("={v}").parse().unwrap())).collect(),
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+
+        Ok(index)
+    }
+}
+
+impl Creeper {
+    #[instrument(skip(self))]
+    pub async fn update_intermediary(&self) -> anyhow::Result<()> {
+        self.intermediary.update_index().await
     }
 }
 
@@ -157,7 +339,7 @@ pub mod fabric_meta {
         pub loader: Loader,
         pub intermediary: Intermediary,
         #[serde(rename = "launcherMeta")]
-        pub _launcher_meta : Option<serde_json::Value>,
+        pub _launcher_meta: Option<serde_json::Value>,
     }
 
     #[derive(Clone, Serialize, Deserialize)]

@@ -5,7 +5,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, ensure};
 use reqwest::Client;
 use semver::{Version, VersionReq};
 use serde::de::DeserializeOwned;
@@ -272,6 +272,55 @@ impl Creeper {
     #[instrument(skip(self))]
     pub async fn update_intermediary(&self) -> anyhow::Result<()> {
         self.intermediary.update_index().await
+    }
+
+    pub async fn intermediary_install(&self, version: &Version) -> anyhow::Result<Install> {
+        let client = FabricMetaClient::new(self.http.clone());
+
+        let loader = client
+            .game_loader_versions(&version.to_string())
+            .await?
+            .into_iter()
+            .filter_map(|v| v.loader.version.parse::<Version>().ok())
+            .collect::<BTreeSet<_>>();
+
+        let loader = loader
+            .last()
+            .ok_or(anyhow!("no fabric loader with intermediary@{version}"))?;
+
+        let profile = client
+            .profile(&version.to_string(), &loader.to_string())
+            .await?;
+
+        let lib = profile
+            .libraries
+            .into_iter()
+            .filter(|x| x.name.group == "net.fabricmc" && x.name.artifact == "intermediary")
+            .collect::<Vec<_>>();
+
+        ensure!(lib.len() == 1, "multiple intermediary libraries found");
+
+        let lib = lib.into_iter().next().unwrap();
+
+        let path = lib.name.path();
+
+        let art = self
+            .download(
+                lib.name.to_string(),
+                lib.url
+                    .join(&lib.name.path().display().to_string())?
+                    .to_string(),
+                lib.size,
+                lib.checksum(),
+            )
+            .await?;
+
+        let install = Install {
+            java_lib_class: once((path, art)).collect(),
+            ..Default::default()
+        };
+
+        Ok(install)
     }
 }
 

@@ -43,8 +43,9 @@ impl Creeper {
         if let Some(mc_jar) = install.mc_jar
             && !install.disable_mc_jar
         {
-            let art = self.retrieve_artifact(&mc_jar).await?;
-            cp.push(art.display().to_string());
+            let path = lib_path.join("minecraft.jar");
+            self.retrieve_artifact_to(&mc_jar, &path).await?;
+            cp.push(path.display().to_string());
         }
 
         let cp = cp.join(":");

@@ -198,6 +198,7 @@ impl Creeper {
                 "vanilla" => self.vanilla_install(version).await?,
                 "neoforge" => self.neoforge_install(version).await?,
                 "fabric" => self.fabric_install(version).await?,
+                "intermediary" => self.intermediary_install(version).await?,
                 _ => todo!(),
             }
         } else {

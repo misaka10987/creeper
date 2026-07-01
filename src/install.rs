@@ -197,6 +197,7 @@ impl Creeper {
             match package.as_str() {
                 "vanilla" => self.vanilla_install(version).await?,
                 "neoforge" => self.neoforge_install(version).await?,
+                "fabric" => self.fabric_install(version).await?,
                 _ => todo!(),
             }
         } else {

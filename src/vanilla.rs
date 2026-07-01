@@ -15,6 +15,7 @@ use mc_launchermeta::{
     version::{
         Version as McVersion,
         library::{Artifact as McArtifact, Library},
+        rule::Rule,
     },
     version_manifest::Manifest,
 };
@@ -24,7 +25,7 @@ use semver::Version;
 
 use serde::{Deserialize, Serialize};
 use tokio::{fs::read_to_string, sync::RwLock};
-use tracing::{debug, info, trace};
+use tracing::{debug, error, info, trace};
 
 fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
     versions
@@ -242,21 +243,23 @@ fn asset_url(sha1: &str) -> anyhow::Result<String> {
     Ok(url)
 }
 
+pub fn check_rule(rule: &Rule) -> bool {
+    if !rule.features.is_empty() {
+        error!("does not support checking rules with features")
+    }
+
+    let apply = rule.os.as_ref().is_none_or(check_os);
+
+    match rule.action {
+        mc_launchermeta::version::rule::RuleAction::Allow => apply,
+        mc_launchermeta::version::rule::RuleAction::Disallow => !apply,
+    }
+}
+
 fn filter_lib(lib: impl IntoIterator<Item = Library>) -> Vec<McArtifact> {
     lib.into_iter()
         // apply the rules
-        .filter(|x| {
-            x.rules.iter().flatten().all(|x| {
-                if !x.features.is_empty() {
-                    todo!("does not support rules with features")
-                }
-                let apply = x.os.as_ref().is_none_or(check_os);
-                match x.action {
-                    mc_launchermeta::version::rule::RuleAction::Allow => apply,
-                    mc_launchermeta::version::rule::RuleAction::Disallow => !apply,
-                }
-            })
-        })
+        .filter(|x| x.rules.iter().flatten().all(check_rule))
         // entries with artifacts to download
         .filter_map(|x| x.downloads)
         // flatten list of artifacts

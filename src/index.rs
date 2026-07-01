@@ -271,6 +271,19 @@ impl Creeper {
         Ok(index)
     }
 
+    pub async fn get_node(
+        &self,
+        package: &Id,
+        version: &Version,
+        rev: u32,
+    ) -> anyhow::Result<PackNode> {
+        let index = self.get_index(package).await?;
+        let node = index
+            .get(&VersionRev(version.clone(), rev))
+            .ok_or(anyhow!("no {version} rev {rev} for {package}"))?;
+        Ok(node.clone())
+    }
+
     pub fn blocking_get_index(&self, package: &Id) -> anyhow::Result<Index> {
         if let Some(index) = self.index_cache.map.read().unwrap().get(package) {
             return Ok(index.clone());

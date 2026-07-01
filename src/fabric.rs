@@ -1,10 +1,11 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     iter::once,
     path::PathBuf,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use anyhow::anyhow;
 use reqwest::Client;
 use semver::{Version, VersionReq};
 use serde::de::DeserializeOwned;
@@ -14,13 +15,14 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 use url::Url;
 
 use crate::{
-    Creeper, Id,
+    Creeper, Id, Install,
     builtin::{GetIndex, SyncBuiltinIndex, UpdateIndex},
     index::VersionRev,
     pack::PackNode,
     path::creeper_cache_dir,
     pbar::PROGRESS_STYLE_DEFAULT,
     util::rebuild_req,
+    vanilla::check_rule,
 };
 
 const META_API: &str = "https://meta.fabricmc.net/";
@@ -150,6 +152,79 @@ impl Creeper {
         }
 
         Ok(())
+    }
+
+    pub(crate) async fn fabric_install(&self, version: &Version) -> anyhow::Result<Install> {
+        let index = self.get_node(&Id::fabric(), version, 0).await?;
+
+        let req = index
+            .dep
+            .get(&Id::vanilla())
+            .ok_or(anyhow!("fabric@{version} does not have vanilla dependency"))?;
+
+        let index = self.get_index(&Id::vanilla()).await?;
+
+        let all = index.keys().map(|VersionRev(v, _)| v);
+
+        let available = all.filter(|v| req.matches(v)).collect::<BTreeSet<_>>();
+
+        let game = available
+            .last()
+            .ok_or(anyhow!("no available vanilla version for fabric@{version}"))?;
+
+        let client = FabricMetaClient::new(self.http.clone());
+
+        let profile = client
+            .profile(&game.to_string(), &version.to_string())
+            .await?;
+
+        let java_flag = profile
+            .arguments
+            .jvm
+            .into_iter()
+            .filter_map(|x| x.rules.iter().all(check_rule).then_some(x.values))
+            .flatten()
+            .collect();
+
+        let mc_flag = profile
+            .arguments
+            .game
+            .into_iter()
+            .filter_map(|x| x.rules.iter().all(check_rule).then_some(x.values))
+            .flatten()
+            .collect();
+
+        let lib = profile
+            .libraries
+            .into_iter()
+            .filter(|x| !(x.name.group == "net.fabricmc" && x.name.artifact == "intermediary"));
+
+        let mut java_lib_class = HashMap::new();
+
+        for lib in lib {
+            let path = lib.name.path();
+
+            let art = self
+                .download(
+                    lib.name.to_string(),
+                    lib.url.join(&path.display().to_string())?.to_string(),
+                    lib.size,
+                    lib.checksum(),
+                )
+                .await?;
+
+            java_lib_class.insert(path, art);
+        }
+
+        let install = Install {
+            java_lib_class,
+            java_flag,
+            java_main_class: Some(profile.main_class),
+            mc_flag,
+            ..Default::default()
+        };
+
+        Ok(install)
     }
 }
 
@@ -282,7 +357,7 @@ pub mod fabric_meta {
     use serde::{Deserialize, Serialize};
     use url::Url;
 
-    use crate::MavenCoord;
+    use crate::{Checksum, MavenCoord};
 
     #[derive(Clone, Serialize, Deserialize)]
     #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -368,10 +443,19 @@ pub mod fabric_meta {
     pub struct Library {
         pub name: MavenCoord,
         pub url: Url,
-        pub md5: String,
-        pub sha1: String,
-        pub sha256: String,
-        pub sha512: String,
-        pub size: u64,
+        pub md5: Option<String>,
+        pub sha1: Option<String>,
+        pub sha256: Option<String>,
+        pub sha512: Option<String>,
+        pub size: Option<u64>,
+    }
+
+    impl Library {
+        pub fn checksum(self) -> impl IntoIterator<Item = Checksum> {
+            self.sha1
+                .into_iter()
+                .map(Checksum::sha1)
+                .chain(self.sha256.into_iter().map(Checksum::sha256))
+        }
     }
 }

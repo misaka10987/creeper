@@ -181,6 +181,25 @@ where
     Ok(value)
 }
 
+pub async fn confirm_or_prompt<T>(
+    value: T,
+    confirm_msg: &str,
+    prompt_msg: &str,
+) -> anyhow::Result<T>
+where
+    T: FromStr + Send + 'static,
+    <T as FromStr>::Err: Display,
+{
+    let confirm_msg = confirm_msg.to_string();
+    let prompt_msg = prompt_msg.to_string();
+
+    let value =
+        spawn_blocking(move || blocking_confirm_or_prompt(value, &confirm_msg, &prompt_msg))
+            .await??;
+
+    Ok(value)
+}
+
 pub fn blocking_prompt_valid<T>(message: &str) -> anyhow::Result<T>
 where
     T: FromStr,
@@ -219,6 +238,26 @@ where
         .parse()
         .map_err(|_| unreachable!())
         .unwrap();
+
+    Ok(value)
+}
+
+pub fn blocking_confirm_or_prompt<T>(
+    value: T,
+    confirm_msg: &str,
+    prompt_msg: &str,
+) -> anyhow::Result<T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    let confirm = Confirm::new(confirm_msg).prompt()?;
+
+    if confirm {
+        return Ok(value);
+    }
+
+    let value = blocking_prompt_valid(prompt_msg)?;
 
     Ok(value)
 }

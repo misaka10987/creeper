@@ -18,7 +18,7 @@ use crate::{
     cmd::Execute,
     neoforge::{NeoforgeMods, neoforge_mods::DependencyType},
     pack::{PackMeta, PackNode},
-    util::prompt_valid,
+    util::{confirm_or_prompt, prompt_valid},
     zip::extract_zip,
 };
 
@@ -65,8 +65,14 @@ impl Execute for PackageNeoforgeMod {
             .unwrap();
 
         let id = match select_mod_id.parse::<Id>() {
-            Ok(id) if Confirm::new(&format!("Use {id} as package id?")).prompt()? => id,
-            Ok(_) => prompt_valid::<Id>("Enter a custom package id:").await?,
+            Ok(id) => {
+                confirm_or_prompt(
+                    id,
+                    &format!("Use {} as package id?", select_mod_id),
+                    "Enter a custom package id:",
+                )
+                .await?
+            }
             Err(_) => {
                 prompt_valid::<Id>(&format!(
                     "{} is not valid package id, enter one instead:",

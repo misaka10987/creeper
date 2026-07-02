@@ -117,4 +117,4 @@ jobs:
           name: ${{ steps.meta.outputs.version }}+build.${{ steps.meta.outputs.short_sha }}
           prerelease: true
           files: release-artifacts/*
-          generate_release_notes: true
+          # generate_release_notes: true

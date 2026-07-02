@@ -1,6 +1,7 @@
 # creeper
 
-![Crates.io Version](https://img.shields.io/crates/v/creeper)
+[![Crates.io Version](https://img.shields.io/crates/v/creeper)](https://crates.io/crates/creeper)
+[![Static Badge](https://img.shields.io/badge/QQ-1045948810-red)](https://qm.qq.com/q/hbjjbDJlM4)
 
 现代的 Minecraft 包管理器。
 

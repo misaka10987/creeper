@@ -129,22 +129,24 @@ impl Extend<Self> for Install {
     }
 }
 
-fn cache_path() -> anyhow::Result<PathBuf> {
-    let path = creeper_cache_dir()?.join("install");
-    Ok(path)
-}
-
 impl Creeper {
+    fn install_cache_path(&self, package: &Id, version: &VersionRev) -> anyhow::Result<PathBuf> {
+        let path = creeper_cache_dir()?
+            .join("install")
+            .join(package.indexed_path())
+            .join(version.to_string())
+            .with_added_extension("json");
+
+        Ok(path)
+    }
+
     // pub(crate) because [`Self::neoforge_install`] needs it to avoid async recursion
     pub(crate) async fn get_install_cache(
         &self,
         package: &Id,
-        version: &Version,
+        version: &VersionRev,
     ) -> anyhow::Result<Option<Install>> {
-        let cache = cache_path()?
-            .join(package.indexed_path())
-            .join(version.to_string())
-            .with_added_extension("json");
+        let cache = self.install_cache_path(package, version)?;
 
         if !try_exists(&cache).await? {
             return Ok(None);
@@ -159,13 +161,10 @@ impl Creeper {
     pub(crate) async fn set_install_cache(
         &self,
         package: &Id,
-        version: &Version,
+        version: &VersionRev,
         value: Option<&Install>,
     ) -> anyhow::Result<()> {
-        let cache = cache_path()?
-            .join(package.indexed_path())
-            .join(version.to_string())
-            .with_added_extension("json");
+        let cache = self.install_cache_path(package, version)?;
 
         let install = if let Some(x) = value {
             x
@@ -193,7 +192,10 @@ impl Creeper {
         version: &Version,
         rev: u32,
     ) -> anyhow::Result<Install> {
-        if let Some(install) = self.get_install_cache(package, version).await? {
+        if let Some(install) = self
+            .get_install_cache(package, &VersionRev::with_rev(version.clone(), rev))
+            .await?
+        {
             debug!("using cached install {package}@{version}");
             return Ok(install);
         }
@@ -211,8 +213,12 @@ impl Creeper {
             package.install
         };
 
-        self.set_install_cache(package, version, Some(&install))
-            .await?;
+        self.set_install_cache(
+            package,
+            &VersionRev::with_rev(version.clone(), rev),
+            Some(&install),
+        )
+        .await?;
 
         Ok(install)
     }

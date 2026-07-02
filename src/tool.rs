@@ -1,5 +1,4 @@
 pub mod download;
-pub mod index_fabric;
 pub mod pack_fabric_mod;
 pub mod pack_nf_mod;
 mod prelude;
@@ -35,7 +34,6 @@ pub enum Tool {
     #[command(name = "pack-nf-mod")]
     PackageNeoforgeMod(PackageNeoforgeMod),
     Download(Download),
-    IndexFabric(IndexFabric),
     #[command(name = "pack-fabric-mod")]
     PackageFabricMod(PackageFabricMod),
 }
@@ -54,7 +52,6 @@ impl Execute for Tool {
                 lib.execute(package_neoforge_mod).await
             }
             Tool::Download(download) => lib.execute(download).await,
-            Tool::IndexFabric(index_fabric) => lib.execute(index_fabric).await,
             Tool::PackageFabricMod(package_fabric_mod) => lib.execute(package_fabric_mod).await,
         }
     }

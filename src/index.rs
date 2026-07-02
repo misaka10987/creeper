@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    fmt::Write,
     io::BufRead,
     path::Path,
     str::FromStr,
@@ -124,25 +123,6 @@ impl IndexLine {
         }
 
         Ok(index)
-    }
-
-    pub fn to_jsonl(id: &Id, index: Index) -> anyhow::Result<String> {
-        let mut buf = String::new();
-
-        for (version, node) in index {
-            let line = IndexLine {
-                id: id.clone(),
-                version: version.0,
-                rev: version.1,
-                node: node,
-            };
-
-            let json = serde_json::to_string(&line)?;
-
-            writeln!(buf, "{json}")?;
-        }
-
-        Ok(buf)
     }
 
     pub async fn read(jsonl: impl AsRef<Path>) -> anyhow::Result<Index> {

@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    fmt::{Debug, Display},
     io::BufRead,
     path::Path,
     str::FromStr,
@@ -178,7 +179,7 @@ impl IndexLine {
 ///
 /// This is used to modify package definitions without changing the version number (which should correspond to the upstream),
 /// while still allowing package version locking.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
 pub struct VersionRev {
     /// The version number.
     pub version: Version,
@@ -200,6 +201,32 @@ impl VersionRev {
 impl From<VersionRev> for Version {
     fn from(value: VersionRev) -> Self {
         value.version
+    }
+}
+
+impl From<Version> for VersionRev {
+    fn from(value: Version) -> Self {
+        Self::new(value)
+    }
+}
+
+impl Display for VersionRev {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} rev {}", self.version, self.rev)
+    }
+}
+
+impl FromStr for VersionRev {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let split = s.split(" rev ").collect::<Vec<_>>();
+
+        ensure!(split.len() == 2, "invalid revisioned version {s}");
+
+        let (version, rev) = (split[0].parse()?, split[1].parse()?);
+
+        Ok(Self { version, rev })
     }
 }
 

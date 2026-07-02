@@ -8,8 +8,8 @@ use std::{
     sync::RwLock,
 };
 
-use anyhow::anyhow;
-use creeper_semver_pubgrub::SemverPubgrub;
+use anyhow::{anyhow, bail};
+use creeper_semver_pubgrub::{SemverPubgrub, VersionLike};
 use petgraph::{algo::toposort, graph::DiGraph};
 use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
 use semver::{BuildMetadata, Prerelease, Version, VersionReq};
@@ -48,7 +48,7 @@ enum Package {
     Normal(Id),
     Root,
     OneHot(Conflict),
-    Either(BTreeMap<Id, VersionReq>),
+    Either(Either),
 }
 
 impl Display for Package {
@@ -57,14 +57,7 @@ impl Display for Package {
             Package::Normal(id) => write!(f, "{id}"),
             Package::Root => write!(f, "<root>"),
             Package::OneHot(clause) => write!(f, "{clause}"),
-            Package::Either(btree_map) => {
-                let data = btree_map
-                    .iter()
-                    .map(|(k, v)| format!("{k}@{v}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                write!(f, "<either: {data}>")
-            }
+            Package::Either(clause) => write!(f, "{clause}"),
         }
     }
 }
@@ -72,6 +65,52 @@ impl Display for Package {
 impl Debug for Package {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self}")
+    }
+}
+
+/// An "either" clause.
+/// Denotes that any of the requirements will satisfy the clause, but not necessarily all of them.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Either(pub BTreeMap<Id, VersionReq>);
+
+impl Deref for Either {
+    type Target = BTreeMap<Id, VersionReq>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Either {
+    pub fn versions(&self) -> impl Iterator<Item = Version> {
+        (1..=self.len()).map(|i| Version::new(i as u64, 0, 0))
+    }
+
+    pub fn select(&self, version: &Version) -> anyhow::Result<(&Id, &VersionReq)> {
+        if version.major == 0
+            || version.major > self.len() as u64
+            || version.minor != 0
+            || version.patch != 0
+            || version.pre != Prerelease::EMPTY
+            || version.build != BuildMetadata::EMPTY
+        {
+            bail!("invalid version {version} for either clause {self}");
+        }
+
+        let (id, req) = self.iter().nth(version.major as usize - 1).unwrap();
+
+        Ok((id, req))
+    }
+}
+
+impl Display for Either {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let data = self
+            .iter()
+            .map(|(k, v)| format!("{k}@{v}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        write!(f, "<either: {data}>")
     }
 }
 
@@ -221,12 +260,30 @@ impl Resolve {
     }
 }
 
+impl VersionLike for VersionRev {
+    fn major(&self) -> u64 {
+        self.version.major
+    }
+
+    fn minor(&self) -> u64 {
+        self.version.minor
+    }
+
+    fn patch(&self) -> u64 {
+        self.version.patch
+    }
+
+    fn pre(&self) -> &str {
+        &self.version.pre
+    }
+}
+
 impl DependencyProvider for Resolve {
     type P = Package;
 
-    type V = Version;
+    type V = VersionRev;
 
-    type VS = SemverPubgrub<Version>;
+    type VS = SemverPubgrub<VersionRev>;
 
     type Priority = Reverse<usize>;
 
@@ -257,11 +314,7 @@ impl DependencyProvider for Resolve {
             BTreeMap::new()
         });
 
-        let available = index
-            .keys()
-            .map(|v| &v.version)
-            .filter(|v| range.contains(v))
-            .count();
+        let available = index.keys().filter(|v| range.contains(v)).count();
 
         trace!("priority for {package} is {available} (smaller is higher)");
         Reverse(available)
@@ -277,16 +330,17 @@ impl DependencyProvider for Resolve {
                 .lib
                 .blocking_get_index(id)?
                 .into_keys()
-                .map(|v| v.version)
                 .filter(|v| range.contains(v))
                 .collect::<BTreeSet<_>>(),
-            Package::Root => return Ok(Some(Version::new(0, 0, 0))),
+            Package::Root => return Ok(Some(Version::new(0, 0, 0).into())),
             Package::OneHot(clause) => clause
                 .versions()
+                .map(VersionRev::new)
                 .filter(|v| range.contains(v))
                 .collect::<BTreeSet<_>>(),
-            Package::Either(map) => (1..=map.len())
-                .map(|i| Version::new(i as u64, 0, 0))
+            Package::Either(clause) => clause
+                .versions()
+                .map(VersionRev::new)
                 .filter(|v| range.contains(v))
                 .collect::<BTreeSet<_>>(),
         };
@@ -320,19 +374,14 @@ impl DependencyProvider for Resolve {
                 ));
             }
             Package::OneHot(_) => return Ok(Dependencies::Available(Default::default())),
-            Package::Either(map) => {
-                if version.major > map.len() as u64
-                    || version.minor != 0
-                    || version.patch != 0
-                    || version.pre != Prerelease::EMPTY
-                    || version.build != BuildMetadata::EMPTY
-                {
+            Package::Either(clause) => {
+                if version.rev != 0 {
                     return Err(
-                        anyhow!("invalid version {version} for virtual package {package}").into(),
+                        anyhow!("package {package} does not support revision number").into(),
                     );
                 }
 
-                let (id, req) = map.iter().nth(version.major as usize - 1).unwrap();
+                let (id, req) = clause.select(&version.version)?;
 
                 let dep = once((Package::Normal(id.clone()), SemverPubgrub::from(req))).collect();
 
@@ -343,20 +392,19 @@ impl DependencyProvider for Resolve {
         let index = self.lib.blocking_get_index(package)?;
 
         // TODO: support revision number instead of defaulting to 0
-        let node = &index[&VersionRev::new(version.clone())];
+        let node = &index[version];
 
         let conflict = self
             .conflict
             .read()
             .unwrap()
-            .get_dependencies(package, version);
+            .get_dependencies(package, &version.version);
 
-        let mut either_dep = vec![];
-
-        for grp in node.either_dep.clone() {
-            let clause = grp.into_iter().collect::<BTreeMap<_, _>>();
-            either_dep.push((Package::Either(clause), VersionReq::STAR));
-        }
+        let either = node
+            .either_dep
+            .clone()
+            .into_iter()
+            .map(|x| (Package::Either(Either(x)), VersionReq::STAR));
 
         let dep = node
             .dep
@@ -365,7 +413,7 @@ impl DependencyProvider for Resolve {
             .chain(
                 conflict
                     .into_iter()
-                    .chain(either_dep)
+                    .chain(either)
                     .map(|(k, v)| (k, SemverPubgrub::from(&v))),
             )
             .collect();
@@ -375,7 +423,10 @@ impl DependencyProvider for Resolve {
 }
 
 impl Creeper {
-    pub fn resolve(&self, req: BTreeMap<Id, VersionReq>) -> anyhow::Result<HashMap<Id, Version>> {
+    pub fn resolve(
+        &self,
+        req: BTreeMap<Id, VersionReq>,
+    ) -> anyhow::Result<HashMap<Id, VersionRev>> {
         info!("resolving {} required packages", req.len());
 
         let resolve = Resolve::new(
@@ -441,7 +492,10 @@ impl Creeper {
     /// Topologically sort the dependencies. Dependencies goes before dependents in the output.
     ///
     /// The behavior is undefined unless the input is a valid solution, i.e. dependencies of each package in the input are also present in the input.
-    pub fn sort_dependency(&self, dep: HashMap<Id, Version>) -> anyhow::Result<Vec<(Id, Version)>> {
+    pub fn sort_dependency(
+        &self,
+        dep: HashMap<Id, VersionRev>,
+    ) -> anyhow::Result<Vec<(Id, VersionRev)>> {
         let mut graph = DiGraph::<&Id, ()>::new();
         let mut id_to_node = HashMap::new();
         let mut node_to_id = HashMap::new();
@@ -453,7 +507,7 @@ impl Creeper {
         }
 
         for (package, version) in &dep {
-            let node = self.blocking_get_node(package, version, 0)?;
+            let node = self.blocking_get_node(package, &version.version, version.rev)?;
             let node_package = id_to_node[package];
 
             for (d, _) in node.dep {

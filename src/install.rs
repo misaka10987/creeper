@@ -236,7 +236,7 @@ impl Creeper {
         let mut install = Install::default();
 
         for (id, version) in sorted {
-            let package = self.install(&id, &version).await?;
+            let package = self.install(&id, &version.version).await?;
             install.extend(once(package));
         }
 

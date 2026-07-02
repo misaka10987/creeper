@@ -156,6 +156,7 @@ pub struct GetInstall {
     /// The revision number of this version, defaults to 0.
     #[arg(long, default_value_t = 0)]
     pub rev: u32,
+
     /// Whether to recursively get the installation of the package's dependencies, defaults to false.
     #[arg(short, long, default_value_t = false)]
     pub recursive: bool,
@@ -169,7 +170,8 @@ impl Execute for GetInstall {
                 .await?;
             lib.recursive_install(package).await?
         } else {
-            lib.install(&self.package.id, &self.package.version).await?
+            lib.install(&self.package.id, &self.package.version, self.rev)
+                .await?
         };
 
         let json = serde_json::to_string(&install)?;

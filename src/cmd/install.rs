@@ -42,9 +42,7 @@ impl Execute for Install {
 
         let sorted = lib.sort_dependency(dep)?;
 
-        let mut install = lib
-            .install_all(sorted.into_iter().map(|(k, v)| (k, v.version)))
-            .await?;
+        let mut install = lib.install_all(sorted).await?;
         install.extend(once(package.install.clone()));
 
         let json = serde_json::to_string(&install)?;

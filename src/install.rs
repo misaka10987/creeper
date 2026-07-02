@@ -6,7 +6,7 @@ use serde_inline_default::serde_inline_default;
 use tokio::fs::{create_dir_all, read_to_string, remove_file, try_exists, write};
 use tracing::debug;
 
-use crate::{Artifact, Creeper, Id, Package, path::creeper_cache_dir};
+use crate::{Artifact, Creeper, Id, Package, VersionRev, path::creeper_cache_dir};
 
 /// Things installed to the game instance by a package.
 #[serde_inline_default]
@@ -187,7 +187,12 @@ impl Creeper {
     ///
     /// Note that this does not install the dependencies of the package.
     /// Use [`Self::recursive_install`] for that.
-    pub async fn install(&self, package: &Id, version: &Version) -> anyhow::Result<Install> {
+    pub async fn install(
+        &self,
+        package: &Id,
+        version: &Version,
+        rev: u32,
+    ) -> anyhow::Result<Install> {
         if let Some(install) = self.get_install_cache(package, version).await? {
             debug!("using cached install {package}@{version}");
             return Ok(install);
@@ -202,7 +207,7 @@ impl Creeper {
                 _ => todo!(),
             }
         } else {
-            let package = self.query_registry(package, version, 0).await?;
+            let package = self.query_registry(package, version, rev).await?;
             package.install
         };
 
@@ -216,12 +221,12 @@ impl Creeper {
     /// Automatically merging them with the latter overriding the former.
     pub async fn install_all(
         &self,
-        packages: impl IntoIterator<Item = (Id, Version)>,
+        packages: impl IntoIterator<Item = (Id, VersionRev)>,
     ) -> anyhow::Result<Install> {
         let mut install = Install::default();
 
         for (id, version) in packages {
-            let package = self.install(&id, &version).await?;
+            let package = self.install(&id, &version.version, version.rev).await?;
             install.extend(once(package));
         }
 
@@ -236,7 +241,7 @@ impl Creeper {
         let mut install = Install::default();
 
         for (id, version) in sorted {
-            let package = self.install(&id, &version.version).await?;
+            let package = self.install(&id, &version.version, version.rev).await?;
             install.extend(once(package));
         }
 

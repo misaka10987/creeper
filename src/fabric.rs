@@ -598,7 +598,10 @@ pub mod fabric_mod {
     use semver::{Version, VersionReq};
     use serde::{Deserialize, Serialize};
     use serde_with::{DeserializeFromStr, SerializeDisplay};
+    use tracing::error;
     use url::Url;
+
+    use crate::util::parse_or_prompt;
 
     #[derive(Clone, Default, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -637,6 +640,15 @@ pub mod fabric_mod {
     pub enum Author {
         Name(String),
         WithContact { name: String, contact: Contact },
+    }
+
+    impl Author {
+        pub fn name(self) -> String {
+            match self {
+                Author::Name(name) => name,
+                Author::WithContact { name, .. } => name,
+            }
+        }
     }
 
     #[derive(Clone, Serialize, Deserialize)]
@@ -717,7 +729,37 @@ pub mod fabric_mod {
     #[derive(Clone, Serialize, Deserialize)]
     #[serde(untagged, deny_unknown_fields, rename_all = "camelCase")]
     pub enum Dependency {
-        Req(String),
-        List(Vec<String>),
+        Req(VersionReq),
+
+        List(Vec<Version>),
+
+        VersionReq(String),
+
+        VersionList(Vec<String>),
+    }
+
+    impl Dependency {
+        pub async fn prompt_normalize(&self) -> anyhow::Result<VersionReq> {
+            let req = match self {
+                crate::fabric::fabric_mod::Dependency::Req(req) => req.clone(),
+                crate::fabric::fabric_mod::Dependency::List(_) => {
+                    error!(
+                        "does not support list of versions in fabric dependency, defaulting to *"
+                    );
+                    VersionReq::STAR
+                }
+                crate::fabric::fabric_mod::Dependency::VersionReq(req) => {
+                    parse_or_prompt(&req, "version requirement").await?
+                }
+                crate::fabric::fabric_mod::Dependency::VersionList(_) => {
+                    error!(
+                        "does not support list of versions in fabric dependency, defaulting to *"
+                    );
+                    VersionReq::STAR
+                }
+            };
+
+            Ok(req)
+        }
     }
 }

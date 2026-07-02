@@ -212,7 +212,11 @@ impl From<Version> for VersionRev {
 
 impl Display for VersionRev {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} rev {}", self.version, self.rev)
+        if self.rev == 0 {
+            return write!(f, "{}", self.version);
+        }
+
+        write!(f, "{}#{}", self.version, self.rev)
     }
 }
 
@@ -220,13 +224,13 @@ impl FromStr for VersionRev {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let split = s.split(" rev ").collect::<Vec<_>>();
+        let split = s.split("#").collect::<Vec<_>>();
 
-        ensure!(split.len() == 2, "invalid revisioned version {s}");
-
-        let (version, rev) = (split[0].parse()?, split[1].parse()?);
-
-        Ok(Self { version, rev })
+        match split.len() {
+            1 => Ok(Self::new(split[0].parse()?)),
+            2 => Ok(Self::with_rev(split[0].parse()?, split[1].parse()?)),
+            _ => bail!("invalid revisioned version {s}"),
+        }
     }
 }
 

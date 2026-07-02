@@ -1,9 +1,7 @@
-name: Rust
+name: Nightly Release
 
 on:
   push:
-    branches: ['main']
-  pull_request:
     branches: ['main']
 
 env:
@@ -14,28 +12,6 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: cargo build --verbose
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Run tests
-        run: cargo test --verbose
-
-  build-release:
-    if: github.event_name == 'push'
-
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +20,7 @@ jobs:
             binary_name: creeper
             asset_name: creeper-linux-x64
 
-          - os: ubuntu-22.04-arm
+          - os: ubuntu-26.04-arm
             binary_name: creeper
             asset_name: creeper-linux-arm64
 
@@ -72,7 +48,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build release binary
-        run: cargo build --release --verbose
+        run: cargo build --release
 
       - name: Package release asset
         shell: bash
@@ -86,9 +62,8 @@ jobs:
           name: ${{ matrix.asset_name }}
           path: dist/${{ matrix.asset_name }}
 
-  release:
-    if: github.event_name == 'push'
-    needs: build-release
+  publish:
+    needs: build
 
     runs-on: ubuntu-latest
 
@@ -117,4 +92,3 @@ jobs:
           name: ${{ steps.meta.outputs.version }}+build.${{ steps.meta.outputs.short_sha }}
           prerelease: true
           files: release-artifacts/*
-          # generate_release_notes: true

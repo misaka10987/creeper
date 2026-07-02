@@ -1,6 +1,7 @@
+use anyhow::anyhow;
 use clap::Parser;
 use colored::Colorize;
-use tracing::error;
+use tracing::{error, info};
 use url::Url;
 
 use crate::{
@@ -8,8 +9,9 @@ use crate::{
     cmd::Execute,
     fabric::FabricMod,
     pack::{PackMeta, PackNode},
+    path::creeper_cache_dir,
     util::{parse_or_prompt, prompt_save},
-    zip::extract_zip,
+    zip::{extract_zip, extract_zip_to},
 };
 
 #[derive(Clone, Debug, Parser)]
@@ -25,7 +27,7 @@ impl Execute for PackageFabricMod {
 
         let jar = lib.retrieve_artifact(&art).await?;
 
-        let json = extract_zip(jar, "fabric.mod.json").await?;
+        let json = extract_zip(&jar, "fabric.mod.json").await?;
 
         let metadata = serde_json::from_str::<FabricMod>(&json)?;
 
@@ -76,6 +78,29 @@ impl Execute for PackageFabricMod {
 
         if !metadata.provides.is_empty() {
             error!("does not support provided dependencies in fabric.mod.json");
+        }
+
+        let extract = creeper_cache_dir()?.join("extract");
+
+        for jij in metadata.jars.into_iter().map(|x| x.file) {
+            let file = jij.file_name().ok_or(anyhow!("invalid filename"))?;
+
+            let path = extract.join(file);
+
+            extract_zip_to(&jar, jij, &path).await?;
+
+            if let Ok(json) = extract_zip(&path, "fabric.mod.json").await
+                && let Ok(metadata) = serde_json::from_str::<FabricMod>(&json)
+                && let Ok(id) = metadata.id.parse()
+                && let Some(req) = node.dep.get(&id)
+                && req.matches(&metadata.version)
+            {
+                info!(
+                    "{id}@{} is packaged jar-in-jar, skipping from dependencies",
+                    metadata.version
+                );
+                node.dep.remove(&id);
+            }
         }
 
         let pack = Package {

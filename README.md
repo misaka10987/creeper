@@ -11,7 +11,7 @@ creeper add vanilla@=1.21.1 mekanism@10 "bsl@*"
 creeper launch
 ```
 
-<img width="2408" height="1354" alt="2026-06-30_11 00 46" src="https://github.com/user-attachments/assets/920f1867-4a57-4a75-b32e-8c4d1b589f75" />
+<img width="2408" height="1354" style="height: auto;" alt="2026-06-30_11 00 46" src="https://github.com/user-attachments/assets/920f1867-4a57-4a75-b32e-8c4d1b589f75" />
 <p align="center">creeper 启动的 Minecraft 1.21.1 + Mekanism 10.7.19 + BSL 10.1.3</p>
 <p align="center">自动解析和安装 NeoForge 21.1.234, Sodium 0.6.13 和 Iris 1.8.8</p>
 

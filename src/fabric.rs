@@ -122,7 +122,7 @@ impl SyncBuiltinIndex for FabricManager {
             })
             .map(|(k, v)| {
                 (
-                    VersionRev(k, 0),
+                    VersionRev::new(k),
                     PackNode {
                         dep: [(Id::vanilla(), v), (Id::intermediary(), VersionReq::STAR)]
                             .into_iter()
@@ -165,7 +165,7 @@ impl Creeper {
 
         let index = self.get_index(&Id::vanilla()).await?;
 
-        let all = index.keys().map(|VersionRev(v, _)| v);
+        let all = index.keys().map(|VersionRev { version, .. }| version);
 
         let available = all.filter(|v| req.matches(v)).collect::<BTreeSet<_>>();
 
@@ -256,7 +256,7 @@ impl SyncBuiltinIndex for IntermediaryManager {
         let index = versions
             .map(|v| {
                 (
-                    VersionRev(v.clone(), 0),
+                    VersionRev::new(v.clone()),
                     PackNode {
                         dep: once((Id::vanilla(), format!("={v}").parse().unwrap())).collect(),
                         ..Default::default()

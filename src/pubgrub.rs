@@ -205,7 +205,7 @@ impl Resolve {
             clause.extend(
                 index
                     .into_iter()
-                    .filter_map(|(VersionRev(v, _), node)| node.conflict_clause(id.clone(), v)),
+                    .filter_map(|(version, node)| node.conflict_clause(id.clone(), version.into())),
             );
         }
 
@@ -259,7 +259,7 @@ impl DependencyProvider for Resolve {
 
         let available = index
             .keys()
-            .map(|VersionRev(v, _)| v)
+            .map(|v| &v.version)
             .filter(|v| range.contains(v))
             .count();
 
@@ -277,7 +277,7 @@ impl DependencyProvider for Resolve {
                 .lib
                 .blocking_get_index(id)?
                 .into_keys()
-                .map(|VersionRev(v, _)| v)
+                .map(|v| v.version)
                 .filter(|v| range.contains(v))
                 .collect::<BTreeSet<_>>(),
             Package::Root => return Ok(Some(Version::new(0, 0, 0))),
@@ -343,7 +343,7 @@ impl DependencyProvider for Resolve {
         let index = self.lib.blocking_get_index(package)?;
 
         // TODO: support revision number instead of defaulting to 0
-        let node = &index[&VersionRev(version.clone(), 0)];
+        let node = &index[&VersionRev::new(version.clone())];
 
         let conflict = self
             .conflict

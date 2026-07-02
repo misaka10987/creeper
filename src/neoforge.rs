@@ -467,7 +467,7 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
                 dep,
                 ..Default::default()
             };
-            (VersionRev(version, 0), node)
+            (VersionRev::new(version), node)
         })
         .collect()
 }

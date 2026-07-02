@@ -25,7 +25,6 @@ use mc_launchermeta::{
     version_manifest::Manifest,
 };
 
-
 use reqwest::Client;
 use semver::Version;
 
@@ -38,7 +37,7 @@ fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
         .into_iter()
         .map(|version| {
             (
-                VersionRev(version, 0),
+                VersionRev::new(version),
                 PackNode {
                     dep: BTreeMap::new(),
                     ..Default::default()

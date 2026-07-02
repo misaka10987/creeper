@@ -9,7 +9,6 @@ use crate::{
     Creeper, Id, YggdrasilClient,
     cmd::Execute,
     id::{IdVersion, IdVersionReq},
-    index::VersionRev,
     neoforge::{decode_neoforge_version, parse_neoforge_version},
 };
 use anyhow::{anyhow, bail};
@@ -193,7 +192,7 @@ impl Execute for ListVersion {
 
         let versions = index
             .into_keys()
-            .map(|VersionRev(version, _rev)| version)
+            .map(|v| v.version)
             .collect::<BTreeSet<_>>();
 
         let json = serde_json::to_string(&versions)?;

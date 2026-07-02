@@ -81,7 +81,7 @@ pub async fn compile_index(src: impl AsRef<Path>) -> anyhow::Result<Index> {
                 path.display()
             );
 
-            index.insert(VersionRev(version.clone(), rev), pack.node);
+            index.insert(VersionRev::with_rev(version.clone(), rev), pack.node);
         }
     }
 
@@ -119,7 +119,7 @@ impl IndexLine {
 
         for json in reader.lines() {
             let line = serde_json::from_str::<Self>(&json?)?;
-            index.insert(VersionRev(line.version, line.rev), line.node);
+            index.insert(VersionRev::with_rev(line.version, line.rev), line.node);
         }
 
         Ok(index)
@@ -135,7 +135,7 @@ impl IndexLine {
 
         while let Some(json) = reader.next_line().await? {
             let line = serde_json::from_str::<Self>(&json)?;
-            index.insert(VersionRev(line.version, line.rev), line.node);
+            index.insert(VersionRev::with_rev(line.version, line.rev), line.node);
         }
 
         Ok(index)
@@ -154,11 +154,11 @@ impl IndexLine {
 
         let count = index.len();
 
-        for (version, node) in index {
+        for (VersionRev { version, rev }, node) in index {
             let line = IndexLine {
                 id: id.clone(),
-                version: version.0,
-                rev: version.1,
+                version,
+                rev,
                 node: node,
             };
             let json = serde_json::to_string(&line)?;
@@ -174,16 +174,32 @@ impl IndexLine {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct VersionRev(pub Version, pub u32);
-impl PartialOrd for VersionRev {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.0.cmp(&other.0).then(self.1.cmp(&other.1)))
+/// A "revisioned" version, which is a regular version with an additional revision number.
+///
+/// This is used to modify package definitions without changing the version number (which should correspond to the upstream),
+/// while still allowing package version locking.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct VersionRev {
+    /// The version number.
+    pub version: Version,
+
+    /// The revision number, monotonically increasing and defaults to 0.
+    pub rev: u32,
+}
+
+impl VersionRev {
+    pub fn new(version: Version) -> Self {
+        Self { version, rev: 0 }
+    }
+
+    pub fn with_rev(version: Version, rev: u32) -> Self {
+        Self { version, rev }
     }
 }
-impl Ord for VersionRev {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
+
+impl From<VersionRev> for Version {
+    fn from(value: VersionRev) -> Self {
+        value.version
     }
 }
 
@@ -259,7 +275,7 @@ impl Creeper {
     ) -> anyhow::Result<PackNode> {
         let index = self.get_index(package).await?;
         let node = index
-            .get(&VersionRev(version.clone(), rev))
+            .get(&VersionRev::with_rev(version.clone(), rev))
             .ok_or(anyhow!("no {version} rev {rev} for {package}"))?;
         Ok(node.clone())
     }
@@ -298,7 +314,7 @@ impl Creeper {
     ) -> anyhow::Result<PackNode> {
         let index = self.blocking_get_index(package)?;
         let node = index
-            .get(&VersionRev(version.clone(), rev))
+            .get(&VersionRev::with_rev(version.clone(), rev))
             .ok_or(anyhow!("no {version} rev {rev} for {package}"))?;
         Ok(node.clone())
     }

@@ -120,7 +120,7 @@ impl Registry {
 
     pub async fn get(&self, id: &Id, version: &Version, rev: u32) -> anyhow::Result<Package> {
         if let Some(pack) = self.cache.read().unwrap().get(id) {
-            if let Some(pack) = pack.get(&VersionRev(version.clone(), rev)) {
+            if let Some(pack) = pack.get(&VersionRev::with_rev(version.clone(), rev)) {
                 return Ok(pack.clone());
             }
         }
@@ -147,7 +147,7 @@ impl Registry {
                 .unwrap()
                 .entry(id.clone())
                 .or_default()
-                .insert(VersionRev(version.clone(), rev), pack.clone());
+                .insert(VersionRev::with_rev(version.clone(), rev), pack.clone());
 
             return Ok(pack);
         }
@@ -172,7 +172,7 @@ impl Registry {
             .unwrap()
             .entry(id.clone())
             .or_default()
-            .insert(VersionRev(version.clone(), rev), pack.clone());
+            .insert(VersionRev::with_rev(version.clone(), rev), pack.clone());
         Ok(pack)
     }
 }

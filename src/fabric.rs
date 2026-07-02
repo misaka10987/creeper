@@ -8,7 +8,8 @@ use std::{
 use anyhow::{anyhow, ensure};
 use reqwest::Client;
 use semver::{Version, VersionReq};
-use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde_with::serde_as;
 use tokio::fs::{create_dir_all, read_to_string, try_exists, write};
 use tracing::{Span, info, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -404,6 +405,7 @@ impl FabricMetaClient {
 pub mod fabric_meta {
     use mc_launchermeta::{VersionKind, version::Arguments};
     use serde::{Deserialize, Serialize};
+    use serde_with::NoneAsEmptyString;
     use url::Url;
 
     use crate::{Checksum, MavenCoord};
@@ -505,6 +507,259 @@ pub mod fabric_meta {
                 .into_iter()
                 .map(Checksum::sha1)
                 .chain(self.sha256.into_iter().map(Checksum::sha256))
+        }
+    }
+}
+
+#[serde_as]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct FabricMod {
+    pub schema_version: u64,
+
+    pub id: String,
+
+    pub version: Version,
+
+    // #[serde_as(as = "NoneAsEmptyString")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+
+    #[serde(default, skip_serializing_if = "fabric_mod::Contact::is_empty")]
+    pub contact: fabric_mod::Contact,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authors: Vec<fabric_mod::Author>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contributors: Vec<fabric_mod::Author>,
+
+    // #[serde_as(as = "Option<DisplayFromStr>")]
+    // #[serde(default, skip_serializing_if = "Option::is_none")]
+    // pub license: Option<spdx::Expression>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<fabric_mod::Icon>,
+
+    #[serde(default, skip_serializing_if = "is_all")]
+    pub environment: fabric_mod::Environment,
+
+    #[serde(default, skip_serializing_if = "fabric_mod::EntryPoints::is_empty")]
+    pub entrypoints: fabric_mod::EntryPoints,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jars: Vec<fabric_mod::Jar>,
+
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub language_adapters: HashMap<String, String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mixins: Vec<fabric_mod::Mixin>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_widener: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provides: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub depends: HashMap<String, fabric_mod::Dependency>,
+
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub recommends: HashMap<String, fabric_mod::Dependency>,
+
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub suggests: HashMap<String, fabric_mod::Dependency>,
+
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub breaks: HashMap<String, fabric_mod::Dependency>,
+
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub conflicts: HashMap<String, fabric_mod::Dependency>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom: Option<serde_json::Value>,
+}
+
+#[allow(unused)] // used by #[serde(skip_serializing_if = "is_all")]
+fn is_all(env: &fabric_mod::Environment) -> bool {
+    *env == fabric_mod::Environment::All
+}
+
+pub mod fabric_mod {
+    use std::{collections::HashMap, path::PathBuf};
+
+    use parse_display::{Display, FromStr};
+    use semver::{Version, VersionReq};
+    use serde::{Deserialize, Serialize};
+    use serde_with::{DeserializeFromStr, SerializeDisplay};
+    use tracing::error;
+    use url::Url;
+
+    use crate::util::parse_or_prompt;
+
+    #[derive(Clone, Default, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct Contact {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub email: Option<String>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub homepage: Option<Url>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub irc: Option<Url>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub issues: Option<Url>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub sources: Option<Url>,
+
+        #[serde(flatten, default, skip_serializing_if = "HashMap::is_empty")]
+        pub extra: HashMap<String, Url>,
+    }
+
+    impl Contact {
+        pub fn is_empty(&self) -> bool {
+            self.email.is_none()
+                && self.homepage.is_none()
+                && self.irc.is_none()
+                && self.issues.is_none()
+                && self.sources.is_none()
+        }
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(untagged, deny_unknown_fields, rename_all = "camelCase")]
+    pub enum Author {
+        Name(String),
+        WithContact { name: String, contact: Contact },
+    }
+
+    impl Author {
+        pub fn name(self) -> String {
+            match self {
+                Author::Name(name) => name,
+                Author::WithContact { name, .. } => name,
+            }
+        }
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(untagged, deny_unknown_fields, rename_all = "camelCase")]
+    pub enum Icon {
+        Single(PathBuf),
+        Widths(HashMap<u32, PathBuf>),
+    }
+
+    #[derive(
+        Clone, Copy, PartialEq, Eq, Display, FromStr, SerializeDisplay, DeserializeFromStr,
+    )]
+    #[display(style = "camelCase")]
+    pub enum Environment {
+        #[display("*")]
+        All,
+        Client,
+        Server,
+    }
+
+    impl Default for Environment {
+        fn default() -> Self {
+            Self::All
+        }
+    }
+
+    #[derive(Clone, Default, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct EntryPoints {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub main: Vec<String>,
+
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub client: Vec<String>,
+
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub server: Vec<String>,
+
+        #[serde(flatten, default, skip_serializing_if = "HashMap::is_empty")]
+        pub extra: HashMap<String, Vec<String>>,
+    }
+
+    #[test]
+    fn test() {
+        let json = r#"{
+    "client": [
+      "net.caffeinemc.mods.sodium.fabric.SodiumFabricMod"
+    ],
+    "preLaunch": [
+      "net.caffeinemc.mods.sodium.fabric.SodiumPreLaunch"
+    ]
+  }"#;
+        serde_json::from_str::<EntryPoints>(json).unwrap();
+    }
+
+    impl EntryPoints {
+        pub fn is_empty(&self) -> bool {
+            self.main.is_empty() && self.client.is_empty() && self.server.is_empty()
+        }
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    pub struct Jar {
+        pub file: PathBuf,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(untagged, deny_unknown_fields, rename_all = "camelCase")]
+    pub enum Mixin {
+        Config(PathBuf),
+        WithEnvironment {
+            config: PathBuf,
+            environment: Environment,
+        },
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(untagged, deny_unknown_fields, rename_all = "camelCase")]
+    pub enum Dependency {
+        Req(VersionReq),
+
+        List(Vec<Version>),
+
+        VersionReq(String),
+
+        VersionList(Vec<String>),
+    }
+
+    impl Dependency {
+        pub async fn prompt_normalize(&self) -> anyhow::Result<VersionReq> {
+            let req = match self {
+                crate::fabric::fabric_mod::Dependency::Req(req) => req.clone(),
+                crate::fabric::fabric_mod::Dependency::List(_) => {
+                    error!(
+                        "does not support list of versions in fabric dependency, defaulting to *"
+                    );
+                    VersionReq::STAR
+                }
+                crate::fabric::fabric_mod::Dependency::VersionReq(req) => {
+                    parse_or_prompt(&req, "version requirement").await?
+                }
+                crate::fabric::fabric_mod::Dependency::VersionList(_) => {
+                    error!(
+                        "does not support list of versions in fabric dependency, defaulting to *"
+                    );
+                    VersionReq::STAR
+                }
+            };
+
+            Ok(req)
         }
     }
 }

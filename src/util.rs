@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt::Display,
     marker::PhantomData,
-    path::Path,
+    path::{Path, PathBuf},
     str::FromStr,
     sync::OnceLock,
 };
@@ -181,6 +181,25 @@ where
     Ok(value)
 }
 
+pub async fn confirm_or_prompt<T>(
+    value: T,
+    confirm_msg: &str,
+    prompt_msg: &str,
+) -> anyhow::Result<T>
+where
+    T: FromStr + Send + 'static,
+    <T as FromStr>::Err: Display,
+{
+    let confirm_msg = confirm_msg.to_string();
+    let prompt_msg = prompt_msg.to_string();
+
+    let value =
+        spawn_blocking(move || blocking_confirm_or_prompt(value, &confirm_msg, &prompt_msg))
+            .await??;
+
+    Ok(value)
+}
+
 pub fn blocking_prompt_valid<T>(message: &str) -> anyhow::Result<T>
 where
     T: FromStr,
@@ -221,6 +240,90 @@ where
         .unwrap();
 
     Ok(value)
+}
+
+pub fn blocking_confirm_or_prompt<T>(
+    value: T,
+    confirm_msg: &str,
+    prompt_msg: &str,
+) -> anyhow::Result<T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    let confirm = Confirm::new(confirm_msg).prompt()?;
+
+    if confirm {
+        return Ok(value);
+    }
+
+    let value = blocking_prompt_valid(prompt_msg)?;
+
+    Ok(value)
+}
+
+pub async fn parse_or_prompt<T>(s: &str, desc: &str) -> anyhow::Result<T>
+where
+    T: FromStr + Send + 'static,
+    <T as FromStr>::Err: Display,
+{
+    let s = s.to_owned();
+    let desc = desc.to_owned();
+
+    let value = spawn_blocking(move || blocking_parse_or_prompt(&s, &desc)).await??;
+
+    Ok(value)
+}
+
+pub fn blocking_parse_or_prompt<T>(s: &str, desc: &str) -> anyhow::Result<T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    if let Ok(value) = s.parse() {
+        return blocking_confirm_or_prompt(
+            value,
+            &format!("Use {s} as {desc}?"),
+            &format!("Input a new {desc}:"),
+        );
+    }
+
+    let value = blocking_prompt_valid(&format!("{s} is not valid {desc}, input one instead:"))?;
+
+    Ok(value)
+}
+
+pub async fn prompt_save(content: impl AsRef<[u8]>, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    let content = content.as_ref();
+    let path = path.as_ref();
+
+    let message = format!("Save {} bytes to file?", content.len());
+
+    let confirm =
+        spawn_blocking(move || Confirm::new(&message).with_default(false).prompt()).await??;
+
+    if !confirm {
+        return Ok(());
+    }
+
+    let default = path.display().to_string();
+
+    let path = spawn_blocking(move || {
+        Text::new("Enter the path to save to")
+            .with_default(&default)
+            .prompt()
+    })
+    .await??;
+
+    let path = PathBuf::from(path);
+
+    if let Some(parent) = path.parent() {
+        create_dir_all(parent).await?;
+    }
+
+    write(&path, content).await?;
+
+    Ok(())
 }
 
 pub async fn symlink_auto(

@@ -528,7 +528,7 @@ dependencies = [
 
 [[package]]
 name = "creeper"
-version = "1.0.0-alpha.5"
+version = "1.0.0-alpha.6"
 dependencies = [
  "anyhow",
  "async_zip",

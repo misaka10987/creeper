@@ -1,6 +1,6 @@
 [package]
 name = "creeper"
-version = "1.0.0-alpha.5"
+version = "1.0.0-alpha.6"
 edition = "2024"
 authors = ["misaka10987 <misaka10987@outlook.com>"]
 description = "Minecraft Package Manager"

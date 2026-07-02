@@ -405,7 +405,6 @@ impl FabricMetaClient {
 pub mod fabric_meta {
     use mc_launchermeta::{VersionKind, version::Arguments};
     use serde::{Deserialize, Serialize};
-    use serde_with::NoneAsEmptyString;
     use url::Url;
 
     use crate::{Checksum, MavenCoord};

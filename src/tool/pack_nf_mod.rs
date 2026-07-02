@@ -1,15 +1,13 @@
 use std::{
     collections::{BTreeMap, HashSet},
     iter::once,
-    path::PathBuf,
 };
 
 use anyhow::bail;
 use clap::Parser;
 use colored::Colorize;
 use inquire::{Confirm, Select, Text};
-use semver::{Version, VersionReq};
-use tokio::fs::{create_dir_all, write};
+use semver::VersionReq;
 use tracing::{error, warn};
 use url::Url;
 
@@ -18,7 +16,7 @@ use crate::{
     cmd::Execute,
     neoforge::{NeoforgeMods, neoforge_mods::DependencyType},
     pack::{PackMeta, PackNode},
-    util::{confirm_or_prompt, prompt_valid},
+    util::{parse_or_prompt, prompt_save, prompt_valid},
     zip::extract_zip,
 };
 
@@ -64,33 +62,11 @@ impl Execute for PackageNeoforgeMod {
             .find(|m| m.mod_id == select_mod_id)
             .unwrap();
 
-        let id = match select_mod_id.parse::<Id>() {
-            Ok(id) => {
-                confirm_or_prompt(
-                    id,
-                    &format!("Use {} as package id?", select_mod_id),
-                    "Enter a custom package id:",
-                )
-                .await?
-            }
-            Err(_) => {
-                prompt_valid::<Id>(&format!(
-                    "{} is not valid package id, enter one instead:",
-                    select_mod_id
-                ))
-                .await?
-            }
-        };
+        let id = parse_or_prompt(&select_mod_id, "package id").await?;
 
-        let version = match select_mod.version.parse::<Version>() {
+        let version = match select_mod.version.parse() {
             Ok(v) => v,
-            Err(_) => {
-                prompt_valid::<Version>(&format!(
-                    "{} is not valid semver, enter one instead::",
-                    select_mod.version
-                ))
-                .await?
-            }
+            Err(_) => parse_or_prompt(&select_mod.version, "semver").await?,
         };
 
         let license = match mods.license.parse::<spdx::Expression>() {
@@ -207,28 +183,14 @@ impl Execute for PackageNeoforgeMod {
 
         println!("{toml}");
 
-        let save = Confirm::new("Save to file?").with_default(false).prompt()?;
+        let path = pack
+            .id
+            .indexed_path()
+            .as_ref()
+            .join(pack.version.to_string())
+            .join("0.toml");
 
-        if save {
-            let path = pack
-                .id
-                .indexed_path()
-                .as_ref()
-                .join(pack.version.to_string())
-                .join("0.toml");
-
-            let path = Text::new("Enter the path to save to:")
-                .with_default(&path.display().to_string())
-                .prompt()?;
-
-            let path = PathBuf::from(path);
-
-            if let Some(parent) = path.parent() {
-                create_dir_all(&parent).await?;
-            }
-
-            write(&path, toml).await?;
-        }
+        prompt_save(toml, path).await?;
 
         Ok(())
     }

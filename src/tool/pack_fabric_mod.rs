@@ -2,7 +2,6 @@ use std::iter::once;
 
 use clap::Parser;
 use colored::Colorize;
-use semver::VersionReq;
 use tracing::error;
 use url::Url;
 

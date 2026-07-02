@@ -344,6 +344,10 @@ impl FabricMetaClient {
         Ok(res)
     }
 
+    pub async fn versions(&self) -> anyhow::Result<FabricMeta> {
+        self.get_meta("/v2/versions").await
+    }
+
     pub async fn game_versions(&self) -> anyhow::Result<Vec<fabric_meta::Game>> {
         self.get_meta("/v2/versions/game").await
     }
@@ -400,6 +404,25 @@ impl FabricMetaClient {
 
         self.get_meta(&path).await
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct FabricMeta {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub game: Vec<fabric_meta::Game>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mappings: Vec<fabric_meta::Mapping>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub intermediary: Vec<fabric_meta::Intermediary>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loader: Vec<fabric_meta::Loader>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub installer: Vec<fabric_meta::Installer>,
 }
 
 pub mod fabric_meta {

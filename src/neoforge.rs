@@ -646,7 +646,7 @@ pub mod neoforge_mods {
         #[serde_inline_default(true)]
         pub logo_blur: bool,
 
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "updateJSONURL", skip_serializing_if = "Option::is_none")]
         pub update_json_url: Option<Url>,
 
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -658,7 +658,7 @@ pub mod neoforge_mods {
         #[serde(skip_serializing_if = "Option::is_none")]
         pub authors: Option<String>,
 
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "displayURL", skip_serializing_if = "Option::is_none")]
         pub display_url: Option<Url>,
 
         #[serde(skip_serializing_if = "Option::is_none")]

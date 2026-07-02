@@ -43,9 +43,15 @@ impl Execute for PackageFabricMod {
         let mut node = PackNode::default();
 
         for (id, dep) in metadata.depends {
-            let id = match id.parse() {
+            let id = match id.parse::<Id>() {
                 Ok(id) => id,
                 Err(_) => parse_or_prompt(&id, "package id").await?,
+            };
+
+            let id = if id.as_str() == "fabricloader" {
+                Id::fabric()
+            } else {
+                id
             };
 
             let req = dep.prompt_normalize().await?;

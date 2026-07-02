@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    iter::once,
-};
+use std::collections::{BTreeMap, HashSet};
 
 use anyhow::bail;
 use clap::Parser;
@@ -117,7 +114,7 @@ impl Execute for PackageNeoforgeMod {
             .cloned()
             .unwrap_or_default();
 
-        let mut conflict = vec![];
+        let mut conflict = BTreeMap::new();
 
         for d in deps {
             let id = match d.mod_id.parse::<Id>() {
@@ -152,7 +149,7 @@ impl Execute for PackageNeoforgeMod {
                     dep.insert(id, req);
                 }
                 DependencyType::Incompatible => {
-                    conflict.push(once((id, req)).collect());
+                    conflict.insert(id, req);
                 }
                 t => {
                     error!("does not support specifying {t} dependency {id}, skipping");

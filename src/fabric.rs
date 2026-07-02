@@ -127,7 +127,7 @@ impl SyncBuiltinIndex for FabricManager {
                         dep: [(Id::vanilla(), v), (Id::intermediary(), VersionReq::STAR)]
                             .into_iter()
                             .collect(),
-                        conflict: vec![once((Id::neoforge(), VersionReq::STAR)).collect()],
+                        conflict: once((Id::neoforge(), VersionReq::STAR)).collect(),
                         ..Default::default()
                     },
                 )

@@ -1,5 +1,3 @@
-use std::iter::once;
-
 use clap::Parser;
 use colored::Colorize;
 use tracing::error;
@@ -61,7 +59,7 @@ impl Execute for PackageFabricMod {
 
             let req = dep.prompt_normalize().await?;
 
-            node.conflict.push(once((id, req)).collect());
+            node.conflict.insert(id, req);
         }
 
         if !metadata.recommends.is_empty() {

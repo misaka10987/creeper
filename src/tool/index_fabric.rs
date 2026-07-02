@@ -70,7 +70,7 @@ impl Execute for IndexFabric {
                     VersionRev(k, 0),
                     PackNode {
                         dep: once((Id::vanilla(), v)).collect(),
-                        conflict: vec![once((Id::neoforge(), VersionReq::STAR)).collect()],
+                        conflict: once((Id::neoforge(), VersionReq::STAR)).collect(),
                         ..Default::default()
                     },
                 )

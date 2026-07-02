@@ -23,8 +23,12 @@ pub struct PackNode {
     )]
     pub dep: BTreeMap<Id, VersionReq>,
 
-    #[serde(default, rename = "conflicts", skip_serializing_if = "Vec::is_empty")]
-    pub conflict: Vec<BTreeMap<Id, VersionReq>>,
+    #[serde(
+        default,
+        rename = "conflicts",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub conflict: BTreeMap<Id, VersionReq>,
 
     #[serde(
         default,
@@ -38,20 +42,18 @@ impl PackNode {
     pub fn neighbours(self) -> HashSet<Id> {
         self.dep
             .into_keys()
-            .chain(self.conflict.into_iter().flat_map(|grp| grp.into_keys()))
+            .chain(self.conflict.into_keys())
             .chain(self.either_dep.into_iter().flat_map(|grp| grp.into_keys()))
             .collect()
     }
 
-    pub fn conflict_clause(self, id: Id, version: Version) -> impl IntoIterator<Item = Conflict> {
-        self.conflict
+    pub fn conflict_clause(self, id: Id, version: Version) -> Conflict {
+        let map = self
+            .conflict
             .into_iter()
-            .map(move |grp| {
-                grp.into_iter()
-                    .chain(once((id.clone(), format!("={version}").parse().unwrap())))
-                    .collect()
-            })
-            .map(Conflict)
+            .chain(once((id.clone(), format!("={version}").parse().unwrap())))
+            .collect();
+        Conflict(map)
     }
 }
 

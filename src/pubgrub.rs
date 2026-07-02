@@ -193,7 +193,7 @@ impl Resolve {
             let index = self.lib.blocking_get_index(&id)?;
             for (VersionRev(v, _), node) in index {
                 let new = node.conflict_clause(id.clone(), v);
-                clause.extend(new);
+                clause.push(new);
             }
         }
 

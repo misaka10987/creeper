@@ -201,10 +201,12 @@ impl Resolve {
 
         for id in reachable {
             let index = self.lib.blocking_get_index(&id)?;
-            for (VersionRev(v, _), node) in index {
-                let new = node.conflict_clause(id.clone(), v);
-                clause.push(new);
-            }
+
+            clause.extend(
+                index
+                    .into_iter()
+                    .filter_map(|(VersionRev(v, _), node)| node.conflict_clause(id.clone(), v)),
+            );
         }
 
         debug!("prepared {} conflict clauses", clause.len());

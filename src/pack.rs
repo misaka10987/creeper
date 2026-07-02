@@ -47,13 +47,18 @@ impl PackNode {
             .collect()
     }
 
-    pub fn conflict_clause(self, id: Id, version: Version) -> Conflict {
+    pub fn conflict_clause(self, id: Id, version: Version) -> Option<Conflict> {
+        if self.conflict.is_empty() {
+            return None;
+        }
+
         let map = self
             .conflict
             .into_iter()
             .chain(once((id.clone(), format!("={version}").parse().unwrap())))
             .collect();
-        Conflict(map)
+
+        Some(Conflict(map))
     }
 }
 

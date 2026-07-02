@@ -155,6 +155,16 @@ impl ConflictManager {
     /// in order to improve performance.
     // the function shall not exceed O(n^2) in time complexity
     fn simp(&mut self) {
+        self.clause
+            .retain(|x| !x.keys().all(|k| [Id::neoforge(), Id::fabric()].contains(k)));
+        self.clause.insert(Conflict(
+            [
+                (Id::neoforge(), VersionReq::STAR),
+                (Id::fabric(), VersionReq::STAR),
+            ]
+            .into_iter()
+            .collect(),
+        ));
         warn!("TODO: simplify conflict clauses to improve performance");
     }
 }

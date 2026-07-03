@@ -24,6 +24,26 @@ cargo install --git https://github.com/misaka10987/creeper
 
 或者在 [Releases](https://github.com/misaka10987/creeper/releases) 下载相应构建。
 
+## 使用
+
+creeper 的使用手册仍在编写中。无论如何，你都可以使用 `help` 子命令，或 `--help` 参数来查看 creeper 的内置帮助。
+
+```txt
+Usage: creeper [OPTIONS] <COMMAND>
+
+Commands:
+  tool         Collection of CLI tools
+  add          Add dependencies to the current game instance
+  launch       Launch the current game instance
+  build-index  Build the lookup index for a package registry
+  install      Install the current game instance as described in `creeper.toml`
+  nuke         Remove all configurations, user data, and cache
+  login        Add a new Minecraft user account to the local configuration
+  init         Create a new creeper package in an existing directory
+  dev          CLI for development use
+  help         Print this message or the help of the given subcommand(s)
+```
+
 ## 为什么有这个项目？
 
 现在已经有了很多 Minecraft 第三方启动器，包括国内的 *HMCL* , *PCL* , *BakaXL* , 国外的 *Prism Launcher* 等。这些启动器编写得很完善，各种功能齐全，看似编写一个新的启动器已经是没有多少价值的重复劳动。然而，我们认为，即使第三方启动器的技术和规范已经很成熟，对模组玩家来说，仍有三个大问题亟须解决：

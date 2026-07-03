@@ -47,6 +47,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - uses: Swatinem/rust-cache@v2
+
       - name: Build release binary
         run: cargo build --release
 

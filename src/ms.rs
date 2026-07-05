@@ -1,11 +1,16 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use anyhow::{anyhow, ensure};
+use chrono::{DateTime, Utc};
 use colored::Colorize;
 use oauth2::{
     AccessToken, AuthUrl, AuthorizationCode, ClientId, CsrfToken, EndpointNotSet, EndpointSet,
     PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
-    basic::BasicClient, reqwest::redirect::Policy,
+    basic::BasicClient,
 };
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use serde_inline_default::serde_inline_default;
 use tokio::sync::RwLock;
 
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
@@ -23,20 +28,21 @@ type OauthClient = oauth2::basic::BasicClient<
 >;
 
 pub struct MicrosoftClient {
-    http: oauth2::reqwest::Client,
+    http: Client,
     oauth: OauthClient,
     access_token: RwLock<Option<AccessToken>>,
     refresh_token: RwLock<Option<RefreshToken>>,
     expires: RwLock<Option<u64>>,
     pkce_verifier: RwLock<Option<PkceCodeVerifier>>,
+
+    xbox_uhs: RwLock<Option<String>>,
+    xbox_token: RwLock<Option<String>>,
+    xbox_token_expiry: RwLock<Option<chrono::DateTime<Utc>>>,
+    xsts_token: RwLock<Option<String>>,
 }
 
 impl MicrosoftClient {
-    pub fn new() -> anyhow::Result<Self> {
-        let http = oauth2::reqwest::ClientBuilder::new()
-            .redirect(Policy::none())
-            .build()?;
-
+    pub fn new(http: Client) -> anyhow::Result<Self> {
         let oauth = BasicClient::new(ClientId::new(CLIENT_ID.into()))
             // .set_client_secret(ClientSecret::new("secret".into()))
             .set_auth_uri(AuthUrl::new(AUTH_URL.into())?)
@@ -50,9 +56,29 @@ impl MicrosoftClient {
             refresh_token: RwLock::new(None),
             expires: RwLock::new(None),
             pkce_verifier: RwLock::new(None),
+            xbox_uhs: RwLock::new(None),
+            xbox_token: RwLock::new(None),
+            xbox_token_expiry: RwLock::new(None),
+            xsts_token: RwLock::new(None),
         };
 
         Ok(value)
+    }
+
+    /// Whether the Microsoft access token is within expiry time.
+    ///
+    /// Note that this function returns **`true`** if there is no expiry time. This is to better indicate whether a token refresh will be needed.
+    pub async fn access_token_expired(&self) -> bool {
+        let expiry = self.expires.read().await;
+
+        let expiry = match *expiry {
+            Some(time) => time,
+            None => return true,
+        };
+
+        let expiry = SystemTime::UNIX_EPOCH + Duration::from_secs(expiry);
+
+        expiry >= SystemTime::now() + Duration::from_secs(15 * 60)
     }
 
     pub async fn prompt_login(&self) -> anyhow::Result<()> {
@@ -80,11 +106,15 @@ impl MicrosoftClient {
 
         let verifier = self.pkce_verifier.write().await.take().unwrap();
 
+        let http = oauth2::reqwest::ClientBuilder::new()
+            .redirect(oauth2::reqwest::redirect::Policy::none())
+            .build()?;
+
         let token = self
             .oauth
             .exchange_code(AuthorizationCode::new(code))
             .set_pkce_verifier(verifier)
-            .request_async(&self.http)
+            .request_async(&http)
             .await?;
 
         *self.access_token.write().await = Some(token.access_token().clone());
@@ -99,5 +129,112 @@ impl MicrosoftClient {
         });
 
         Ok(())
+    }
+
+    pub async fn xbox_auth(&self) -> anyhow::Result<()> {
+        const URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
+
+        let access_token = self
+            .access_token
+            .read()
+            .await
+            .clone()
+            .ok_or(anyhow!("no Microsoft OAuth access_token present"))?;
+
+        let req = XboxAuthRequest::new(access_token.into_secret());
+
+        let res = self
+            .http
+            .post(URL)
+            .json(&req)
+            .send()
+            .await?
+            .json::<XboxAuthResponse>()
+            .await?;
+
+        ensure!(
+            res.display_claims.xui.len() == 1,
+            "multiple user hash returned"
+        );
+
+        *self.xbox_uhs.write().await = Some(res.display_claims.xui[0].uhs.clone());
+
+        *self.xbox_token.write().await = Some(res.token);
+
+        *self.xbox_token_expiry.write().await = Some(res.not_after);
+
+        Ok(())
+    }
+}
+
+#[serde_inline_default]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "PascalCase")]
+pub struct XboxAuthRequest {
+    pub properties: xbox::Properties,
+
+    #[serde_inline_default("http://auth.xboxlive.com".into())]
+    pub relying_party: String,
+
+    #[serde_inline_default("JWT".into())]
+    pub token_type: String,
+}
+
+impl XboxAuthRequest {
+    pub fn new(access_token: String) -> Self {
+        Self {
+            properties: xbox::Properties::new(access_token),
+            relying_party: "http://auth.xboxlive.com".into(),
+            token_type: "JWT".into(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "PascalCase")]
+pub struct XboxAuthResponse {
+    pub issue_instant: DateTime<Utc>,
+    pub not_after: DateTime<Utc>,
+    pub token: String,
+    pub display_claims: xbox::DisplayClaims,
+}
+
+pub mod xbox {
+    use serde::{Deserialize, Serialize};
+    use serde_inline_default::serde_inline_default;
+
+    #[serde_inline_default]
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "PascalCase")]
+    pub struct Properties {
+        #[serde_inline_default("RPS".into())]
+        pub auth_method: String,
+
+        #[serde_inline_default("user.auth.xboxlive.com".into())]
+        pub site_name: String,
+
+        pub rps_ticket: String,
+    }
+
+    impl Properties {
+        pub fn new(access_token: String) -> Self {
+            Self {
+                auth_method: "RPS".into(),
+                site_name: "user.auth.xboxlive.com".into(),
+                rps_ticket: access_token,
+            }
+        }
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct DisplayClaims {
+        pub xui: Vec<Xui>,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Xui {
+        pub uhs: String,
     }
 }

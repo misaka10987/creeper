@@ -95,9 +95,11 @@ impl Creeper {
     }
 
     pub async fn prompt_new_microsoft_user(&self) -> anyhow::Result<User> {
-        let client = MicrosoftClient::new()?;
+        let client = MicrosoftClient::new(self.http.clone())?;
 
         client.prompt_login().await?;
+
+        client.xbox_auth().await?;
 
         todo!()
     }

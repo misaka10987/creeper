@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use colored::Colorize;
 use oauth2::{
     AccessToken, AuthUrl, AuthorizationCode, ClientId, CsrfToken, EndpointNotSet, EndpointSet,
-    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
+    PkceCodeChallenge, RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
     basic::BasicClient,
 };
 use reqwest::Client;
@@ -28,20 +28,25 @@ type OauthClient = oauth2::basic::BasicClient<
     EndpointSet,
 >;
 
+#[derive(Clone, Default, Serialize, Deserialize)]
+struct Data {
+    pub access_token: Option<AccessToken>,
+    pub refresh_token: Option<RefreshToken>,
+    pub access_token_expiry: Option<u64>,
+
+    pub xbox_uhs: Option<String>,
+
+    pub xbl_token: Option<String>,
+    pub xbl_token_expiry: Option<chrono::DateTime<Utc>>,
+
+    pub xsts_token: Option<String>,
+    pub xsts_token_expiry: Option<chrono::DateTime<Utc>>,
+}
+
 pub struct MicrosoftClient {
     http: Client,
     oauth: OauthClient,
-    access_token: RwLock<Option<AccessToken>>,
-    refresh_token: RwLock<Option<RefreshToken>>,
-    expires: RwLock<Option<u64>>,
-    pkce_verifier: RwLock<Option<PkceCodeVerifier>>,
-
-    xbox_uhs: RwLock<Option<String>>,
-    xbox_token: RwLock<Option<String>>,
-    xbox_token_expiry: RwLock<Option<chrono::DateTime<Utc>>>,
-
-    xsts_token: RwLock<Option<String>>,
-    xsts_token_expiry: RwLock<Option<chrono::DateTime<Utc>>>,
+    data: RwLock<Data>,
 }
 
 impl MicrosoftClient {
@@ -55,15 +60,7 @@ impl MicrosoftClient {
         let value = Self {
             http,
             oauth,
-            access_token: RwLock::new(None),
-            refresh_token: RwLock::new(None),
-            expires: RwLock::new(None),
-            pkce_verifier: RwLock::new(None),
-            xbox_uhs: RwLock::new(None),
-            xbox_token: RwLock::new(None),
-            xbox_token_expiry: RwLock::new(None),
-            xsts_token: RwLock::new(None),
-            xsts_token_expiry: RwLock::new(None),
+            data: RwLock::new(Default::default()),
         };
 
         Ok(value)
@@ -73,9 +70,9 @@ impl MicrosoftClient {
     ///
     /// Note that this function returns **`true`** if there is no expiry time. This is to better indicate whether a token refresh will be needed.
     pub async fn access_token_expired(&self) -> bool {
-        let expiry = self.expires.read().await;
+        let data = self.data.read().await;
 
-        let expiry = match *expiry {
+        let expiry = match data.access_token_expiry {
             Some(time) => time,
             None => return true,
         };
@@ -86,9 +83,9 @@ impl MicrosoftClient {
     }
 
     pub async fn prompt_login(&self) -> anyhow::Result<()> {
-        let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
+        let mut data = self.data.write().await;
 
-        *self.pkce_verifier.write().await = Some(verifier);
+        let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
 
         let (url, csrf) = self
             .oauth
@@ -108,8 +105,6 @@ impl MicrosoftClient {
 
         let code = redirect.wait_code().await?;
 
-        let verifier = self.pkce_verifier.write().await.take().unwrap();
-
         let http = oauth2::reqwest::ClientBuilder::new()
             .redirect(oauth2::reqwest::redirect::Policy::none())
             .build()?;
@@ -121,11 +116,11 @@ impl MicrosoftClient {
             .request_async(&http)
             .await?;
 
-        *self.access_token.write().await = Some(token.access_token().clone());
+        data.access_token = Some(token.access_token().clone());
 
-        *self.refresh_token.write().await = token.refresh_token().cloned();
+        data.refresh_token = token.refresh_token().cloned();
 
-        *self.expires.write().await = token.expires_in().map(|x| {
+        data.access_token_expiry = token.expires_in().map(|x| {
             (SystemTime::now() + x)
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -138,10 +133,10 @@ impl MicrosoftClient {
     pub async fn xbox_auth(&self) -> anyhow::Result<()> {
         const URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 
-        let access_token = self
+        let mut data = self.data.write().await;
+
+        let access_token = data
             .access_token
-            .read()
-            .await
             .clone()
             .ok_or(anyhow!("no Microsoft OAuth access_token present"))?;
 
@@ -156,11 +151,11 @@ impl MicrosoftClient {
             .json::<XboxAuthResponse>()
             .await?;
 
-        *self.xbox_uhs.write().await = Some(res.display_claims.uhs()?);
+        data.xbox_uhs = Some(res.display_claims.uhs()?);
 
-        *self.xbox_token.write().await = Some(res.token);
+        data.xbl_token = Some(res.token);
 
-        *self.xbox_token_expiry.write().await = Some(res.not_after);
+        data.xbl_token_expiry = Some(res.not_after);
 
         Ok(())
     }
@@ -168,15 +163,14 @@ impl MicrosoftClient {
     pub async fn xsts_auth(&self) -> anyhow::Result<()> {
         const URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 
-        let xbl_token = self
-            .xbox_token
-            .read()
-            .await
+        let mut data = self.data.write().await;
+
+        let xbl_token = data
+            .xbl_token
             .clone()
             .ok_or(anyhow!("no Xbox Live token present"))?;
 
-        let uhs = self.xbox_uhs.read().await;
-        let uhs = uhs.as_ref().ok_or(anyhow!("no Xbox user hash"))?;
+        let uhs = data.xbox_uhs.as_ref().ok_or(anyhow!("no Xbox user hash"))?;
 
         let req = XstsAuthRequest::new(xbl_token);
 
@@ -191,8 +185,8 @@ impl MicrosoftClient {
 
         ensure!(*uhs == res.display_claims.uhs()?, "Xbox user hash mismatch");
 
-        *self.xsts_token.write().await = Some(res.token);
-        *self.xbox_token_expiry.write().await = Some(res.not_after);
+        data.xsts_token = Some(res.token);
+        data.xsts_token_expiry = Some(res.not_after);
 
         Ok(())
     }

@@ -1,16 +1,12 @@
-use std::{
-    collections::HashMap,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use colored::Colorize;
-use inquire::Text;
 use oauth2::{
-    AccessToken, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet,
-    EndpointSet, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RefreshToken, Scope,
-    TokenResponse, TokenUrl, basic::BasicClient, reqwest::redirect::Policy,
+    AccessToken, AuthUrl, AuthorizationCode, ClientId, CsrfToken, EndpointNotSet, EndpointSet,
+    PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, RefreshToken, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, reqwest::redirect::Policy,
 };
-use tokio::{sync::RwLock, task::spawn_blocking};
+use tokio::sync::RwLock;
 
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 
@@ -74,15 +70,13 @@ impl MicrosoftClient {
             .set_pkce_challenge(challenge)
             .url();
 
+        let redirect = local_redirect_uri::Server::new(5555, csrf.into_secret());
+
         eprintln!("{} {url}", "Open".bold().cyan());
 
         open::that_detached(url.as_str())?;
 
-        let code = spawn_blocking(|| Text::new("Code:").prompt()).await??;
-
-        let code = url::form_urlencoded::parse(code.as_bytes()).collect::<HashMap<_, _>>();
-
-        let code = code["code"].to_string();
+        let code = redirect.wait_code().await?;
 
         let verifier = self.pkce_verifier.write().await.take().unwrap();
 

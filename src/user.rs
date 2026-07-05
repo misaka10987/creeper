@@ -101,6 +101,8 @@ impl Creeper {
 
         client.xbox_auth().await?;
 
+        client.xsts_auth().await?;
+
         todo!()
     }
 

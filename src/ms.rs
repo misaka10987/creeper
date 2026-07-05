@@ -12,6 +12,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use tokio::sync::RwLock;
+use url::Url;
 
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 
@@ -38,7 +39,9 @@ pub struct MicrosoftClient {
     xbox_uhs: RwLock<Option<String>>,
     xbox_token: RwLock<Option<String>>,
     xbox_token_expiry: RwLock<Option<chrono::DateTime<Utc>>>,
+
     xsts_token: RwLock<Option<String>>,
+    xsts_token_expiry: RwLock<Option<chrono::DateTime<Utc>>>,
 }
 
 impl MicrosoftClient {
@@ -60,6 +63,7 @@ impl MicrosoftClient {
             xbox_token: RwLock::new(None),
             xbox_token_expiry: RwLock::new(None),
             xsts_token: RwLock::new(None),
+            xsts_token_expiry: RwLock::new(None),
         };
 
         Ok(value)
@@ -152,15 +156,42 @@ impl MicrosoftClient {
             .json::<XboxAuthResponse>()
             .await?;
 
-        ensure!(
-            res.display_claims.xui.len() == 1,
-            "multiple user hash returned"
-        );
-
-        *self.xbox_uhs.write().await = Some(res.display_claims.xui[0].uhs.clone());
+        *self.xbox_uhs.write().await = Some(res.display_claims.uhs()?);
 
         *self.xbox_token.write().await = Some(res.token);
 
+        *self.xbox_token_expiry.write().await = Some(res.not_after);
+
+        Ok(())
+    }
+
+    pub async fn xsts_auth(&self) -> anyhow::Result<()> {
+        const URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
+
+        let xbl_token = self
+            .xbox_token
+            .read()
+            .await
+            .clone()
+            .ok_or(anyhow!("no Xbox Live token present"))?;
+
+        let uhs = self.xbox_uhs.read().await;
+        let uhs = uhs.as_ref().ok_or(anyhow!("no Xbox user hash"))?;
+
+        let req = XstsAuthRequest::new(xbl_token);
+
+        let res = self
+            .http
+            .post(URL)
+            .json(&req)
+            .send()
+            .await?
+            .json::<XboxAuthResponse>()
+            .await?;
+
+        ensure!(*uhs == res.display_claims.uhs()?, "Xbox user hash mismatch");
+
+        *self.xsts_token.write().await = Some(res.token);
         *self.xbox_token_expiry.write().await = Some(res.not_after);
 
         Ok(())
@@ -200,6 +231,7 @@ pub struct XboxAuthResponse {
 }
 
 pub mod xbox {
+    use anyhow::ensure;
     use serde::{Deserialize, Serialize};
     use serde_inline_default::serde_inline_default;
 
@@ -232,9 +264,66 @@ pub mod xbox {
         pub xui: Vec<Xui>,
     }
 
+    impl DisplayClaims {
+        pub fn uhs(self) -> anyhow::Result<String> {
+            ensure!(self.xui.len() == 1, "multiple user hash returned");
+
+            let xui = self.xui.into_iter().next().unwrap();
+
+            Ok(xui.uhs)
+        }
+    }
+
     #[derive(Clone, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub struct Xui {
         pub uhs: String,
+    }
+}
+
+#[serde_inline_default]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "PascalCase")]
+pub struct XstsAuthRequest {
+    pub properties: xsts::Properties,
+
+    #[serde_inline_default("rp://api.minecraftservices.com/".parse().unwrap())]
+    pub relying_party: Url,
+
+    #[serde_inline_default("JWT".into())]
+    pub token_type: String,
+}
+
+impl XstsAuthRequest {
+    pub fn new(xbl_token: String) -> Self {
+        Self {
+            properties: xsts::Properties::new(xbl_token),
+            relying_party: "rp://api.minecraftservices.com/".parse().unwrap(),
+            token_type: "JWT".into(),
+        }
+    }
+}
+
+pub mod xsts {
+    use serde::{Deserialize, Serialize};
+    use serde_inline_default::serde_inline_default;
+
+    #[serde_inline_default]
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "PascalCase")]
+    pub struct Properties {
+        #[serde_inline_default("RETAIL".into())]
+        pub sandbox_id: String,
+
+        pub user_tokens: Vec<String>,
+    }
+
+    impl Properties {
+        pub fn new(xbl_token: String) -> Self {
+            Self {
+                sandbox_id: "RETAIL".into(),
+                user_tokens: vec![xbl_token],
+            }
+        }
     }
 }

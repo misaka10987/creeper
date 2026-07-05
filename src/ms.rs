@@ -3,6 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use colored::Colorize;
 use inquire::Text;
 use oauth2::{
     AccessToken, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet,
@@ -73,7 +74,9 @@ impl MicrosoftClient {
             .set_pkce_challenge(challenge)
             .url();
 
-        eprintln!("{url}");
+        eprintln!("{} {url}", "Open".bold().cyan());
+
+        open::that_detached(url.as_str())?;
 
         let code = spawn_blocking(|| Text::new("Code:").prompt()).await??;
 

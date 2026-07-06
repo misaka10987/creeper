@@ -19,7 +19,7 @@ use tokio::{
     fs::{read_to_string, write},
     sync::RwLock,
 };
-use tracing::error;
+use tracing::{debug, error, info, trace};
 use url::Url;
 use uuid::Uuid;
 
@@ -161,8 +161,12 @@ impl MicrosoftClient {
         if let Some(token) = &self.data.read().await.access_token
             && !self.access_token_expired().await
         {
+            trace!("Microsoft session is valid, using cached access_token");
+
             return Ok(token.clone());
         }
+
+        info!("Microsoft session is invalid, refreshing");
 
         self.refresh_ms_token().await?;
 
@@ -173,8 +177,12 @@ impl MicrosoftClient {
 
     pub async fn get_ms_refresh_token(&self) -> anyhow::Result<RefreshToken> {
         if let Some(token) = &self.data.read().await.refresh_token {
+            trace!("using cached Microsoft OAuth refresh_token");
+
             return Ok(token.clone());
         }
+
+        info!("no Microsoft OAuth refresh_token, prompting login");
 
         self.prompt_login().await?;
 
@@ -256,6 +264,8 @@ impl MicrosoftClient {
 
         let code = redirect.wait_code().await?;
 
+        info!("logged in, proceeding to PKCE token exchange");
+
         let http = oauth2::reqwest::ClientBuilder::new()
             .redirect(oauth2::reqwest::redirect::Policy::none())
             .build()?;
@@ -280,8 +290,12 @@ impl MicrosoftClient {
         if let Some(token) = &self.data.read().await.xbl_token
             && !self.xbl_token_expired().await
         {
+            trace!("Xbox Live session is valid, using cached token");
+
             return Ok(token.clone());
         }
+
+        info!("refreshing Xbox Live token");
 
         self.xbox_auth().await?;
 
@@ -294,8 +308,12 @@ impl MicrosoftClient {
         if let Some(token) = &self.data.read().await.xsts_token
             && !self.xsts_token_expired().await
         {
+            trace!("using cached XSTS token");
+
             return Ok(token.clone());
         }
+
+        info!("refreshing XSTS token");
 
         self.xsts_auth().await?;
 
@@ -308,8 +326,12 @@ impl MicrosoftClient {
         if let Some(token) = &self.data.read().await.mc_jwt
             && !self.mc_jwt_expired().await
         {
+            trace!("Minecraft session is valid, using cached token");
+
             return Ok(token.clone());
         }
+
+        info!("refreshing Minecraft JWT");
 
         self.mc_login().await?;
 
@@ -337,10 +359,12 @@ impl MicrosoftClient {
             .json::<XboxAuthResponse>()
             .await?;
 
-        data.xbox_uhs = Some(res.display_claims.uhs()?);
+        let uhs = res.display_claims.uhs()?;
 
+        info!("authenticated with Xbox Live (user hash {})", uhs);
+
+        data.xbox_uhs = Some(uhs);
         data.xbl_token = Some(res.token);
-
         data.xbl_token_expiry = Some(res.not_after);
 
         Ok(())
@@ -353,7 +377,7 @@ impl MicrosoftClient {
 
         let mut data = self.data.write().await;
 
-        let uhs = data.xbox_uhs.as_ref().ok_or(anyhow!("no Xbox user hash"))?;
+        let xbox_uhs = data.xbox_uhs.as_ref().ok_or(anyhow!("no Xbox user hash"))?;
 
         let req = XstsAuthRequest::new(xbl_token);
 
@@ -367,7 +391,11 @@ impl MicrosoftClient {
             .json::<XboxAuthResponse>()
             .await?;
 
-        ensure!(*uhs == res.display_claims.uhs()?, "Xbox user hash mismatch");
+        let uhs = res.display_claims.uhs()?;
+
+        ensure!(*xbox_uhs == uhs, "Xbox user hash mismatch");
+
+        info!("XSTS authorized (user hash {})", uhs);
 
         data.xsts_token = Some(res.token);
         data.xsts_token_expiry = Some(res.not_after);
@@ -441,7 +469,15 @@ impl MicrosoftClient {
             .json::<McStoreResponse>()
             .await?;
 
-        Ok(!res.items.is_empty())
+        let own = !res.items.is_empty();
+
+        if own {
+            debug!("user owns a Minecraft purchase");
+        } else {
+            debug!("user does not own a Minecraft purchase");
+        }
+
+        Ok(own)
     }
 
     pub async fn sync_mc_user(&self) -> anyhow::Result<()> {

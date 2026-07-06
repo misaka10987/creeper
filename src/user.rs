@@ -108,7 +108,11 @@ impl Creeper {
 
         client.save().await?;
 
-        Ok(User::Microsoft { uuid })
+        let user = User::Microsoft { uuid };
+
+        self.user.add(user.clone()).await?;
+
+        Ok(user)
     }
 
     pub async fn prompt_new_offline_user(&self) -> anyhow::Result<User> {

@@ -103,6 +103,16 @@ impl Creeper {
 
         client.xsts_auth().await?;
 
+        client.mc_login().await?;
+
+        if client.owns_minecraft().await? {
+            eprintln!("has minecraft");
+        }
+
+        let (uuid, name) = client.get_mc_user().await?;
+
+        eprintln!("{uuid} {name}");
+
         todo!()
     }
 

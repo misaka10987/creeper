@@ -1,4 +1,7 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    fmt::Display,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
@@ -13,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use tokio::sync::RwLock;
 use url::Url;
+use uuid::Uuid;
 
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 
@@ -41,6 +45,12 @@ struct Data {
 
     pub xsts_token: Option<String>,
     pub xsts_token_expiry: Option<chrono::DateTime<Utc>>,
+
+    pub mc_jwt: Option<String>,
+    pub mc_jwt_expiry: Option<u64>,
+
+    pub mc_uuid: Option<Uuid>,
+    pub mc_name: Option<String>,
 }
 
 pub struct MicrosoftClient {
@@ -79,7 +89,7 @@ impl MicrosoftClient {
 
         let expiry = SystemTime::UNIX_EPOCH + Duration::from_secs(expiry);
 
-        expiry >= SystemTime::now() + Duration::from_secs(15 * 60)
+        SystemTime::now() + Duration::from_secs(15 * 60) >= expiry
     }
 
     pub async fn prompt_login(&self) -> anyhow::Result<()> {
@@ -120,12 +130,7 @@ impl MicrosoftClient {
 
         data.refresh_token = token.refresh_token().cloned();
 
-        data.access_token_expiry = token.expires_in().map(|x| {
-            (SystemTime::now() + x)
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-        });
+        data.access_token_expiry = token.expires_in().map(|x| calc_expiry(x.as_secs()));
 
         Ok(())
     }
@@ -189,6 +194,108 @@ impl MicrosoftClient {
         data.xsts_token_expiry = Some(res.not_after);
 
         Ok(())
+    }
+
+    pub async fn xbl_token_expired(&self) -> bool {
+        let data = self.data.read().await;
+
+        let expiry = match data.xbl_token_expiry {
+            Some(time) => time,
+            None => return true,
+        };
+
+        Utc::now() >= expiry
+    }
+
+    pub async fn xsts_token_expired(&self) -> bool {
+        let data = self.data.read().await;
+
+        let expiry = match data.xsts_token_expiry {
+            Some(time) => time,
+            None => return true,
+        };
+
+        Utc::now() >= expiry
+    }
+
+    pub async fn mc_login(&self) -> anyhow::Result<()> {
+        const URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
+
+        let mut data = self.data.write().await;
+
+        let uhs = data.xbox_uhs.as_ref().ok_or(anyhow!("no Xbox user hash"))?;
+
+        let xsts_token = data
+            .xsts_token
+            .as_ref()
+            .ok_or(anyhow!("no XSTS token present"))?;
+
+        let req = McLoginRequest::new(uhs, xsts_token);
+
+        let res = self
+            .http
+            .post(URL)
+            .json(&req)
+            .send()
+            .await?
+            .json::<McLoginResponse>()
+            .await?;
+
+        data.mc_jwt = Some(res.access_token);
+        data.mc_jwt_expiry = Some(calc_expiry(res.expires_in));
+
+        Ok(())
+    }
+
+    pub async fn owns_minecraft(&self) -> anyhow::Result<bool> {
+        const URL: &str = "https://api.minecraftservices.com/entitlements/mcstore";
+
+        let data = self.data.read().await;
+
+        let token = data
+            .mc_jwt
+            .as_ref()
+            .ok_or(anyhow!("no Minecraft JWT present"))?;
+
+        let res = self
+            .http
+            .get(URL)
+            .bearer_auth(token)
+            .send()
+            .await?
+            .json::<McStoreResponse>()
+            .await?;
+
+        Ok(!res.items.is_empty())
+    }
+
+    pub async fn get_mc_user(&self) -> anyhow::Result<(Uuid, String)> {
+        const URL: &str = "https://api.minecraftservices.com/minecraft/profile";
+
+        let mut data = self.data.write().await;
+
+        if let (Some(uuid), Some(name)) = (data.mc_uuid, data.mc_name.clone()) {
+            return Ok((uuid, name));
+        }
+
+        let token = data
+            .mc_jwt
+            .as_ref()
+            .ok_or(anyhow!("no Minecraft JWT present"))?;
+
+        let res = self
+            .http
+            .get(URL)
+            .bearer_auth(token)
+            .send()
+            .await?
+            .json::<McProfileResponse>()
+            .await?;
+
+        data.mc_uuid = Some(res.id);
+        data.mc_name = Some(res.name.clone());
+
+        Ok((res.id, res.name))
     }
 }
 
@@ -320,4 +427,81 @@ pub mod xsts {
             }
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct McLoginRequest {
+    pub identity_token: String,
+}
+
+impl McLoginRequest {
+    pub fn new(uhs: impl Display, xsts_token: impl Display) -> Self {
+        Self {
+            identity_token: format!("XBL3.0 x={uhs};{xsts_token}"),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct McLoginResponse {
+    pub username: String,
+    pub roles: Vec<String>,
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: u64,
+}
+
+fn calc_expiry(expires_in: u64) -> u64 {
+    (SystemTime::now() + Duration::from_secs(expires_in))
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct McStoreResponse {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<mc::Item>,
+
+    pub signature: String,
+
+    pub key_id: String,
+}
+
+pub mod mc {
+    use serde::{Deserialize, Serialize};
+    use url::Url;
+    use uuid::Uuid;
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct Item {
+        pub name: String,
+        pub signature: String,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    pub struct Skin {
+        pub id: Uuid,
+        pub state: String,
+        pub url: Url,
+        pub variant: String,
+        pub alias: String,
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct McProfileResponse {
+    #[serde(with = "uuid::serde::simple")]
+    pub id: Uuid,
+
+    pub name: String,
+
+    pub skins: Vec<mc::Skin>,
+
+    pub capes: Vec<serde_json::Value>,
 }

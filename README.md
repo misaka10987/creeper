@@ -66,8 +66,6 @@ creeper 是一个包管理器命令行工具。就像其他包管理器，它可
 
 creeper 的 UI 基于命令行（不要害怕！）。如果你会操作命令行（其实很简单！），使用过其他的包管理器，或者愿意花一点点时间学习的话，creeper 完全可以作为你日常游玩 Minecraft 用的启动器。同时，creeper 基于 MIT 协议开源。这意味着如果你是 Minecraft 启动器作者或者软件开发者，你完全可以将 creeper 嵌入你的作品中，为你的用户提供更好的 Minecraft 模组游玩体验。
 
-## 关于微软账户支持
+---
 
-将无限期地推迟支持使用微软账户登录游戏。这是因为作者 [misaka10987](mailto:misaka10987@outlook.com) 无法获取免费版 Azure 账户。微软设定应用开发者必须在 Azure 上注册应用，并在 OAuth 标准授权流中提交 `client_id` 才能获得授权。由于这一政策，没有 Azure 账户，不可能为启动器实现登录微软账户的功能。
-
-如果你知道解决方法，欢迎联系作者。不胜感激。
+NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.

@@ -56,5 +56,5 @@ parse-display = "0.11.0"
 uuid = { version = "1.23.4", features = ["serde"] }
 oauth2 = "5.0.0"
 open = "5.3.6"
-local-redirect-uri = { path = "../local-redirect-uri" }
+local-redirect-uri = "0.1.0"
 chrono = { version = "0.4.45", features = ["serde"] }

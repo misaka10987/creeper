@@ -1739,6 +1739,8 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "local-redirect-uri"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36e789bd4488cb008b49852f0a450e3aaca0a67a9aa3e1cbbc0771c8cc9fdcdc"
 dependencies = [
  "anyhow",
  "axum",

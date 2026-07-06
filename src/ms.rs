@@ -1,5 +1,6 @@
 use std::{
     fmt::Display,
+    path::PathBuf,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -14,10 +15,15 @@ use oauth2::{
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
-use tokio::sync::RwLock;
+use tokio::{
+    fs::{read_to_string, write},
+    sync::RwLock,
+};
 use tracing::error;
 use url::Url;
 use uuid::Uuid;
+
+use crate::path::creeper_data_dir;
 
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 
@@ -61,6 +67,80 @@ pub struct MicrosoftClient {
 }
 
 impl MicrosoftClient {
+    fn ms_scopes() -> Vec<Scope> {
+        vec![
+            Scope::new("XboxLive.signin".into()),
+            Scope::new("offline_access".into()),
+        ]
+    }
+
+    fn http_oauth() -> anyhow::Result<oauth2::reqwest::Client> {
+        let client = oauth2::reqwest::ClientBuilder::new()
+            .redirect(oauth2::reqwest::redirect::Policy::none())
+            .build()?;
+
+        Ok(client)
+    }
+
+    async fn storage_path(&self) -> anyhow::Result<PathBuf> {
+        let uuid = self
+            .data
+            .read()
+            .await
+            .mc_uuid
+            .ok_or(anyhow!("no Minecraft UUID, cannot determine storage path"))?;
+
+        let hash = blake3::hash(uuid.as_bytes()).to_string();
+
+        let path = creeper_data_dir()?
+            .join("microsoft")
+            .join(hash)
+            .with_added_extension("json");
+
+        Ok(path)
+    }
+
+    pub async fn load(&self) -> anyhow::Result<()> {
+        let path = self.storage_path().await?;
+
+        let json = read_to_string(path).await?;
+
+        let data = serde_json::from_str::<Data>(&json)?;
+
+        *self.data.write().await = data;
+
+        Ok(())
+    }
+
+    pub async fn save(&self) -> anyhow::Result<()> {
+        let path = self.storage_path().await?;
+
+        let data = self.data.read().await;
+
+        let json = serde_json::to_string(&*data)?;
+
+        write(path, json).await?;
+
+        Ok(())
+    }
+
+    pub async fn set_uuid(&self, uuid: Uuid) {
+        let mut data = self.data.write().await;
+
+        data.mc_uuid = Some(uuid);
+    }
+
+    // pub async fn reset_all(&self) {
+    //     let uuid = self.get_uuid().await;
+
+    //     let mut data = self.data.write().await;
+
+    //     *data = Data {
+    //         mc_uuid: uuid,
+    //         ..Default::default()
+    //     };
+    // }
+
     pub fn new(http: Client) -> anyhow::Result<Self> {
         let oauth = BasicClient::new(ClientId::new(CLIENT_ID.into()))
             // .set_client_secret(ClientSecret::new("secret".into()))
@@ -77,6 +157,53 @@ impl MicrosoftClient {
         Ok(value)
     }
 
+    pub async fn get_ms_access_token(&self) -> anyhow::Result<AccessToken> {
+        if let Some(token) = &self.data.read().await.access_token
+            && !self.access_token_expired().await
+        {
+            return Ok(token.clone());
+        }
+
+        self.refresh_ms_token().await?;
+
+        let token = self.data.read().await.access_token.clone().unwrap();
+
+        Ok(token)
+    }
+
+    pub async fn get_ms_refresh_token(&self) -> anyhow::Result<RefreshToken> {
+        if let Some(token) = &self.data.read().await.refresh_token {
+            return Ok(token.clone());
+        }
+
+        self.prompt_login().await?;
+
+        let token = self.data.read().await.refresh_token.clone().unwrap();
+
+        Ok(token)
+    }
+
+    pub async fn refresh_ms_token(&self) -> anyhow::Result<()> {
+        let mut data = self.data.write().await;
+
+        let refresh = self.get_ms_refresh_token().await?;
+
+        let token = self
+            .oauth
+            .exchange_refresh_token(&refresh)
+            .add_scopes(Self::ms_scopes())
+            .request_async(&Self::http_oauth()?)
+            .await?;
+
+        data.access_token = Some(token.access_token().clone());
+
+        data.refresh_token = token.refresh_token().cloned();
+
+        data.access_token_expiry = token.expires_in().map(|x| calc_expiry(x.as_secs()));
+
+        Ok(())
+    }
+
     /// Whether the Microsoft access token is within expiry time.
     ///
     /// Note that this function returns **`true`** if there is no expiry time. This is to better indicate whether a token refresh will be needed.
@@ -84,6 +211,19 @@ impl MicrosoftClient {
         let data = self.data.read().await;
 
         let expiry = match data.access_token_expiry {
+            Some(time) => time,
+            None => return true,
+        };
+
+        let expiry = SystemTime::UNIX_EPOCH + Duration::from_secs(expiry);
+
+        SystemTime::now() + Duration::from_secs(15 * 60) >= expiry
+    }
+
+    pub async fn mc_jwt_expired(&self) -> bool {
+        let data = self.data.read().await;
+
+        let expiry = match data.mc_jwt_expiry {
             Some(time) => time,
             None => return true,
         };
@@ -136,15 +276,54 @@ impl MicrosoftClient {
         Ok(())
     }
 
+    pub async fn get_xbl_token(&self) -> anyhow::Result<String> {
+        if let Some(token) = &self.data.read().await.xbl_token
+            && !self.xbl_token_expired().await
+        {
+            return Ok(token.clone());
+        }
+
+        self.xbox_auth().await?;
+
+        let token = self.data.read().await.xbl_token.clone().unwrap();
+
+        Ok(token)
+    }
+
+    pub async fn get_xsts_token(&self) -> anyhow::Result<String> {
+        if let Some(token) = &self.data.read().await.xsts_token
+            && !self.xsts_token_expired().await
+        {
+            return Ok(token.clone());
+        }
+
+        self.xsts_auth().await?;
+
+        let token = self.data.read().await.xsts_token.clone().unwrap();
+
+        Ok(token)
+    }
+
+    pub async fn get_mc_jwt(&self) -> anyhow::Result<String> {
+        if let Some(token) = &self.data.read().await.mc_jwt
+            && !self.mc_jwt_expired().await
+        {
+            return Ok(token.clone());
+        }
+
+        self.mc_login().await?;
+
+        let token = self.data.read().await.mc_jwt.clone().unwrap();
+
+        Ok(token)
+    }
+
     pub async fn xbox_auth(&self) -> anyhow::Result<()> {
         const URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 
-        let mut data = self.data.write().await;
+        let access_token = self.get_ms_access_token().await?;
 
-        let access_token = data
-            .access_token
-            .clone()
-            .ok_or(anyhow!("no Microsoft OAuth access_token present"))?;
+        let mut data = self.data.write().await;
 
         let req = XboxAuthRequest::new(access_token.into_secret());
 
@@ -170,12 +349,9 @@ impl MicrosoftClient {
     pub async fn xsts_auth(&self) -> anyhow::Result<()> {
         const URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 
-        let mut data = self.data.write().await;
+        let xbl_token = self.get_xbl_token().await?;
 
-        let xbl_token = data
-            .xbl_token
-            .clone()
-            .ok_or(anyhow!("no Xbox Live token present"))?;
+        let mut data = self.data.write().await;
 
         let uhs = data.xbox_uhs.as_ref().ok_or(anyhow!("no Xbox user hash"))?;
 
@@ -224,14 +400,13 @@ impl MicrosoftClient {
     pub async fn mc_login(&self) -> anyhow::Result<()> {
         const URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 
+        error!("TODO: waiting for Mojang approval on Minecraft services API privilege");
+
+        let xsts_token = self.get_xsts_token().await?;
+
         let mut data = self.data.write().await;
 
         let uhs = data.xbox_uhs.as_ref().ok_or(anyhow!("no Xbox user hash"))?;
-
-        let xsts_token = data
-            .xsts_token
-            .as_ref()
-            .ok_or(anyhow!("no XSTS token present"))?;
 
         let req = McLoginRequest::new(uhs, xsts_token);
 
@@ -254,17 +429,12 @@ impl MicrosoftClient {
     pub async fn owns_minecraft(&self) -> anyhow::Result<bool> {
         const URL: &str = "https://api.minecraftservices.com/entitlements/mcstore";
 
-        let data = self.data.read().await;
-
-        let token = data
-            .mc_jwt
-            .as_ref()
-            .ok_or(anyhow!("no Minecraft JWT present"))?;
+        let mc_jwt = self.get_mc_jwt().await?;
 
         let res = self
             .http
             .get(URL)
-            .bearer_auth(token)
+            .bearer_auth(mc_jwt)
             .send()
             .await?
             .error_for_status()?
@@ -274,24 +444,17 @@ impl MicrosoftClient {
         Ok(!res.items.is_empty())
     }
 
-    pub async fn get_mc_user(&self) -> anyhow::Result<(Uuid, String)> {
+    pub async fn sync_mc_user(&self) -> anyhow::Result<()> {
         const URL: &str = "https://api.minecraftservices.com/minecraft/profile";
 
+        let mc_jwt = self.get_mc_jwt().await?;
+
         let mut data = self.data.write().await;
-
-        if let (Some(uuid), Some(name)) = (data.mc_uuid, data.mc_name.clone()) {
-            return Ok((uuid, name));
-        }
-
-        let token = data
-            .mc_jwt
-            .as_ref()
-            .ok_or(anyhow!("no Minecraft JWT present"))?;
 
         let res = self
             .http
             .get(URL)
-            .bearer_auth(token)
+            .bearer_auth(mc_jwt)
             .send()
             .await?
             .error_for_status()?
@@ -299,9 +462,33 @@ impl MicrosoftClient {
             .await?;
 
         data.mc_uuid = Some(res.id);
-        data.mc_name = Some(res.name.clone());
+        data.mc_name = Some(res.name);
 
-        Ok((res.id, res.name))
+        Ok(())
+    }
+
+    pub async fn get_mc_uuid(&self) -> anyhow::Result<Uuid> {
+        if let Some(uuid) = self.data.read().await.mc_uuid {
+            return Ok(uuid);
+        }
+
+        self.sync_mc_user().await?;
+
+        let uuid = self.data.read().await.mc_uuid.unwrap();
+
+        Ok(uuid)
+    }
+
+    pub async fn get_mc_name(&self) -> anyhow::Result<String> {
+        if let Some(name) = self.data.read().await.mc_name.clone() {
+            return Ok(name);
+        }
+
+        self.sync_mc_user().await?;
+
+        let name = self.data.read().await.mc_name.clone().unwrap();
+
+        Ok(name)
     }
 }
 

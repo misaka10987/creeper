@@ -24,8 +24,8 @@ pub enum User {
     #[display("Offline Player {name}")]
     Offline { name: String },
 
-    #[display("Microsoft Account {account} ({uuid})")]
-    Microsoft { account: String, uuid: Uuid },
+    #[display("Microsoft Account ({uuid})")]
+    Microsoft { uuid: Uuid },
 
     #[display("authlib-injector Account {account} ({uuid}) on {server}")]
     AuthlibInjector {
@@ -100,11 +100,15 @@ impl Creeper {
 
         client.prompt_login().await?;
 
-        client.xbox_auth().await?;
+        if !client.owns_minecraft().await? {
+            bail!("the Microsoft account does not own Minecraft, please purchase it first");
+        }
 
-        client.xsts_auth().await?;
+        let uuid = client.get_mc_uuid().await?;
 
-        todo!("waiting for Mojang approval on Minecraft services API privilege")
+        client.save().await?;
+
+        Ok(User::Microsoft { uuid })
     }
 
     pub async fn prompt_new_offline_user(&self) -> anyhow::Result<User> {
@@ -221,6 +225,32 @@ impl Creeper {
         Ok(install)
     }
 
+    async fn user_install_microsoft(&self, uuid: Uuid) -> anyhow::Result<Install> {
+        let client = MicrosoftClient::new(self.http.clone())?;
+        client.set_uuid(uuid).await;
+        client.load().await?;
+
+        let uuid = client.get_mc_uuid().await?;
+        let name = client.get_mc_name().await?;
+        let token = client.get_mc_jwt().await?;
+
+        client.save().await?;
+
+        let install = Install {
+            mc_flag: vec![
+                "--username".into(),
+                name,
+                "--uuid".into(),
+                uuid.as_simple().to_string(),
+                "--accessToken".into(),
+                token,
+            ],
+            ..Default::default()
+        };
+
+        Ok(install)
+    }
+
     async fn user_install_authlib_injector(
         &self,
         server: Url,
@@ -301,7 +331,7 @@ impl Creeper {
                 self.user_install_authlib_injector(server, account, uuid)
                     .await?
             }
-            _ => todo!(),
+            User::Microsoft { uuid } => self.user_install_microsoft(uuid).await?,
         };
 
         Ok(install)

@@ -14,7 +14,8 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    Artifact, Checksum, Creeper, Install, YggdrasilClient, ms::MicrosoftClient, path::creeper_config_dir, util::TomlFile,
+    Artifact, Checksum, Creeper, Install, YggdrasilClient, ms::MicrosoftClient,
+    path::creeper_config_dir, util::TomlFile,
 };
 
 #[derive(Clone, PartialEq, Eq, Display, Serialize, Deserialize)]
@@ -103,17 +104,7 @@ impl Creeper {
 
         client.xsts_auth().await?;
 
-        client.mc_login().await?;
-
-        if client.owns_minecraft().await? {
-            eprintln!("has minecraft");
-        }
-
-        let (uuid, name) = client.get_mc_user().await?;
-
-        eprintln!("{uuid} {name}");
-
-        todo!()
+        todo!("waiting for Mojang approval on Minecraft services API privilege")
     }
 
     pub async fn prompt_new_offline_user(&self) -> anyhow::Result<User> {

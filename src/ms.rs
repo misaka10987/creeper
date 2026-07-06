@@ -15,6 +15,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use tokio::sync::RwLock;
+use tracing::error;
 use url::Url;
 use uuid::Uuid;
 
@@ -153,6 +154,7 @@ impl MicrosoftClient {
             .json(&req)
             .send()
             .await?
+            .error_for_status()?
             .json::<XboxAuthResponse>()
             .await?;
 
@@ -185,6 +187,7 @@ impl MicrosoftClient {
             .json(&req)
             .send()
             .await?
+            .error_for_status()?
             .json::<XboxAuthResponse>()
             .await?;
 
@@ -238,6 +241,7 @@ impl MicrosoftClient {
             .json(&req)
             .send()
             .await?
+            .error_for_status()?
             .json::<McLoginResponse>()
             .await?;
 
@@ -263,6 +267,7 @@ impl MicrosoftClient {
             .bearer_auth(token)
             .send()
             .await?
+            .error_for_status()?
             .json::<McStoreResponse>()
             .await?;
 
@@ -289,6 +294,7 @@ impl MicrosoftClient {
             .bearer_auth(token)
             .send()
             .await?
+            .error_for_status()?
             .json::<McProfileResponse>()
             .await?;
 
@@ -354,7 +360,7 @@ pub mod xbox {
             Self {
                 auth_method: "RPS".into(),
                 site_name: "user.auth.xboxlive.com".into(),
-                rps_ticket: access_token,
+                rps_ticket: format!("d={access_token}"),
             }
         }
     }

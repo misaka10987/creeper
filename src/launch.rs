@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     iter::once,
     path::{Path, PathBuf},
 };
@@ -32,13 +33,19 @@ impl Creeper {
         let lib_path = self.game_env_dir().await?.join("lib");
         create_dir_all(&lib_path).await?;
 
+        fn prefixed(
+            map: &HashMap<PathBuf, Artifact>,
+            prefix: &impl AsRef<Path>,
+        ) -> impl Iterator<Item = String> {
+            let prefix = prefix.as_ref();
+            map.keys().map(|k| prefix.join(k).display().to_string())
+        }
+
         let mut cp = vec![];
 
-        for (path, art) in install.java_lib_class {
-            let path = lib_path.join(path);
-            self.retrieve_artifact_to(&art, &path).await?;
-            cp.push(path.display().to_string());
-        }
+        cp.extend(prefixed(&install.java_lib_class, &lib_path));
+        self.batch_retrieve_artifact_to(install.java_lib_class, &lib_path)
+            .await?;
 
         if let Some(mc_jar) = install.mc_jar
             && !install.disable_mc_jar
@@ -55,21 +62,17 @@ impl Creeper {
 
         let mut p = vec![];
 
-        for (path, art) in install.java_lib_mod {
-            let path = lib_path.join(path);
-            self.retrieve_artifact_to(&art, &path).await?;
-            p.push(path.display().to_string());
-        }
+        p.extend(prefixed(&install.java_lib_mod, &lib_path));
+        self.batch_retrieve_artifact_to(install.java_lib_mod, &lib_path)
+            .await?;
 
         let p = p.join(":");
         if !p.is_empty() {
             cmd.arg("--module-path").arg(p);
         }
 
-        for (path, art) in install.java_lib_file {
-            let path = lib_path.join(path);
-            self.retrieve_artifact_to(&art, &path).await?;
-        }
+        self.batch_retrieve_artifact_to(install.java_lib_file, &lib_path)
+            .await?;
 
         for (file, arg) in install.java_agent {
             let art = self.retrieve_artifact(&file).await?;
@@ -97,12 +100,15 @@ impl Creeper {
             Ok(path)
         }
 
-        for (_path, art) in &install.mc_asset {
-            let sha1 = art.sha1.as_ref().ok_or(anyhow!("missing SHA-1 checksum"))?;
-            let path = asset_path.join("objects").join(sha1_indexed_path(&sha1)?);
+        let mut assets = HashMap::new();
 
-            self.retrieve_artifact_to(&art, &path).await?;
+        for (_, art) in &install.mc_asset {
+            let sha1 = art.sha1.as_ref().ok_or(anyhow!("missing SHA-1 checksum"))?;
+            assets.insert(sha1_indexed_path(sha1)?, art.clone());
         }
+
+        self.batch_retrieve_artifact_to(assets, asset_path.join("objects"))
+            .await?;
 
         let asset_index = AssetIndex::from_map(install.mc_asset)?;
 
@@ -162,21 +168,23 @@ impl Creeper {
         art: impl IntoIterator<Item = &Artifact>,
         ext: Option<&str>,
     ) -> anyhow::Result<()> {
-        let dir = dir.as_ref();
-
-        create_dir_all(dir).await?;
-
         let art = art.into_iter().collect::<Vec<_>>();
 
         let max_digit = art.len().to_string().len();
 
-        for (idx, art) in art.iter().enumerate() {
+        let mut map = HashMap::new();
+
+        for (idx, art) in art.into_iter().enumerate() {
             let file = format!("{idx:0max_digit$}");
 
-            let path = dir.join(file).with_added_extension(ext.unwrap_or(""));
+            let path = PathBuf::from(file).with_added_extension(ext.unwrap_or(""));
 
-            self.retrieve_artifact_to(*art, path).await?;
+            map.insert(path, art.clone());
         }
+
+        create_dir_all(&dir).await?;
+
+        self.batch_retrieve_artifact_to(map, &dir).await?;
 
         Ok(())
     }

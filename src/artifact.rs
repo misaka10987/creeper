@@ -415,6 +415,31 @@ impl Creeper {
         self.artifact.retrieve(art).await
     }
 
+    /// Parallel retrieve artifacts and create soft links.
+    /// Each artifact is keyed by its relative path under the base path.
+    ///
+    /// See [`Self::retrieve_artifact_to`] for details and caveats.
+    pub async fn batch_retrieve_artifact_to(
+        &self,
+        map: HashMap<PathBuf, Artifact>,
+        base: impl AsRef<Path>,
+    ) -> anyhow::Result<()> {
+        let base = base.as_ref();
+
+        let count = stream::iter(map)
+            .map(
+                |(path, art)| async move { self.retrieve_artifact_to(&art, base.join(path)).await },
+            )
+            .buffer_unordered(self.config.parallel_download)
+            .try_collect::<Vec<_>>()
+            .await?
+            .len();
+
+        debug!("deployed {count} artifacts under {}", base.display());
+
+        Ok(())
+    }
+
     /// Retrieve an artifact and create a soft link to it at the specified path.
     /// Creating parent directories if necessary.
     ///

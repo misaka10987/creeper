@@ -30,10 +30,19 @@ mod zip;
 
 use clap::Parser;
 use reqwest::Client;
-use std::{ops::Deref, path::PathBuf, sync::Arc};
+use serde::{Deserialize, Serialize};
+use serde_inline_default::serde_inline_default;
+use std::{
+    ops::Deref,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use stop::fatal;
-use tokio::runtime;
-use tracing::{Level, level_filters::LevelFilter};
+use tokio::{
+    fs::{read_to_string, write},
+    runtime,
+};
+use tracing::{Level, info, level_filters::LevelFilter};
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -46,7 +55,7 @@ use crate::{
     game::GameManager,
     index::IndexCache,
     neoforge::NeoforgeManager,
-    path::init_creeper_dirs,
+    path::{creeper_config_dir, init_creeper_dirs},
     registry::Registry,
     tool::Tool,
     user::UserManager,
@@ -58,7 +67,7 @@ pub use prelude::*;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct CreeperInner {
-    pub args: CreeperConfig,
+    pub config: CreeperConfig,
     artifact: ArtifactManager,
     vanilla: VanillaManager,
     http: Client,
@@ -83,11 +92,40 @@ impl Deref for Creeper {
 }
 
 impl Creeper {
-    pub async fn new(args: CreeperConfig) -> anyhow::Result<Self> {
+    async fn load_config(path: impl AsRef<Path>) -> anyhow::Result<CreeperConfig> {
+        // let path = creeper_config_dir()?.join("config.toml");
+
+        let path = path.as_ref();
+
+        if !path.exists() {
+            info!("no config file at {}, using default", path.display());
+
+            let config = CreeperConfig::default();
+
+            let toml = toml::to_string_pretty(&config)?;
+
+            write(path, toml).await?;
+
+            return Ok(config);
+        }
+
+        let toml = read_to_string(path).await?;
+
+        let config = toml::from_str(&toml)?;
+
+        Ok(config)
+    }
+
+    pub async fn new(config: Option<PathBuf>, dir: Option<PathBuf>) -> anyhow::Result<Self> {
         init_creeper_dirs().await?;
+
+        let path = config.unwrap_or(creeper_config_dir()?.join("config.toml"));
+
+        let config = Self::load_config(path).await?;
+
         let http = Client::default();
-        let registry = Registry::new(args.registry.clone(), http.clone())?;
-        let game = GameManager::new(args.working_dir.clone());
+        let registry = Registry::new(config.registry.clone(), http.clone())?;
+        let game = GameManager::new(dir);
         let neoforge = NeoforgeManager::new(http.clone());
         let vanilla = VanillaManager::new(http.clone());
         let artifact = ArtifactManager::new(http.clone()).await?;
@@ -95,7 +133,7 @@ impl Creeper {
         let fabric = FabricManager::new(http.clone());
         let intermediary = IntermediaryManager::new(http.clone());
         let val = CreeperInner {
-            args,
+            config,
             artifact,
             vanilla,
             http,
@@ -108,6 +146,10 @@ impl Creeper {
             intermediary,
         };
         Ok(Self(Arc::new(val)))
+    }
+
+    pub async fn default() -> anyhow::Result<Self> {
+        Self::new(None, None).await
     }
 
     pub async fn execute(&self, cmd: impl Execute) -> anyhow::Result<()> {
@@ -124,24 +166,36 @@ impl Creeper {
     }
 }
 
-#[derive(Clone, Debug, Parser)]
-#[command(version)]
+#[serde_inline_default]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct CreeperConfig {
-    /// Rewrite the home directory for current minecraft instance.
-    ///
-    /// If not specified, would recursively look up parent directory from current directory until a `creeper.toml` is found.
-    #[arg(name = "dir", short, long)]
-    pub working_dir: Option<PathBuf>,
-
     /// URL to the package registry.
-    ///
-    /// Note that only `file://` URLs are supported for now.
-    #[arg(long, default_value = "https://creeper-registry.pages.dev/")]
+    #[serde_inline_default("https://creeper-registry.pages.dev/".parse().unwrap())]
+    #[serde(skip_serializing_if = "is_default_registry")]
     pub registry: Url,
 
     /// Limit number of parallel downloads.
-    #[arg(long, default_value_t = 4)]
+    #[serde_inline_default(4)]
+    #[serde(skip_serializing_if = "is_default_parallel_download")]
     pub parallel_download: usize,
+}
+
+fn is_default_registry(registry: &Url) -> bool {
+    registry == &"https://creeper-registry.pages.dev/".parse().unwrap()
+}
+
+fn is_default_parallel_download(parallel_download: &usize) -> bool {
+    *parallel_download == 4
+}
+
+impl Default for CreeperConfig {
+    fn default() -> Self {
+        Self {
+            registry: "https://creeper-registry.pages.dev/".parse().unwrap(),
+            parallel_download: 4,
+        }
+    }
 }
 
 pub const CREEPER_TEXT_ART: &str = r#"
@@ -158,17 +212,31 @@ pub const CREEPER_TEXT_ART: &str = r#"
 /// Minecraft Package Manager.
 #[derive(Clone, Debug, Parser)]
 struct Args {
-    #[clap(flatten)]
-    cfg: CreeperConfig,
+    /// Path to the config file.
+    ///
+    /// If not specified, will default to `$CONFIG_DIR/creeper/config.toml`,
+    /// where `$CONFIG_DIR` is the user config directory depending on platform, e.g. `$XDG_CONFIG_HOME` on Linux.
+    #[arg(short, long)]
+    pub config: Option<PathBuf>,
+
+    /// Rewrite the home directory for current minecraft instance.
+    ///
+    /// If not specified, would recursively look up parent directory from current directory until a `creeper.toml` is found.
+    #[arg(short, long)]
+    dir: Option<PathBuf>,
+
     /// Set the log filtering level.
     #[arg(name = "loglevel", long, default_value_t = Level::INFO)]
     log_level: Level,
+
     /// Use verbose output, equivalent to overriding log level to DEBUG.
     #[arg(short, long)]
     verbose: bool,
+
     /// Use noisy output, equivalent to overriding log level to TRACE.
     #[arg(short, long)]
     noisy: bool,
+
     #[command(subcommand)]
     cmd: SubCommand,
 }
@@ -209,12 +277,14 @@ impl Execute for SubCommand {
 
 fn main() {
     let Args {
-        cfg,
+        config,
         cmd,
         log_level,
         verbose,
         noisy,
+        dir,
     } = Args::parse();
+
     let log_level = if noisy {
         Level::TRACE
     } else if verbose {
@@ -222,16 +292,23 @@ fn main() {
     } else {
         log_level
     };
+
     let layer = IndicatifLayer::new();
+
     tracing_subscriber::registry()
         .with(LevelFilter::from_level(log_level))
         .with(fmt::layer().with_writer(layer.get_stderr_writer()))
         .with(layer)
         .init();
+
     let run = runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap_or_else(fatal!());
-    let creeper = run.block_on(Creeper::new(cfg)).unwrap_or_else(fatal!());
+
+    let creeper = run
+        .block_on(Creeper::new(config, dir))
+        .unwrap_or_else(fatal!());
+
     run.block_on(creeper.execute(cmd)).unwrap_or_else(fatal!());
 }

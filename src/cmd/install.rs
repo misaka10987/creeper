@@ -31,7 +31,7 @@ impl Execute for Install {
                 let sol = lib.resolve(package.node.dep.clone())?;
 
                 let lock = Lock {
-                    registry: lib.args.registry.clone(),
+                    registry: lib.config.registry.clone(),
                     package: sol.clone(),
                 };
                 lib.game.set_lock(Some(lock)).await?;

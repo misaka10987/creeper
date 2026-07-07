@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, HashSet};
 use anyhow::bail;
 use clap::Parser;
 use colored::Colorize;
-use inquire::{Confirm, Select, Text};
+use inquire::{Select, Text};
 use semver::VersionReq;
+use tokio::task::spawn_blocking;
 use tracing::{error, warn};
 use url::Url;
 
@@ -13,7 +14,7 @@ use crate::{
     cmd::Execute,
     neoforge::{NeoforgeMods, neoforge_mods::DependencyType},
     pack::{PackMeta, PackNode},
-    util::{parse_or_prompt, prompt_save, prompt_valid},
+    util::{parse_or_prompt, prompt_correct_license, prompt_save, prompt_valid},
     zip::extract_zip,
 };
 
@@ -41,15 +42,25 @@ impl Execute for PackageNeoforgeMod {
         let select_mod_id = if mods.mods.len() == 1 {
             mods.mods[0].mod_id.clone()
         } else {
-            let ids = mods.mods.iter().map(|m| &m.mod_id).collect::<HashSet<_>>();
+            let ids = mods
+                .mods
+                .iter()
+                .map(|m| m.mod_id.clone())
+                .collect::<HashSet<_>>();
+
             if ids.len() < mods.mods.len() {
                 bail!("duplicate mod IDs in neoforge.mods.toml")
             }
-            let select = Select::new(
-                "The JAR file contains multiple mods, select one:",
-                ids.into_iter().collect(),
-            )
-            .prompt()?;
+
+            let select = spawn_blocking(move || {
+                Select::new(
+                    "The JAR file contains multiple mods, select one:",
+                    ids.into_iter().collect(),
+                )
+                .prompt()
+            })
+            .await??;
+
             select.clone()
         };
 
@@ -66,32 +77,12 @@ impl Execute for PackageNeoforgeMod {
             Err(_) => parse_or_prompt(&select_mod.version, "semver").await?,
         };
 
-        let license = match mods.license.parse::<spdx::Expression>() {
-            Ok(x) => x,
-            Err(_)
-                if let Ok(x) =
-                    format!("LicenseRef-{}", mods.license).parse::<spdx::Expression>()
-                    && Confirm::new(&format!(
-                        "{} is not valid SPDX license expression, correct it to LicenseRef-{0}?",
-                        mods.license
-                    ))
-                    .prompt()? =>
-            {
-                x
-            }
-            _ => {
-                prompt_valid::<spdx::Expression>(&format!(
-                    "{} is not valid SPDX license expression, enter one instead:",
-                    mods.license
-                ))
-                .await?
-            }
-        };
+        let license = prompt_correct_license(&mods.license).await?;
 
         let name = if let Some(name) = &select_mod.display_name {
             name.clone()
         } else {
-            Text::new("Name of the package:").prompt()?
+            spawn_blocking(|| Text::new("Name of the package:").prompt()).await??
         };
 
         let authors = select_mod

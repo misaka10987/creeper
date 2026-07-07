@@ -400,3 +400,16 @@ pub fn rebuild_req(
 
     Ok(req)
 }
+
+pub async fn prompt_correct_license(exp: &str) -> anyhow::Result<spdx::Expression> {
+    match exp.parse() {
+        Ok(x) => Ok(x),
+        Err(_) if let Ok(x) = format!("LicenseRef-{exp}").parse() => Ok(x),
+        Err(_) => {
+            prompt_valid(&format!(
+                "{exp} is not valid SPDX license expression, input one instead:"
+            ))
+            .await
+        }
+    }
+}

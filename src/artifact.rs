@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::iter::once;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, ensure};
 use base64::{Engine, prelude::BASE64_URL_SAFE};
+use futures::{StreamExt, TryStreamExt, stream};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{AssertSqlSafe, query, query_as};
@@ -481,6 +484,37 @@ impl Creeper {
         checksum: impl IntoIterator<Item = Checksum> + Send,
     ) -> anyhow::Result<Artifact> {
         self.artifact.download(name, src, len, checksum).await
+    }
+
+    /// Parallel download a batch of files keyed by `K` and store them in the artifact storage.
+    /// Each file is described by a 4-tuple of `(name, src, len, checksum)`,
+    /// as specified in [`Self::download`].
+    pub async fn batch_download<K>(
+        &self,
+        download: HashMap<
+            K,
+            (
+                String,
+                String,
+                Option<u64>,
+                impl IntoIterator<Item = Checksum> + Send,
+            ),
+        >,
+    ) -> anyhow::Result<HashMap<K, Artifact>>
+    where
+        K: Eq + Hash,
+    {
+        let map = stream::iter(download)
+            .map(|(k, (name, src, len, checksum))| async move {
+                self.download(name, src, len, checksum)
+                    .await
+                    .map(|a| (k, a))
+            })
+            .buffer_unordered(self.config.parallel_download)
+            .try_collect::<HashMap<_, _>>()
+            .await?;
+
+        Ok(map)
     }
 
     /// Store a file to the artifact storage.

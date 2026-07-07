@@ -14,7 +14,6 @@ use crate::{
 };
 
 use anyhow::{anyhow, ensure};
-use futures::{StreamExt, TryStreamExt, stream};
 use mc_launchermeta::{
     VERSION_MANIFEST_URL,
     version::{
@@ -112,28 +111,23 @@ impl Creeper {
 
         info!("downloading {} library artifacts", arts.len());
 
-        let lib = stream::iter(arts.clone())
-            .map(|art| {
-                let name = MavenCoord::from_path(&art.path)
+        let lib = arts
+            .into_iter()
+            .map(|a| {
+                let name = MavenCoord::from_path(&a.path)
                     .map(|c| c.to_string())
-                    .unwrap_or(art.path.clone());
+                    .unwrap_or(a.path.clone());
 
-                async move {
-                    self.download(
-                        name,
-                        art.url,
-                        Some(art.size),
-                        Some(Checksum::sha1(art.sha1)),
-                    )
-                    .await
-                    .map(|a| (art.path.into(), a))
-                }
+                (
+                    a.path.into(),
+                    (name, a.url, Some(a.size), once(Checksum::sha1(a.sha1))),
+                )
             })
-            .buffer_unordered(self.config.parallel_download)
-            .try_collect::<HashMap<_, _>>()
-            .await?;
+            .collect();
 
-        Ok(lib)
+        let map = self.batch_download(lib).await?;
+
+        Ok(map)
     }
 
     pub async fn vanilla_manifest(&self) -> anyhow::Result<&Manifest> {
@@ -219,25 +213,26 @@ impl Creeper {
         &self,
         index: AssetIndex,
     ) -> anyhow::Result<HashMap<PathBuf, Artifact>> {
-        stream::iter(index.objects)
-            .map(|(path, art)| {
-                let name = PathBuf::from(".minecraft")
-                    .join("assets")
-                    .join(&path)
-                    .display()
-                    .to_string();
+        let mut map = HashMap::new();
 
-                async move {
-                    let src = asset_url(&art.sha1)?;
+        for (path, obj) in index.objects {
+            let name = PathBuf::from(".minecraft")
+                .join("assets")
+                .join(&path)
+                .display()
+                .to_string();
 
-                    self.download(name, src, Some(art.size), once(Checksum::sha1(art.sha1)))
-                        .await
-                        .map(|a| (path, a))
-                }
-            })
-            .buffer_unordered(self.config.parallel_download)
-            .try_collect::<HashMap<_, _>>()
-            .await
+            let src = asset_url(&obj.sha1)?;
+
+            map.insert(
+                path,
+                (name, src, Some(obj.size), once(Checksum::sha1(obj.sha1))),
+            );
+        }
+
+        let map = self.batch_download(map).await?;
+
+        Ok(map)
     }
 }
 

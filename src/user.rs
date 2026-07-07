@@ -299,10 +299,18 @@ impl Creeper {
 
     async fn latest_authlib_injector(&self) -> anyhow::Result<Artifact> {
         const URL: &str = "https://authlib-injector.yushi.moe/artifact/latest.json";
+        const URL_BMCLAPI: &str =
+            "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json";
+
+        let url = if self.config.use_bmclapi {
+            URL_BMCLAPI
+        } else {
+            URL
+        };
 
         let version = self
             .http
-            .get(URL)
+            .get(url)
             .send()
             .await?
             .json::<AuthlibInjectorVersion>()

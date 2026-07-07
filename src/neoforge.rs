@@ -93,11 +93,19 @@ impl Creeper {
     async fn neoforge_installer_jar(&self, version: &Version) -> anyhow::Result<Artifact> {
         let nf_version = decode_neoforge_version(version);
 
-        let url = format!(
-            "https://maven.neoforged.net/releases/net/neoforged/neoforge/{nf_version}/neoforge-{nf_version}-installer.jar"
-        );
+        let url = if self.config.use_bmclapi {
+            format!(
+                "https://bmclapi2.bangbang93.com/neoforge/version/{nf_version}/download/installer.jar"
+            )
+        } else {
+            format!(
+                "https://maven.neoforged.net/releases/net/neoforged/neoforge/{nf_version}/neoforge-{nf_version}-installer.jar"
+            )
+        };
 
-        let sha1_url = format!("{url}.sha1");
+        let sha1_url = format!(
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/{nf_version}/neoforge-{nf_version}-installer.jar.sha1"
+        );
 
         let req = self.http.get(sha1_url).build()?;
         let res = self.http.execute(req).await?;

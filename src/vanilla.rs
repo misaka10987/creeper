@@ -172,10 +172,17 @@ impl Creeper {
         let mc_version = self.vanilla_version(version.clone()).await?;
 
         let client = mc_version.downloads.client;
+
+        let url = if self.config.use_bmclapi {
+            format!("https://bmclapi2.bangbang93.com/version/{version}/client")
+        } else {
+            client.url
+        };
+
         let client = self
             .download(
                 "minecraft.jar".into(),
-                client.url,
+                url,
                 Some(client.size),
                 Some(Checksum::sha1(client.sha1)),
             )

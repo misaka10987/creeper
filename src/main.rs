@@ -179,6 +179,10 @@ pub struct CreeperConfig {
     #[serde_inline_default(4)]
     #[serde(skip_serializing_if = "is_default_parallel_download")]
     pub parallel_download: usize,
+
+    #[serde_inline_default(false)]
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub use_bmclapi: bool,
 }
 
 fn is_default_registry(registry: &Url) -> bool {
@@ -194,6 +198,7 @@ impl Default for CreeperConfig {
         Self {
             registry: "https://creeper-registry.pages.dev/".parse().unwrap(),
             parallel_download: 4,
+            use_bmclapi: false,
         }
     }
 }

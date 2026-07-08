@@ -16,10 +16,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use tokio::{
-    fs::{read_to_string, write},
+    fs::{create_dir_all, read_to_string, try_exists, write},
     sync::RwLock,
 };
-use tracing::{debug, error, info, trace};
+use tracing::{debug, info, trace};
 use url::Url;
 use uuid::Uuid;
 
@@ -40,6 +40,7 @@ type OauthClient = oauth2::basic::BasicClient<
 >;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
 struct Data {
     pub access_token: Option<AccessToken>,
     pub refresh_token: Option<RefreshToken>,
@@ -103,7 +104,12 @@ impl MicrosoftClient {
     pub async fn load(&self) -> anyhow::Result<()> {
         let path = self.storage_path().await?;
 
-        let json = read_to_string(path).await?;
+        if !try_exists(&path).await? {
+            debug!("no Microsoft session data at {} to load", path.display());
+            return Ok(());
+        }
+
+        let json = read_to_string(&path).await?;
 
         let data = serde_json::from_str::<Data>(&json)?;
 
@@ -118,6 +124,8 @@ impl MicrosoftClient {
         let data = self.data.read().await;
 
         let json = serde_json::to_string(&*data)?;
+
+        create_dir_all(path.parent().unwrap()).await?;
 
         write(path, json).await?;
 
@@ -428,8 +436,6 @@ impl MicrosoftClient {
     pub async fn mc_login(&self) -> anyhow::Result<()> {
         const URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 
-        error!("TODO: waiting for Mojang approval on Minecraft services API privilege");
-
         let xsts_token = self.get_xsts_token().await?;
 
         let mut data = self.data.write().await;
@@ -447,6 +453,8 @@ impl MicrosoftClient {
             .error_for_status()?
             .json::<McLoginResponse>()
             .await?;
+
+        info!("logged in to Minecraft services (user id {})", res.username);
 
         data.mc_jwt = Some(res.access_token);
         data.mc_jwt_expiry = Some(calc_expiry(res.expires_in));
@@ -675,11 +683,12 @@ impl McLoginRequest {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct McLoginResponse {
-    pub username: String,
+    pub username: Uuid,
     pub roles: Vec<String>,
     pub access_token: String,
     pub token_type: String,
     pub expires_in: u64,
+    pub metadata: serde_json::Value,
 }
 
 fn calc_expiry(expires_in: u64) -> u64 {
@@ -713,17 +722,38 @@ pub mod mc {
     }
 
     #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
     pub struct Skin {
         pub id: Uuid,
+
         pub state: String,
+
         pub url: Url,
+
+        pub texture_key: String,
+
         pub variant: String,
-        pub alias: String,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub alias: Option<String>,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    pub struct Cape {
+        pub id: Uuid,
+
+        pub state: String,
+
+        pub url: Url,
+
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub alias: Option<String>,
     }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct McProfileResponse {
     #[serde(with = "uuid::serde::simple")]
     pub id: Uuid,
@@ -732,5 +762,7 @@ pub struct McProfileResponse {
 
     pub skins: Vec<mc::Skin>,
 
-    pub capes: Vec<serde_json::Value>,
+    pub capes: Vec<mc::Cape>,
+
+    pub profile_actions: serde_json::Value,
 }

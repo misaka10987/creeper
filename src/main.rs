@@ -67,7 +67,7 @@ pub use prelude::*;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct CreeperInner {
-    pub config: CreeperConfig,
+    pub config: Config,
     artifact: ArtifactManager,
     vanilla: VanillaManager,
     http: Client,
@@ -92,15 +92,13 @@ impl Deref for Creeper {
 }
 
 impl Creeper {
-    async fn load_config(path: impl AsRef<Path>) -> anyhow::Result<CreeperConfig> {
-        // let path = creeper_config_dir()?.join("config.toml");
-
+    async fn load_config(path: impl AsRef<Path>) -> anyhow::Result<Config> {
         let path = path.as_ref();
 
         if !path.exists() {
             info!("no config file at {}, using default", path.display());
 
-            let config = CreeperConfig::default();
+            let config = Config::default();
 
             let toml = toml::to_string_pretty(&config)?;
 
@@ -169,7 +167,7 @@ impl Creeper {
 #[serde_inline_default]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
-pub struct CreeperConfig {
+pub struct Config {
     /// URL to the package registry.
     #[serde_inline_default("https://creeper-registry.pages.dev/".parse().unwrap())]
     #[serde(skip_serializing_if = "is_default_registry")]
@@ -193,7 +191,7 @@ fn is_default_parallel_download(parallel_download: &usize) -> bool {
     *parallel_download == 4
 }
 
-impl Default for CreeperConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             registry: "https://creeper-registry.pages.dev/".parse().unwrap(),
@@ -216,7 +214,8 @@ pub const CREEPER_TEXT_ART: &str = r#"
 
 /// Minecraft Package Manager.
 #[derive(Clone, Debug, Parser)]
-struct Args {
+#[command(version)]
+pub struct Command {
     /// Path to the config file.
     ///
     /// If not specified, will default to `$CONFIG_DIR/creeper/config.toml`,
@@ -247,7 +246,7 @@ struct Args {
 }
 
 #[derive(Clone, Debug, Parser)]
-enum SubCommand {
+pub enum SubCommand {
     #[command(subcommand)]
     Tool(Tool),
 
@@ -293,14 +292,14 @@ impl Execute for SubCommand {
 }
 
 fn main() {
-    let Args {
+    let Command {
         config,
         cmd,
         log_level,
         verbose,
         noisy,
         dir,
-    } = Args::parse();
+    } = Command::parse();
 
     let log_level = if noisy {
         Level::TRACE

@@ -6,7 +6,7 @@ use clap_complete::{
 use clap_complete_nushell::Nushell;
 use parse_display::{Display, FromStr};
 
-use crate::{Args, cmd::Execute};
+use crate::{Command, cmd::Execute};
 
 /// Generate shell completions.
 #[derive(Clone, Debug, Parser)]
@@ -39,7 +39,7 @@ pub enum Shell {
 
 impl Execute for Complete {
     async fn execute(self, _lib: &crate::Creeper) -> anyhow::Result<()> {
-        let mut cmd = Args::command();
+        let mut cmd = Command::command();
 
         let mut buf = vec![];
 

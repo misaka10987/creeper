@@ -1,6 +1,6 @@
 [package]
 name = "creeper"
-version = "1.0.0-alpha.8"
+version = "1.0.0-alpha.9"
 edition = "2024"
 authors = ["misaka10987 <misaka10987@outlook.com>"]
 description = "Minecraft Package Manager"
@@ -58,3 +58,5 @@ oauth2 = "5.0.0"
 open = "5.3.6"
 local-redirect-uri = "0.1.0"
 chrono = { version = "0.4.45", features = ["serde"] }
+clap_complete = "4.6.7"
+clap_complete_nushell = "4.6.0"

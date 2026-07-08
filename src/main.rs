@@ -250,15 +250,26 @@ struct Args {
 enum SubCommand {
     #[command(subcommand)]
     Tool(Tool),
+
     Add(cmd::Add),
+
     Launch(cmd::Launch),
+
     BuildIndex(cmd::BuildIndex),
+
     Install(cmd::Install),
+
     Nuke(cmd::Nuke),
+
     Login(cmd::Login),
+
     Init(cmd::Init),
+
     #[command(subcommand)]
     Dev(Dev),
+
+    Complete(cmd::Complete),
+
     #[clap(hide = true)]
     AwwMan,
 }
@@ -276,6 +287,7 @@ impl Execute for SubCommand {
             SubCommand::Init(init) => lib.execute(init).await,
             SubCommand::Add(add) => lib.execute(add).await,
             SubCommand::Dev(_dev) => todo!(),
+            SubCommand::Complete(complete) => lib.execute(complete).await,
         }
     }
 }

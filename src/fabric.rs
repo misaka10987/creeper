@@ -166,18 +166,11 @@ impl Creeper {
 
         for lib in lib {
             let path = lib.name.path();
-
-            let art = self
-                .download(
-                    lib.name.to_string(),
-                    lib.url.join(&path.display().to_string())?.to_string(),
-                    lib.size,
-                    lib.checksum(),
-                )
-                .await?;
-
-            java_lib_class.insert(path, art);
+            let src = lib.url.join(&path.display().to_string())?.to_string();
+            java_lib_class.insert(path, (lib.name.to_string(), src, lib.size, lib.checksum()));
         }
+
+        let java_lib_class = self.batch_download(java_lib_class).await?;
 
         let install = Install {
             java_lib_class,

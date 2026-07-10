@@ -1,5 +1,6 @@
 use std::{collections::HashMap, iter::once, path::PathBuf};
 
+use anyhow::bail;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
@@ -198,6 +199,10 @@ impl Creeper {
         {
             debug!("using cached install {package}@{version}");
             return Ok(install);
+        }
+
+        if self.args.offline {
+            bail!("{package}@{version}#{rev} is missing from cache");
         }
 
         let install = if !package.is_regular() {

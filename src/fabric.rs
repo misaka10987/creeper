@@ -143,6 +143,11 @@ impl SyncBuiltinIndex for FabricManager {
 impl Creeper {
     #[instrument(skip(self))]
     pub async fn update_fabric(&self) -> anyhow::Result<()> {
+        if self.args.offline {
+            info!("skipping fabric update because offline mode enabled");
+            return Ok(());
+        }
+
         if self.fabric.get_index().await.is_ok()
             && let Some(time) = self.fabric.since_last_index_update().await?
             && time < Duration::from_secs(60 * 60 * 24 * 14)
@@ -272,6 +277,11 @@ impl SyncBuiltinIndex for IntermediaryManager {
 impl Creeper {
     #[instrument(skip(self))]
     pub async fn update_intermediary(&self) -> anyhow::Result<()> {
+        if self.args.offline {
+            info!("skipping intermediary update because offline mode enabled");
+            return Ok(());
+        }
+
         self.intermediary.update_index().await
     }
 

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::iter::once;
 use std::path::{Path, PathBuf};
@@ -28,16 +29,27 @@ use crate::{checksum, symlink_auto};
 #[serde(deny_unknown_fields)]
 pub struct Artifact {
     pub blake3: String,
+
     pub name: String,
+
     pub src: Option<String>,
+
     pub len: u64,
-    // other checksums
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sha1: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub md5: Option<String>,
+}
+
+impl Display for Artifact {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} (#{})", self.name, &self.blake3[..8])
+    }
 }
 
 impl Artifact {
@@ -125,19 +137,25 @@ impl Artifact {
 const DB_INIT_QUERY: &str = include_str!("artifact.sql");
 
 pub struct ArtifactManager {
+    pub offline: bool,
+
     http: Client,
     index: SqlitePool,
 }
 
 impl ArtifactManager {
-    pub async fn new(http: Client) -> anyhow::Result<Self> {
+    pub async fn new(http: Client, offline: bool) -> anyhow::Result<Self> {
         let path = creeper_data_dir()?.join("artifact.db");
         let opt = SqliteConnectOptions::default()
             .filename(path)
             .create_if_missing(true);
         let index = SqlitePool::connect_with(opt).await?;
         index.execute(DB_INIT_QUERY).await?;
-        let val = Self { index, http };
+        let val = Self {
+            index,
+            http,
+            offline,
+        };
         Ok(val)
     }
 
@@ -229,6 +247,10 @@ impl ArtifactManager {
             return Ok(path);
         }
 
+        if self.offline {
+            bail!("offline mode enabled, cannot retrieve missing artifact {art}")
+        }
+
         let src = match &art.src {
             Some(x) => x,
             None => bail!("missing download source"),
@@ -316,6 +338,10 @@ impl ArtifactManager {
 
                 return Ok(art);
             }
+        }
+
+        if self.offline {
+            bail!("offline mode enabled, cannot download {src}");
         }
 
         let cache = creeper_cache_dir()?

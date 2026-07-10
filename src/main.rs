@@ -67,6 +67,7 @@ pub use prelude::*;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct CreeperInner {
+    pub args: Args,
     pub config: Config,
     artifact: ArtifactManager,
     vanilla: VanillaManager,
@@ -114,23 +115,27 @@ impl Creeper {
         Ok(config)
     }
 
-    pub async fn new(config: Option<PathBuf>, dir: Option<PathBuf>) -> anyhow::Result<Self> {
+    pub async fn new(args: Args) -> anyhow::Result<Self> {
         init_creeper_dirs().await?;
 
-        let path = config.unwrap_or(creeper_config_dir()?.join("config.toml"));
+        let path = args
+            .config
+            .clone()
+            .unwrap_or(creeper_config_dir()?.join("config.toml"));
 
         let config = Self::load_config(path).await?;
 
         let http = Client::default();
         let registry = Registry::new(config.registry.clone(), http.clone())?;
-        let game = GameManager::new(dir);
+        let game = GameManager::new(args.dir.clone());
         let neoforge = NeoforgeManager::new(http.clone());
         let vanilla = VanillaManager::new(http.clone());
-        let artifact = ArtifactManager::new(http.clone()).await?;
+        let artifact = ArtifactManager::new(http.clone(), args.offline).await?;
         let user = UserManager::new();
         let fabric = FabricManager::new(http.clone());
         let intermediary = IntermediaryManager::new(http.clone());
         let val = CreeperInner {
+            args,
             config,
             artifact,
             vanilla,
@@ -146,21 +151,57 @@ impl Creeper {
         Ok(Self(Arc::new(val)))
     }
 
-    pub async fn default() -> anyhow::Result<Self> {
-        Self::new(None, None).await
-    }
-
     pub async fn execute(&self, cmd: impl Execute) -> anyhow::Result<()> {
         cmd.execute(self).await
     }
 
     pub async fn update_all(&self) -> anyhow::Result<()> {
+        if self.args.offline {
+            info!("skipping update because offline mode enabled");
+            return Ok(());
+        }
+
         self.update_registry().await?;
         self.update_vanilla().await?;
         self.update_neoforge().await?;
         self.update_fabric().await?;
         self.update_intermediary().await?;
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Parser)]
+pub struct Args {
+    /// Path to the config file.
+    ///
+    /// If not specified, will default to `$CONFIG_DIR/creeper/config.toml`,
+    /// where `$CONFIG_DIR` is the user config directory depending on platform, e.g. `$XDG_CONFIG_HOME` on Linux.
+    #[arg(short, long)]
+    pub config: Option<PathBuf>,
+
+    /// Rewrite the home directory for current minecraft instance.
+    ///
+    /// If not specified, would recursively look up parent directory from current directory until a `creeper.toml` is found.
+    #[arg(short, long)]
+    pub dir: Option<PathBuf>,
+
+    /// Run in offline mode.
+    ///
+    /// If enabled, would prevent network requests and only use cached data.
+    /// Note that this may cause some actions to fail.
+    /// Also note that the feature is under development,
+    /// and there may still be network requests even if this option is enabled.
+    #[arg(long, default_value_t = false)]
+    pub offline: bool,
+}
+
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            config: None,
+            dir: None,
+            offline: false,
+        }
     }
 }
 
@@ -216,18 +257,8 @@ pub const CREEPER_TEXT_ART: &str = r#"
 #[derive(Clone, Debug, Parser)]
 #[command(version)]
 pub struct Command {
-    /// Path to the config file.
-    ///
-    /// If not specified, will default to `$CONFIG_DIR/creeper/config.toml`,
-    /// where `$CONFIG_DIR` is the user config directory depending on platform, e.g. `$XDG_CONFIG_HOME` on Linux.
-    #[arg(short, long)]
-    pub config: Option<PathBuf>,
-
-    /// Rewrite the home directory for current minecraft instance.
-    ///
-    /// If not specified, would recursively look up parent directory from current directory until a `creeper.toml` is found.
-    #[arg(short, long)]
-    dir: Option<PathBuf>,
+    #[clap(flatten)]
+    pub args: Args,
 
     /// Set the log filtering level.
     #[arg(name = "loglevel", long, default_value_t = Level::INFO)]
@@ -293,12 +324,11 @@ impl Execute for SubCommand {
 
 fn main() {
     let Command {
-        config,
+        args,
         cmd,
         log_level,
         verbose,
         noisy,
-        dir,
     } = Command::parse();
 
     let log_level = if noisy {
@@ -322,9 +352,7 @@ fn main() {
         .build()
         .unwrap_or_else(fatal!());
 
-    let creeper = run
-        .block_on(Creeper::new(config, dir))
-        .unwrap_or_else(fatal!());
+    let creeper = run.block_on(Creeper::new(args)).unwrap_or_else(fatal!());
 
     run.block_on(creeper.execute(cmd)).unwrap_or_else(fatal!());
 }

@@ -87,6 +87,11 @@ impl SyncBuiltinIndex for NeoforgeManager {
 
 impl Creeper {
     pub async fn update_neoforge(&self) -> anyhow::Result<()> {
+        if self.args.offline {
+            info!("skipping neoforge update because offline mode enabled");
+            return Ok(());
+        }
+
         self.neoforge.update_index().await
     }
 

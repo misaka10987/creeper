@@ -100,6 +100,11 @@ impl SyncBuiltinIndex for VanillaManager {
 
 impl Creeper {
     pub async fn update_vanilla(&self) -> anyhow::Result<()> {
+        if self.args.offline {
+            info!("skipping vanilla update because offline mode enabled");
+            return Ok(());
+        }
+
         self.vanilla.update_index().await
     }
 

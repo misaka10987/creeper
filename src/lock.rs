@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
-use serde_with::{DisplayFromStr, serde_as};
+use serde_with::serde_as;
 use url::Url;
 
 use crate::{Id, index::VersionRev};
@@ -11,7 +11,6 @@ use crate::{Id, index::VersionRev};
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Lock {
     pub registry: Url,
-    #[serde_as(as = "HashMap<_, DisplayFromStr>")]
     pub package: HashMap<Id, VersionRev>,
 }
 

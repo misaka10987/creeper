@@ -11,6 +11,7 @@ use anyhow::{anyhow, bail, ensure};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use tokio::{
     fs::{File, create_dir_all, read_dir, read_to_string},
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
@@ -179,7 +180,9 @@ impl IndexLine {
 ///
 /// This is used to modify package definitions without changing the version number (which should correspond to the upstream),
 /// while still allowing package version locking.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, SerializeDisplay, DeserializeFromStr,
+)]
 pub struct VersionRev {
     /// The version number.
     pub version: Version,

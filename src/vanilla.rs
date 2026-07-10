@@ -3,6 +3,7 @@ use std::{
     iter::once,
     path::PathBuf,
     sync::OnceLock,
+    time::Duration,
 };
 
 use crate::{
@@ -95,6 +96,10 @@ impl SyncBuiltinIndex for VanillaManager {
         let index = vanilla_index(versions);
 
         Ok(index)
+    }
+
+    fn cache_expiry(&self) -> std::time::Duration {
+        Duration::from_hours(72)
     }
 }
 

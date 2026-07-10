@@ -1,6 +1,6 @@
 mod fmt;
 
-use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use mc_launchermeta::{
@@ -82,6 +82,10 @@ impl SyncBuiltinIndex for NeoforgeManager {
         );
 
         Ok(index)
+    }
+
+    fn cache_expiry(&self) -> std::time::Duration {
+        Duration::from_hours(72)
     }
 }
 

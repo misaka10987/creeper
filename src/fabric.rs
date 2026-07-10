@@ -1,8 +1,7 @@
 use std::{
     collections::{BTreeSet, HashMap},
     iter::once,
-    path::PathBuf,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use anyhow::{anyhow, ensure};
@@ -10,17 +9,15 @@ use reqwest::Client;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_with::serde_as;
-use tokio::fs::{create_dir_all, read_to_string, try_exists, write};
 use tracing::{Span, info, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 use url::Url;
 
 use crate::{
     Creeper, Id, Install,
-    builtin::{GetIndex, SyncBuiltinIndex, UpdateIndex},
+    builtin::{SyncBuiltinIndex, UpdateIndex},
     index::VersionRev,
     pack::PackNode,
-    path::creeper_cache_dir,
     pbar::PROGRESS_STYLE_DEFAULT,
     util::rebuild_req,
     vanilla::check_rule,
@@ -35,42 +32,6 @@ pub struct FabricManager {
 impl FabricManager {
     pub fn new(http: Client) -> Self {
         Self { http }
-    }
-
-    fn cache_path() -> anyhow::Result<PathBuf> {
-        let path = creeper_cache_dir()?.join("builtin").join("fabric");
-        Ok(path)
-    }
-
-    async fn since_last_index_update(&self) -> anyhow::Result<Option<Duration>> {
-        let path = Self::cache_path()?.join("index-last-updated");
-
-        if !try_exists(&path).await? {
-            return Ok(None);
-        }
-
-        let time = read_to_string(path).await?.parse::<u64>()?;
-
-        let time = SystemTime::UNIX_EPOCH + Duration::from_secs(time);
-
-        let duration = time.elapsed().ok();
-
-        Ok(duration)
-    }
-
-    async fn renew_index_last_update(&self) -> anyhow::Result<()> {
-        let path = Self::cache_path()?.join("index-last-updated");
-
-        create_dir_all(path.parent().unwrap()).await?;
-
-        let time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        write(path, time.to_string()).await?;
-
-        Ok(())
     }
 }
 
@@ -134,9 +95,12 @@ impl SyncBuiltinIndex for FabricManager {
             })
             .collect();
 
-        self.renew_index_last_update().await?;
-
         Ok(index)
+    }
+
+    fn cache_expiry(&self) -> std::time::Duration {
+        // 14 days
+        Duration::from_hours(14 * 24)
     }
 }
 
@@ -148,14 +112,7 @@ impl Creeper {
             return Ok(());
         }
 
-        if self.fabric.get_index().await.is_ok()
-            && let Some(time) = self.fabric.since_last_index_update().await?
-            && time < Duration::from_secs(60 * 60 * 24 * 14)
-        {
-            info!("skipping slow fabric index update since already updated in 14 days");
-        } else {
-            self.fabric.update_index().await?;
-        }
+        self.fabric.update_index().await?;
 
         Ok(())
     }
@@ -271,6 +228,10 @@ impl SyncBuiltinIndex for IntermediaryManager {
             .collect();
 
         Ok(index)
+    }
+
+    fn cache_expiry(&self) -> Duration {
+        Duration::from_hours(72)
     }
 }
 

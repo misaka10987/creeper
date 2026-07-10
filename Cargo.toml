@@ -60,3 +60,6 @@ local-redirect-uri = "0.1.0"
 chrono = { version = "0.4.45", features = ["serde"] }
 clap_complete = "4.6.7"
 clap_complete_nushell = "4.6.0"
+shellexpand = { version = "3.1.2", default-features = false, features = [
+    "base-0",
+] }

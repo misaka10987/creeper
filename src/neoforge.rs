@@ -346,21 +346,6 @@ impl Creeper {
                     }
                     s if !s.contains("$") => java_flag.push(s.into()),
                     s => {
-                        if s.matches("$").count() != 1
-                            || s.matches("{").count() != 1
-                            || s.matches("}").count() != 1
-                        {
-                            error!("does not yet support formatting: {s}");
-                            continue;
-                        }
-
-                        if s.find("{").unwrap() != s.find("$").unwrap() + 1
-                            || s.find("{").unwrap() >= s.find("}").unwrap()
-                        {
-                            error!("does not yet support formatting: {s}");
-                            continue;
-                        }
-
                         let vars = vec![
                             ("library_directory".into(), "./.creeper/lib".into()),
                             ("version_name".into(), version.id.clone()),
@@ -368,11 +353,11 @@ impl Creeper {
                         .into_iter()
                         .collect::<HashMap<String, String>>();
 
-                        let format = s.replace("$", "").format(&vars)?;
+                        let format = shellexpand::env_with_context_no_errors(s, |k| vars.get(k));
 
                         trace!("formatted java argument {s} -> {format}");
 
-                        java_flag.push(format);
+                        java_flag.push(format.to_string());
                     }
                 }
             }

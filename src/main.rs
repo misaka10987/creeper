@@ -12,7 +12,6 @@ mod java;
 mod launch;
 mod lock;
 mod maven;
-mod mc;
 mod ms;
 mod neoforge;
 mod pack;

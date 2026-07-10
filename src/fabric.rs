@@ -20,7 +20,7 @@ use crate::{
     pack::PackNode,
     pbar::PROGRESS_STYLE_DEFAULT,
     util::rebuild_req,
-    vanilla::check_rule,
+    vanilla::RuleChecker,
 };
 
 const META_API: &str = "https://meta.fabricmc.net/";
@@ -141,11 +141,13 @@ impl Creeper {
             .profile(&game.to_string(), &version.to_string())
             .await?;
 
+        let rule = RuleChecker::default();
+
         let java_flag = profile
             .arguments
             .jvm
             .into_iter()
-            .filter_map(|x| x.rules.iter().all(check_rule).then_some(x.values))
+            .filter_map(|x| x.rules.iter().all(rule.checker()).then_some(x.values))
             .flatten()
             .collect();
 
@@ -153,7 +155,7 @@ impl Creeper {
             .arguments
             .game
             .into_iter()
-            .filter_map(|x| x.rules.iter().all(check_rule).then_some(x.values))
+            .filter_map(|x| x.rules.iter().all(rule.checker()).then_some(x.values))
             .flatten()
             .collect();
 

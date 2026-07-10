@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap},
+    env::consts::{ARCH, OS},
     iter::once,
     path::PathBuf,
     sync::OnceLock,
@@ -10,7 +11,6 @@ use crate::{
     Artifact, Checksum, Creeper, Id, Install, MavenCoord,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
-    mc::{check_class, check_os},
     pack::PackNode,
 };
 
@@ -20,7 +20,7 @@ use mc_launchermeta::{
     version::{
         Version as McVersion,
         library::{Artifact as McArtifact, Library},
-        rule::Rule,
+        rule::{Os, Rule},
     },
     version_manifest::Manifest,
 };
@@ -30,7 +30,7 @@ use semver::Version;
 
 use serde::{Deserialize, Serialize};
 use tokio::{fs::read_to_string, sync::RwLock};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, info, trace};
 
 fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
     versions
@@ -45,6 +45,62 @@ fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
             )
         })
         .collect()
+}
+
+pub fn check_class(class: &str) -> bool {
+    match class {
+        "natives-linux" => OS == "linux",
+        "natives-windows" => OS == "windows",
+        "natives-macos" | "natives-osx" => OS == "macos",
+        c => todo!("unknown classifier {c}"),
+    }
+}
+
+#[derive(Default)]
+pub struct RuleChecker {
+    feature: HashMap<String, bool>,
+}
+
+impl RuleChecker {
+    pub fn checker(&self) -> impl Fn(&Rule) -> bool {
+        move |rule| self.check(rule)
+    }
+
+    pub fn check(&self, rule: &Rule) -> bool {
+        let os = rule.os.as_ref().is_none_or(Self::check_os);
+
+        let feature = rule.features.iter().all(|(k, v)| {
+            let enable = self.feature.get(k).unwrap_or(&false);
+
+            enable == v
+        });
+
+        let apply = os && feature;
+
+        match rule.action {
+            mc_launchermeta::version::rule::RuleAction::Allow => apply,
+            mc_launchermeta::version::rule::RuleAction::Disallow => !apply,
+        }
+    }
+
+    pub fn check_os(os: &Os) -> bool {
+        let name = os.name.as_ref().is_none_or(|x| match x {
+            mc_launchermeta::version::rule::OsName::Windows => OS == "windows",
+            mc_launchermeta::version::rule::OsName::Osx => OS == "macos",
+            mc_launchermeta::version::rule::OsName::Linux => OS == "linux",
+        });
+
+        let arch = os.arch.as_ref().is_none_or(|x| match x {
+            mc_launchermeta::version::rule::OsArch::X86 => ARCH == "x86" || ARCH == "x86_64",
+        });
+
+        let version = os
+            .version
+            .as_ref()
+            .is_none_or(|_| todo!("does not support checking OS version"));
+
+        name && arch && version
+    }
 }
 
 pub struct VanillaManager {
@@ -260,23 +316,12 @@ fn asset_url(sha1: &str) -> anyhow::Result<String> {
     Ok(url)
 }
 
-pub fn check_rule(rule: &Rule) -> bool {
-    if !rule.features.is_empty() {
-        error!("does not support checking rules with features")
-    }
-
-    let apply = rule.os.as_ref().is_none_or(check_os);
-
-    match rule.action {
-        mc_launchermeta::version::rule::RuleAction::Allow => apply,
-        mc_launchermeta::version::rule::RuleAction::Disallow => !apply,
-    }
-}
-
 fn filter_lib(lib: impl IntoIterator<Item = Library>) -> Vec<McArtifact> {
+    let rule = RuleChecker::default();
+
     lib.into_iter()
         // apply the rules
-        .filter(|x| x.rules.iter().flatten().all(check_rule))
+        .filter(|x| x.rules.iter().flatten().all(rule.checker()))
         // entries with artifacts to download
         .filter_map(|x| x.downloads)
         // flatten list of artifacts

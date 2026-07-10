@@ -413,3 +413,23 @@ pub async fn prompt_correct_license(exp: &str) -> anyhow::Result<spdx::Expressio
         }
     }
 }
+
+/// Like [`Iterator::filter`], but it also immediately skips the next element after a match.
+///
+/// Also note that that an element is skipped when `skip` returns `true`, negation of [`Iterator::filter`].
+pub fn skip_two<T>(skip: impl Fn(&T) -> bool, it: impl IntoIterator<Item = T>) -> Vec<T> {
+    let mut keep = vec![];
+
+    let mut it = it.into_iter();
+
+    while let Some(x) = it.next() {
+        if skip(&x) {
+            it.next();
+            continue;
+        }
+
+        keep.push(x);
+    }
+
+    keep
+}

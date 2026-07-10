@@ -4,7 +4,6 @@ pub use super::fabric::FabricMetaClient;
 pub use super::id::Id;
 pub use super::index::VersionRev;
 pub use super::install::Install;
-pub use super::java::Java;
 pub use super::lock::Lock;
 pub use super::maven::{MavenCoord, MavenVersionRange};
 pub use super::pack::Package;

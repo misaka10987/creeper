@@ -8,7 +8,6 @@ mod game;
 mod id;
 mod index;
 mod install;
-mod java;
 mod launch;
 mod lock;
 mod maven;

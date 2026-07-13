@@ -170,11 +170,7 @@ impl Creeper {
         self.vanilla.update_index().await
     }
 
-    pub fn vanilla_args_install(
-        &self,
-        args: &mc_version::Arguments,
-        version_name: &str,
-    ) -> Install {
+    fn vanilla_args_install(&self, args: &mc_version::Arguments, version_name: &str) -> Install {
         let rule = RuleChecker::default();
 
         let version_type = format!("creeper {VERSION}");
@@ -186,6 +182,7 @@ impl Creeper {
             ("natives_directory", "./.creeper/native"),
             ("launcher_name", "creeper"),
             ("launcher_version", VERSION),
+            ("library_directory", "./.creeper/lib"),
         ]
         .into_iter()
         .collect::<HashMap<_, _>>();
@@ -471,6 +468,7 @@ pub struct McVersionExt {
 
     pub time: String,
 
+    #[serde(rename = "type")]
     pub kind: mc_launchermeta::VersionKind,
 }
 

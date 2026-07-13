@@ -10,4 +10,5 @@ pub use super::maven::{MavenCoord, MavenVersionRange};
 pub use super::pack::Package;
 pub use super::user::User;
 pub use super::util::{mv, symlink_auto};
+pub use super::vanilla::McVersionExt;
 pub use super::yggdrasil::YggdrasilClient;

@@ -3,10 +3,7 @@ mod fmt;
 use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
-use mc_launchermeta::{
-    VersionKind,
-    version::{Arguments, JavaVersion, library::Library, logging::Logging},
-};
+use mc_launchermeta::version::library::Library;
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -19,7 +16,7 @@ use url::Url;
 use walkdir::WalkDir;
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install, MavenCoord, MavenVersionRange,
+    Artifact, Checksum, Creeper, Id, Install, MavenCoord, MavenVersionRange, McVersionExt,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
     neoforge::fmt::maven_coord_format,
@@ -136,10 +133,10 @@ impl Creeper {
 
         // handle install as defined in `version.json`
 
-        let nf_version = extract_zip(&installer, "version.json").await?;
-        let nf_version = serde_json::from_str::<NfVersion>(&nf_version)?;
+        let mc_version = extract_zip(&installer, "version.json").await?;
+        let mc_version = serde_json::from_str::<McVersionExt>(&mc_version)?;
 
-        let mut install = self.neoforge_version_install(nf_version).await?;
+        let mut install = self.vanilla_version_install(mc_version).await?;
 
         // handle install as defined in `install_profile.json`
 
@@ -310,76 +307,6 @@ impl Creeper {
 
         Ok(install)
     }
-
-    async fn neoforge_version_install(&self, version: NfVersion) -> anyhow::Result<Install> {
-        let java_lib_class = self.vanilla_lib(version.libraries).await?;
-        let mut java_lib_mod = HashMap::new();
-
-        let (java_flag, mc_flag) = if let Some(args) = version.arguments {
-            let java_flag = args.jvm.into_iter().flat_map(|arg| arg.values);
-
-            let mut it = java_flag.peekable();
-
-            let mut java_flag = vec![];
-
-            while let Some(arg) = it.next() {
-                match arg.as_str() {
-                    "-p" => {
-                        let value = it
-                            .peek()
-                            .ok_or(anyhow!("missing value for java argument -p"))?;
-
-                        let value = value.replace("${library_directory}/", "");
-
-                        let names = value.split("${classpath_separator}");
-
-                        for name in names {
-                            let path = PathBuf::from(name);
-                            if let Some(art) = java_lib_class.get(&path) {
-                                java_lib_mod.insert(path, art.clone());
-                            } else {
-                                error!("library {name} not found during neoforge install");
-                            }
-                        }
-
-                        it.next();
-                    }
-                    s if !s.contains("$") => java_flag.push(s.into()),
-                    s => {
-                        let vars = vec![
-                            ("library_directory".into(), "./.creeper/lib".into()),
-                            ("version_name".into(), version.id.clone()),
-                        ]
-                        .into_iter()
-                        .collect::<HashMap<String, String>>();
-
-                        let format = shellexpand::env_with_context_no_errors(s, |k| vars.get(k));
-
-                        trace!("formatted java argument {s} -> {format}");
-
-                        java_flag.push(format.to_string());
-                    }
-                }
-            }
-
-            let mc_flag = args.game.into_iter().flat_map(|arg| arg.values).collect();
-
-            (java_flag, mc_flag)
-        } else {
-            (vec![], vec![])
-        };
-
-        let install = Install {
-            java_lib_class,
-            java_lib_mod,
-            java_main_class: Some(version.main_class),
-            java_flag,
-            mc_flag,
-            ..Default::default()
-        };
-
-        Ok(install)
-    }
 }
 
 /// NeoForge's versioning scheme does not always follow the semver standard:
@@ -475,36 +402,6 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
             (VersionRev::new(version), node)
         })
         .collect()
-}
-
-// mc_launchermeta::version::Version
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct NfVersion {
-    //
-    pub inherits_from: String,
-    #[serde(default)]
-    pub arguments: Option<Arguments>,
-    #[serde(default)]
-    pub minecraft_arguments: Option<String>,
-    // pub asset_index: AssetIndex,
-    // pub assets: String,
-    #[serde(default)]
-    pub compliance_level: Option<u8>,
-    // pub downloads: Downloads,
-    pub id: String,
-    #[serde(default)]
-    pub java_version: Option<JavaVersion>,
-    pub libraries: Vec<Library>,
-    #[serde(default)]
-    pub logging: Option<Logging>,
-    pub main_class: String,
-    // pub minimum_launcher_version: u8,
-    pub release_time: String,
-    pub time: String,
-    #[serde(rename = "type")]
-    pub kind: VersionKind,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

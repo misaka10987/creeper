@@ -12,7 +12,10 @@ use url::Url;
 use crate::{
     Id, Install, Package,
     cmd::Execute,
-    neoforge::{NeoforgeMods, neoforge_mods::DependencyType},
+    neoforge::{
+        NeoforgeMods,
+        meta::{DependencyType, Ordering},
+    },
     pack::{PackMeta, PackNode},
     util::{parse_or_prompt, prompt_correct_license, prompt_save, prompt_valid},
     zip::extract_zip,
@@ -128,8 +131,7 @@ impl Execute for PackageNeoforgeMod {
             };
 
             match d.ordering {
-                crate::neoforge::neoforge_mods::Ordering::After
-                | crate::neoforge::neoforge_mods::Ordering::None => {}
+                Ordering::After | Ordering::None => {}
                 ord => {
                     error!("ignoring unsupported {ord} ordering for dependency {id}");
                 }

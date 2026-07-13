@@ -1,22 +1,23 @@
 mod fmt;
+pub mod install_profile;
+pub mod meta;
+mod prelude;
+
+pub use prelude::*;
 
 use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
-use mc_launchermeta::version::library::Library;
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use serde_inline_default::serde_inline_default;
-use serde_with::{NoneAsEmptyString, serde_as};
 use strfmt::Format;
 use tokio::process::Command;
 use tracing::{debug, error, info, trace};
-use url::Url;
 use walkdir::WalkDir;
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install, MavenCoord, MavenVersionRange, McVersionExt,
+    Artifact, Checksum, Creeper, Id, Install, MavenCoord, McVersionExt,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
     neoforge::fmt::maven_coord_format,
@@ -402,249 +403,4 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
             (VersionRev::new(version), node)
         })
         .collect()
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-pub struct NfInstallProfile {
-    pub spec: u64,
-    pub profile: String,
-    pub version: String,
-    pub icon: String,
-    pub minecraft: Version,
-    pub json: PathBuf,
-    pub logo: PathBuf,
-    pub welcome: String,
-    pub mirror_list: Url,
-    pub hide_extract: bool,
-    pub data: HashMap<String, install_profile::DataValue>,
-    pub processors: Vec<install_profile::Processor>,
-    pub libraries: Vec<Library>,
-    pub server_jar_path: String,
-}
-
-pub mod install_profile {
-    use std::fmt::Display;
-
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    #[serde(deny_unknown_fields)]
-    pub struct DataValue {
-        pub client: String,
-        pub server: String,
-    }
-
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    #[serde(deny_unknown_fields)]
-    pub struct Processor {
-        pub sides: Option<Vec<String>>,
-        pub jar: String,
-        pub classpath: Vec<String>,
-        pub args: Vec<String>,
-    }
-
-    impl Display for Processor {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{} {}", self.jar, self.args.join(" "))
-        }
-    }
-}
-
-#[serde_inline_default]
-#[serde_as]
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub struct NeoforgeMods {
-    #[serde_inline_default("javafml".into())]
-    pub mod_loader: String,
-
-    // TODO: serde with maven version range
-    #[serde_as(as = "NoneAsEmptyString")]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub loader_version: Option<MavenVersionRange>,
-
-    /// This field should be a valid SPDX license expression,
-    /// but since many mods like Sodium violate this rule,
-    /// the field is typed as a `String`.
-    // #[serde_as(as = "DisplayFromStr")]
-    // pub license: Expression,
-    pub license: String,
-
-    #[serde_inline_default(false)]
-    pub show_as_resource_pack: bool,
-
-    #[serde_inline_default(false)]
-    pub show_as_data_pack: bool,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub services: Vec<String>,
-
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub properties: HashMap<String, String>,
-
-    #[serde(rename = "issueTrackerURL", skip_serializing_if = "Option::is_none")]
-    pub issue_tracker_url: Option<Url>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mods: Vec<neoforge_mods::Mod>,
-
-    /// NeoForge does not document the type of a property, so we use `serde_json::Value` to represent it.
-    #[serde(
-        rename = "modproperties",
-        default,
-        skip_serializing_if = "HashMap::is_empty"
-    )]
-    pub mod_properties: HashMap<String, HashMap<String, serde_json::Value>>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub access_transformers: Vec<neoforge_mods::AccessTransformer>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mixins: Vec<neoforge_mods::Mixin>,
-
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub dependencies: HashMap<String, Vec<neoforge_mods::Dependency>>,
-}
-
-pub mod neoforge_mods {
-    use std::path::PathBuf;
-
-    use parse_display::{Display, FromStr};
-    use serde::{Deserialize, Serialize};
-    use serde_inline_default::serde_inline_default;
-    use serde_with::{DeserializeFromStr, NoneAsEmptyString, SerializeDisplay, serde_as};
-    use url::Url;
-
-    use crate::MavenVersionRange;
-
-    #[serde_inline_default]
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "camelCase")]
-    pub struct Mod {
-        pub mod_id: String,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub namespace: Option<String>,
-
-        #[serde_inline_default("1".into())]
-        pub version: String,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub display_name: Option<String>,
-
-        #[serde_inline_default(r#"'''MISSING DESCRIPTION '''"#.into())]
-        pub description: String,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub logo_file: Option<PathBuf>,
-
-        #[serde_inline_default(true)]
-        pub logo_blur: bool,
-
-        #[serde(rename = "updateJSONURL", skip_serializing_if = "Option::is_none")]
-        pub update_json_url: Option<Url>,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub mod_url: Option<Url>,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub credits: Option<String>,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub authors: Option<String>,
-
-        #[serde(rename = "displayURL", skip_serializing_if = "Option::is_none")]
-        pub display_url: Option<Url>,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub enum_extensions: Option<PathBuf>,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub feature_flags: Option<PathBuf>,
-
-        /// The field is not NeoForge standard but used by Sodium.
-        /// It is here to avoid error.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        pub _provides: Vec<String>,
-
-        /// The field is not NeoForge standard but used by Iris.
-        /// It is here to avoid error.
-        #[serde(rename = "sodium:options", default, skip_serializing)]
-        pub _sodium_options: serde_json::Value,
-    }
-
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "camelCase")]
-    pub struct AccessTransformer {
-        pub file: PathBuf,
-    }
-
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "camelCase")]
-    pub struct Mixin {
-        pub config: PathBuf,
-
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        pub required_mods: Vec<String>,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub behavior_version: Option<String>,
-    }
-
-    #[serde_inline_default]
-    #[serde_as]
-    #[derive(Clone, Serialize, Deserialize)]
-    #[serde(deny_unknown_fields, rename_all = "camelCase")]
-    pub struct Dependency {
-        pub mod_id: String,
-
-        #[serde_inline_default(DependencyType::Required)]
-        #[serde(rename = "type")]
-        pub dependency_type: DependencyType,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub reason: Option<String>,
-
-        #[serde_as(as = "NoneAsEmptyString")]
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub version_range: Option<MavenVersionRange>,
-
-        #[serde_inline_default(Ordering::None)]
-        pub ordering: Ordering,
-
-        #[serde_inline_default(Side::Both)]
-        pub side: Side,
-
-        #[serde(skip_serializing_if = "Option::is_none")]
-        pub refferal_url: Option<Url>,
-    }
-
-    #[derive(Clone, PartialEq, Eq, Display, FromStr, SerializeDisplay, DeserializeFromStr)]
-    #[display(style = "camelCase")]
-    pub enum DependencyType {
-        Required,
-        Optional,
-        Incompatible,
-        Discouraged,
-    }
-
-    #[derive(Clone, PartialEq, Eq, Display, FromStr, SerializeDisplay, DeserializeFromStr)]
-    #[display(style = "SNAKE_CASE")]
-    pub enum Ordering {
-        Before,
-        After,
-        None,
-    }
-
-    #[derive(Clone, PartialEq, Eq, Display, FromStr, SerializeDisplay, DeserializeFromStr)]
-    #[display(style = "SNAKE_CASE")]
-    pub enum Side {
-        Both,
-        Client,
-        Server,
-    }
 }

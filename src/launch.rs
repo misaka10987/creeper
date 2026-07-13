@@ -124,8 +124,6 @@ impl Creeper {
             cmd.arg(flag);
         }
 
-        cmd.arg("--gameDir").arg(game_dir);
-
         let mod_dir = game_dir.join(".creeper").join("mod");
 
         if try_exists(&mod_dir).await? {

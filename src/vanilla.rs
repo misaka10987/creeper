@@ -170,6 +170,75 @@ impl Creeper {
         self.vanilla.update_index().await
     }
 
+    pub fn vanilla_args_install(
+        &self,
+        args: &mc_version::Arguments,
+        version_name: &str,
+    ) -> Install {
+        let rule = RuleChecker::default();
+
+        let version_type = format!("creeper {VERSION}");
+
+        let vars = [
+            ("version_name", version_name),
+            ("game_directory", "."),
+            ("version_type", &version_type),
+            ("natives_directory", "./.creeper/native"),
+            ("launcher_name", "creeper"),
+            ("launcher_version", VERSION),
+        ]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+
+        let java_flag = args
+            .jvm
+            .iter()
+            .filter_map(|a| a.rules.iter().all(rule.checker()).then_some(&a.values))
+            .flatten();
+
+        let java_flag = skip_two(
+            |a| ["--class-path", "-cp", "--module-path", "-p"].contains(&a.as_str()),
+            java_flag,
+        );
+
+        let java_flag = java_flag
+            .iter()
+            .map(|x| shellexpand::env_with_context_no_errors(x, |k| vars.get(k)).to_string())
+            .collect();
+
+        let mc_flag = args
+            .game
+            .iter()
+            .filter_map(|a| a.rules.iter().all(rule.checker()).then_some(&a.values))
+            .flatten();
+
+        let mc_flag = skip_two(
+            |a| {
+                [
+                    "--username",
+                    "--assetsDir",
+                    "--assetIndex",
+                    "--uuid",
+                    "--accessToken",
+                    "--userType",
+                ]
+                .contains(&a.as_str())
+            },
+            mc_flag,
+        );
+
+        let mc_flag = mc_flag
+            .iter()
+            .map(|x| shellexpand::env_with_context_no_errors(x, |k| vars.get(k)).to_string())
+            .collect();
+
+        Install {
+            java_flag,
+            mc_flag,
+            ..Default::default()
+        }
+    }
+
     pub(crate) async fn vanilla_lib(
         &self,
         lib: impl IntoIterator<Item = Library>,
@@ -238,8 +307,6 @@ impl Creeper {
     pub(crate) async fn vanilla_install(&self, version: &Version) -> anyhow::Result<Install> {
         let mut install = Install::default();
 
-        let rule = RuleChecker::default();
-
         let mc_version = self.vanilla_version(version.clone()).await?;
 
         let client = mc_version.downloads.client;
@@ -266,71 +333,18 @@ impl Creeper {
 
         install.extend(once(asset));
 
-        let mc_flag = mc_version
-            .arguments
-            .iter()
-            .map(|x| &x.game)
-            .flatten()
-            .filter_map(|a| a.rules.iter().all(rule.checker()).then_some(&a.values))
-            .flatten();
+        let arg = if let Some(arg) = mc_version.arguments {
+            self.vanilla_args_install(&arg, &version.to_string())
+        } else {
+            Install::default()
+        };
 
-        let mc_flag = skip_two(
-            |a| {
-                [
-                    "--username",
-                    "--assetsDir",
-                    "--assetIndex",
-                    "--uuid",
-                    "--accessToken",
-                    "--userType",
-                ]
-                .contains(&a.as_str())
-            },
-            mc_flag,
-        );
-
-        let vars = [
-            ("version_name", version.to_string()),
-            ("game_directory", ".".into()),
-            ("version_type", format!("creeper {VERSION}")),
-        ]
-        .into_iter()
-        .collect::<HashMap<_, _>>();
-
-        let mc_flag = mc_flag
-            .into_iter()
-            .map(|x| shellexpand::env_with_context_no_errors(x, |k| vars.get(k)).to_string())
-            .collect();
-
-        let java_flag = mc_version
-            .arguments
-            .iter()
-            .map(|x| &x.jvm)
-            .flatten()
-            .filter_map(|a| a.rules.iter().all(rule.checker()).then_some(&a.values))
-            .flatten();
-
-        let java_flag = skip_two(|x| *x == "-cp", java_flag);
-
-        let vars = [
-            ("natives_directory", "./.creeper/native"),
-            ("launcher_name", "creeper"),
-            ("launcher_version", VERSION),
-        ]
-        .into_iter()
-        .collect::<HashMap<_, _>>();
-
-        let java_flag = java_flag
-            .into_iter()
-            .map(|x| shellexpand::env_with_context_no_errors(x, |k| vars.get(k)).to_string())
-            .collect();
+        install.extend(once(arg));
 
         install.extend(once(Install {
             java_lib_class: lib,
             java_main_class: Some(mc_version.main_class),
-            java_flag,
             mc_jar: Some(client),
-            mc_flag,
             ..Default::default()
         }));
 

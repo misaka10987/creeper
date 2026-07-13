@@ -10,7 +10,7 @@ use tokio::{
     process::Command,
 };
 
-use crate::{Artifact, Creeper, Install, symlink_auto, vanilla::AssetIndex};
+use crate::{Artifact, AssetIndex, Creeper, Install, symlink_auto};
 
 impl Creeper {
     pub async fn launch(&self) -> anyhow::Result<Command> {

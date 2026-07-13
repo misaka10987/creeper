@@ -1,4 +1,5 @@
 mod artifact;
+mod asset;
 mod builtin;
 mod checksum;
 mod cmd;

@@ -1,4 +1,5 @@
 pub use super::artifact::Artifact;
+pub use super::asset::AssetIndex;
 pub use super::checksum::Checksum;
 pub use super::fabric::FabricMetaClient;
 pub use super::id::Id;

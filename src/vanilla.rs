@@ -15,9 +15,9 @@ use crate::{
     util::skip_two,
 };
 
-use anyhow::{anyhow, ensure};
+use anyhow::anyhow;
 use mc_launchermeta::{
-    VERSION_MANIFEST_URL,
+    VERSION_MANIFEST_URL, version as mc_version,
     version::{
         Version as McVersion,
         library::{Artifact as McArtifact, Library},
@@ -30,7 +30,7 @@ use reqwest::Client;
 use semver::Version;
 
 use serde::{Deserialize, Serialize};
-use tokio::{fs::read_to_string, sync::RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, info, trace};
 
 fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
@@ -236,6 +236,8 @@ impl Creeper {
     }
 
     pub(crate) async fn vanilla_install(&self, version: &Version) -> anyhow::Result<Install> {
+        let mut install = Install::default();
+
         let rule = RuleChecker::default();
 
         let mc_version = self.vanilla_version(version.clone()).await?;
@@ -258,21 +260,11 @@ impl Creeper {
             .await?;
         let lib = self.vanilla_lib(mc_version.libraries).await?;
 
-        let asset_index = mc_version.asset_index;
-        let asset_index = self
-            .download(
-                asset_index.id,
-                asset_index.url,
-                Some(asset_index.size),
-                Some(Checksum::sha1(asset_index.sha1)),
-            )
-            .await?;
+        let asset_index = self.download_asset_index(mc_version.asset_index).await?;
 
-        let asset_index = self.retrieve_artifact(&asset_index).await?;
-        let json = read_to_string(asset_index).await?;
+        let asset = self.vanilla_asset_install(asset_index).await?;
 
-        let asset_index = serde_json::from_str::<AssetIndex>(&json)?;
-        let mc_asset = self.download_mc_asset(asset_index).await?;
+        install.extend(once(asset));
 
         let mc_flag = mc_version
             .arguments
@@ -333,51 +325,21 @@ impl Creeper {
             .map(|x| shellexpand::env_with_context_no_errors(x, |k| vars.get(k)).to_string())
             .collect();
 
-        let install = Install {
+        install.extend(once(Install {
             java_lib_class: lib,
             java_main_class: Some(mc_version.main_class),
             java_flag,
             mc_jar: Some(client),
-            mc_asset,
             mc_flag,
             ..Default::default()
-        };
+        }));
 
         Ok(install)
     }
 
-    async fn download_mc_asset(
-        &self,
-        index: AssetIndex,
-    ) -> anyhow::Result<HashMap<PathBuf, Artifact>> {
-        let mut map = HashMap::new();
-
-        for (path, obj) in index.objects {
-            let name = PathBuf::from(".minecraft")
-                .join("assets")
-                .join(&path)
-                .display()
-                .to_string();
-
-            let src = asset_url(&obj.sha1)?;
-
-            map.insert(
-                path,
-                (name, src, Some(obj.size), once(Checksum::sha1(obj.sha1))),
-            );
-        }
-
-        let map = self.batch_download(map).await?;
-
-        Ok(map)
+    pub async fn vanilla_version_install(&self, version: &Version) -> anyhow::Result<Install> {
+        todo!()
     }
-}
-
-fn asset_url(sha1: &str) -> anyhow::Result<String> {
-    ensure!(sha1.len() == 40, "invalid sha1 length");
-    let first2 = &sha1[0..2];
-    let url = format!("https://resources.download.minecraft.net/{first2}/{sha1}");
-    Ok(url)
 }
 
 fn filter_lib(lib: impl IntoIterator<Item = Library>) -> Vec<McArtifact> {
@@ -405,34 +367,71 @@ fn filter_lib(lib: impl IntoIterator<Item = Library>) -> Vec<McArtifact> {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct AssetIndex {
-    pub objects: HashMap<PathBuf, Object>,
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct McVersionExt {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inherits_from: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<mc_version::Arguments>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minecraft_arguments: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset_index: Option<mc_version::AssetIndex>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assets: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compliance_level: Option<u8>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downloads: Option<mc_version::Downloads>,
+
+    pub id: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub java_version: Option<mc_version::JavaVersion>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub libraries: Vec<mc_version::library::Library>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<mc_version::logging::Logging>,
+
+    pub main_class: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minimum_launcher_version: Option<u8>,
+
+    pub release_time: String,
+
+    pub time: String,
+
+    pub kind: mc_launchermeta::VersionKind,
 }
 
-impl AssetIndex {
-    pub fn from_map(map: HashMap<PathBuf, Artifact>) -> anyhow::Result<Self> {
-        let mut objects = HashMap::new();
-
-        for (path, art) in map {
-            let sha1 = art
-                .sha1
-                .ok_or(anyhow!("missing SHA-1 checksum in asset index"))?;
-            objects.insert(
-                path,
-                Object {
-                    sha1,
-                    size: art.len,
-                },
-            );
+impl From<mc_version::Version> for McVersionExt {
+    fn from(value: mc_version::Version) -> Self {
+        Self {
+            inherits_from: None,
+            arguments: value.arguments,
+            minecraft_arguments: value.minecraft_arguments,
+            asset_index: Some(value.asset_index),
+            assets: Some(value.assets),
+            compliance_level: value.compliance_level,
+            downloads: Some(value.downloads),
+            id: value.id,
+            java_version: value.java_version,
+            libraries: value.libraries,
+            logging: value.logging,
+            main_class: value.main_class,
+            minimum_launcher_version: Some(value.minimum_launcher_version),
+            release_time: value.release_time,
+            time: value.time,
+            kind: value.kind,
         }
-
-        Ok(Self { objects })
     }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Object {
-    #[serde(rename = "hash")]
-    pub sha1: String,
-    pub size: u64,
 }

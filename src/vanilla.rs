@@ -1,8 +1,8 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     env::consts::{ARCH, OS},
     iter::once,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::OnceLock,
     time::Duration,
 };
@@ -305,54 +305,75 @@ impl Creeper {
     }
 
     pub(crate) async fn vanilla_install(&self, version: &Version) -> anyhow::Result<Install> {
-        let mut install = Install::default();
-
         let mc_version = self.vanilla_version(version.clone()).await?;
 
-        let client = mc_version.downloads.client;
-
-        let url = if self.config.use_bmclapi {
-            format!("https://bmclapi2.bangbang93.com/version/{version}/client")
-        } else {
-            client.url
-        };
-
-        let client = self
-            .download(
-                "minecraft.jar".into(),
-                url,
-                Some(client.size),
-                Some(Checksum::sha1(client.sha1)),
-            )
-            .await?;
-        let lib = self.vanilla_lib(mc_version.libraries).await?;
-
-        let asset_index = self.download_asset_index(mc_version.asset_index).await?;
-
-        let asset = self.vanilla_asset_install(asset_index).await?;
-
-        install.extend(once(asset));
-
-        let arg = if let Some(arg) = mc_version.arguments {
-            self.vanilla_args_install(&arg, &version.to_string())
-        } else {
-            Install::default()
-        };
-
-        install.extend(once(arg));
-
-        install.extend(once(Install {
-            java_lib_class: lib,
-            java_main_class: Some(mc_version.main_class),
-            mc_jar: Some(client),
-            ..Default::default()
-        }));
+        let install = self.vanilla_version_install(mc_version.into()).await?;
 
         Ok(install)
     }
 
-    pub async fn vanilla_version_install(&self, version: &Version) -> anyhow::Result<Install> {
-        todo!()
+    pub async fn vanilla_version_install(&self, version: McVersionExt) -> anyhow::Result<Install> {
+        let mut install = Install::default();
+
+        let rule = RuleChecker::default();
+
+        if let Some(downloads) = version.downloads {
+            let client = self
+                .download(
+                    format!("{}.jar", version.id),
+                    downloads.client.url,
+                    Some(downloads.client.size),
+                    once(Checksum::sha1(downloads.client.sha1)),
+                )
+                .await?;
+
+            install.extend(once(Install {
+                mc_jar: Some(client),
+                ..Default::default()
+            }));
+        }
+
+        let lib = self.vanilla_lib(version.libraries).await?;
+
+        let java_args = version
+            .arguments
+            .iter()
+            .flat_map(|x| &x.jvm)
+            .filter_map(|a| a.rules.iter().all(rule.checker()).then_some(&a.values))
+            .flatten();
+
+        let mut java_lib_mod = HashMap::new();
+
+        for p in java_module_path(java_args.map(|a| a.as_str()))? {
+            let path = Path::new(p);
+
+            if let Some(art) = lib.get(path) {
+                java_lib_mod.insert(path.into(), art.clone());
+            }
+        }
+
+        if let Some(asset_index) = version.asset_index {
+            let asset_index = self.download_asset_index(asset_index).await?;
+
+            let asset = self.vanilla_asset_install(asset_index).await?;
+
+            install.extend(once(asset));
+        }
+
+        if let Some(args) = version.arguments {
+            let arg = self.vanilla_args_install(&args, &version.id);
+
+            install.extend(once(arg));
+        }
+
+        install.extend(once(Install {
+            java_lib_class: lib,
+            java_lib_mod,
+            java_main_class: Some(version.main_class),
+            ..Default::default()
+        }));
+
+        Ok(install)
     }
 }
 
@@ -378,6 +399,32 @@ fn filter_lib(lib: impl IntoIterator<Item = Library>) -> Vec<McArtifact> {
         .into_iter()
         .map(|(_k, v)| v)
         .collect()
+}
+
+fn java_module_path<'a>(
+    args: impl IntoIterator<Item = &'a str>,
+) -> anyhow::Result<HashSet<&'a str>> {
+    let mut it = args.into_iter().peekable();
+
+    let mut p = HashSet::new();
+
+    while let Some(arg) = it.next() {
+        if !(arg == "--module-path" || arg == "-p") {
+            continue;
+        }
+
+        let value = it
+            .peek()
+            .ok_or(anyhow!("missing value for java module path"))?;
+
+        let paths = value
+            .split("${classpath_separator}")
+            .map(|x| x.strip_prefix("${library_directory}/").unwrap_or(x));
+
+        p.extend(paths);
+    }
+
+    Ok(p)
 }
 
 #[derive(Clone, Serialize, Deserialize)]

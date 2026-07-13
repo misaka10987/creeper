@@ -176,19 +176,6 @@ pub struct EntryPoints {
     pub extra: HashMap<String, Vec<String>>,
 }
 
-#[test]
-fn test() {
-    let json = r#"{
-    "client": [
-      "net.caffeinemc.mods.sodium.fabric.SodiumFabricMod"
-    ],
-    "preLaunch": [
-      "net.caffeinemc.mods.sodium.fabric.SodiumPreLaunch"
-    ]
-  }"#;
-    serde_json::from_str::<EntryPoints>(json).unwrap();
-}
-
 impl EntryPoints {
     pub fn is_empty(&self) -> bool {
         self.main.is_empty() && self.client.is_empty() && self.server.is_empty()

@@ -34,19 +34,6 @@ pub fn is_valid_maven_artifact(name: &str) -> bool {
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-// fn normalize_version(version: &str) -> String {
-//     let (version, suffix) = version
-//         .split_once("-")
-//         .or(version.split_once("+"))
-//         .unwrap_or((version, ""));
-
-//     match version.matches(".").count() {
-//         0 => format!("{}.0.0{}", version, suffix),
-//         1 => format!("{}.0{}", version, suffix),
-//         _ => format!("{}{}", version, suffix),
-//     }
-// }
-
 /// A maven coordinate defined as `<groupId>:<artifactId>:<version>`.
 #[derive(Clone, PartialEq, Eq, SerializeDisplay, DeserializeFromStr)]
 #[cfg_attr(test, derive(Debug))]

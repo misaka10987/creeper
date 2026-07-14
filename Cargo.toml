@@ -63,3 +63,5 @@ clap_complete_nushell = "4.6.0"
 shellexpand = { version = "3.1.2", default-features = false, features = [
     "base-0",
 ] }
+fabric-meta-api = { version = "1.0.0-rc.1", features = ["client"] }
+creeper-maven-coord = "1.0.0"

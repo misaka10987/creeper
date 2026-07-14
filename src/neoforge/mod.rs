@@ -3,6 +3,7 @@ pub mod install_profile;
 pub mod meta;
 mod prelude;
 
+use creeper_maven_coord::MavenCoord;
 pub use prelude::*;
 
 use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr, time::Duration};
@@ -17,7 +18,7 @@ use tracing::{debug, error, info, trace};
 use walkdir::WalkDir;
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install, MavenCoord, McVersionExt,
+    Artifact, Checksum, Creeper, Id, Install, McVersionExt,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
     neoforge::fmt::maven_coord_format,

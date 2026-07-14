@@ -1,8 +1,6 @@
 mod prelude;
 mod rule;
 
-pub use prelude::*;
-
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     env::consts::OS,
@@ -13,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install, MavenCoord, VERSION,
+    Artifact, Checksum, Creeper, Id, Install, VERSION,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
     pack::PackNode,
@@ -21,6 +19,7 @@ use crate::{
 };
 
 use anyhow::anyhow;
+use creeper_maven_coord::MavenCoord;
 use mc_launchermeta::{
     VERSION_MANIFEST_URL, version as mc_version,
     version::{
@@ -29,13 +28,13 @@ use mc_launchermeta::{
     },
     version_manifest::Manifest,
 };
-
 use reqwest::Client;
 use semver::Version;
-
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, info, trace};
+
+pub use prelude::*;
 
 fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
     versions

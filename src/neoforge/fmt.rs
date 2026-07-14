@@ -1,8 +1,7 @@
 use std::path::Path;
 
 use anyhow::bail;
-
-use crate::MavenCoord;
+use creeper_maven_coord::MavenCoord;
 
 pub fn maven_coord_format(s: &str, root: impl AsRef<Path>) -> anyhow::Result<String> {
     let root = root.as_ref();

@@ -606,8 +606,10 @@ dependencies = [
  "clap_complete_nushell",
  "colored",
  "const-hex",
+ "creeper-maven-coord",
  "creeper-semver-pubgrub",
  "dirs",
+ "fabric-meta-api",
  "futures",
  "indexmap 2.14.0",
  "indicatif",
@@ -640,6 +642,17 @@ dependencies = [
  "url",
  "uuid",
  "walkdir",
+]
+
+[[package]]
+name = "creeper-maven-coord"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c38367c582b75ebb9facb9629fa7ba981714815878232ec628d074d19ffd79ee"
+dependencies = [
+ "anyhow",
+ "semver",
+ "tracing",
 ]
 
 [[package]]
@@ -933,6 +946,21 @@ dependencies = [
  "concurrent-queue",
  "parking",
  "pin-project-lite",
+]
+
+[[package]]
+name = "fabric-meta-api"
+version = "1.0.0-rc.1+v2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8140ef02168afb47315b269bd941afce035bc0f78cb53c35b18c92797556a65d"
+dependencies = [
+ "anyhow",
+ "creeper-maven-coord",
+ "mc-launchermeta",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_with",
+ "url",
 ]
 
 [[package]]

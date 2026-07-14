@@ -1,5 +1,4 @@
 pub mod meta;
-pub mod meta_api;
 mod prelude;
 
 pub use prelude::*;
@@ -11,15 +10,15 @@ use std::{
 };
 
 use anyhow::{anyhow, ensure};
+use fabric_meta_api::{FabricMetaClient, Game, Library, LoaderWithIntermediary};
 use reqwest::Client;
 use semver::{Version, VersionReq};
 use tracing::{Span, info, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
-    Creeper, Id, Install,
+    Checksum, Creeper, Id, Install,
     builtin::{SyncBuiltinIndex, UpdateIndex},
-    fabric::meta_api::{Game, LoaderWithIntermediary},
     index::VersionRev,
     pack::PackNode,
     pbar::PROGRESS_STYLE_DEFAULT,
@@ -172,7 +171,7 @@ impl Creeper {
         for lib in lib {
             let path = lib.name.path();
             let src = lib.url.join(&path.display().to_string())?.to_string();
-            java_lib_class.insert(path, (lib.name.to_string(), src, lib.size, lib.checksum()));
+            java_lib_class.insert(path, (lib.name.to_string(), src, lib.size, checksum(lib)));
         }
 
         let java_lib_class = self.batch_download(java_lib_class).await?;
@@ -281,7 +280,7 @@ impl Creeper {
                     .join(&lib.name.path().display().to_string())?
                     .to_string(),
                 lib.size,
-                lib.checksum(),
+                checksum(lib),
             )
             .await?;
 
@@ -292,4 +291,11 @@ impl Creeper {
 
         Ok(install)
     }
+}
+
+fn checksum(lib: Library) -> impl IntoIterator<Item = Checksum> {
+    lib.sha1
+        .into_iter()
+        .map(Checksum::sha1)
+        .chain(lib.sha256.into_iter().map(Checksum::sha256))
 }

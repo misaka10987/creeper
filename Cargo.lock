@@ -615,7 +615,9 @@ dependencies = [
  "indicatif",
  "inquire",
  "local-redirect-uri",
+ "maven-version-range",
  "mc-launchermeta",
+ "neoforge",
  "oauth2",
  "open",
  "parse-display",
@@ -1821,6 +1823,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
+name = "maven-version-range"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "138cbebbe436a186be43f6e7f9830e80ecc3ca5392ee03f23f4722a0a796652b"
+dependencies = [
+ "anyhow",
+ "semver",
+]
+
+[[package]]
 name = "mc-launchermeta"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1872,6 +1884,24 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "neoforge"
+version = "0.1.0+mc26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c0f393a9ebb2f886f11374077a0c3eb5edb615231d90e484cf693210a1e08f2"
+dependencies = [
+ "maven-version-range",
+ "mc-launchermeta",
+ "parse-display",
+ "semver",
+ "serde",
+ "serde-inline-default",
+ "serde_json",
+ "serde_with",
+ "spdx",
+ "url",
 ]
 
 [[package]]

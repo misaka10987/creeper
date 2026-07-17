@@ -1,14 +1,10 @@
 mod fmt;
-pub mod install_profile;
-pub mod meta;
-mod prelude;
-
-use creeper_maven_coord::MavenCoord;
-pub use prelude::*;
 
 use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
+use creeper_maven_coord::MavenCoord;
+use neoforge::NfInstallProfile;
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};

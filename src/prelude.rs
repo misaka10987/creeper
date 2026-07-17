@@ -5,7 +5,6 @@ pub use super::id::Id;
 pub use super::index::VersionRev;
 pub use super::install::Install;
 pub use super::lock::Lock;
-pub use super::maven::MavenVersionRange;
 pub use super::pack::Package;
 pub use super::user::User;
 pub use super::util::{mv, symlink_auto};

@@ -4,6 +4,10 @@ use anyhow::bail;
 use clap::Parser;
 use colored::Colorize;
 use inquire::{Select, Text};
+use neoforge::{
+    NfMods,
+    meta::{DependencyType, Ordering},
+};
 use semver::VersionReq;
 use tokio::task::spawn_blocking;
 use tracing::{error, warn};
@@ -12,12 +16,8 @@ use url::Url;
 use crate::{
     Id, Install, Package,
     cmd::Execute,
-    neoforge::{
-        NeoforgeMods,
-        meta::{DependencyType, Ordering},
-    },
     pack::{PackMeta, PackNode},
-    util::{parse_or_prompt, prompt_correct_license, prompt_save, prompt_valid},
+    util::{parse_or_prompt, prompt_save, prompt_valid},
     zip::extract_zip,
 };
 
@@ -40,7 +40,7 @@ impl Execute for PackageNeoforgeMod {
 
         let toml = extract_zip(jar, "META-INF/neoforge.mods.toml").await?;
 
-        let mods = toml::from_str::<NeoforgeMods>(&toml)?;
+        let mods = toml::from_str::<NfMods>(&toml)?;
 
         let select_mod_id = if mods.mods.len() == 1 {
             mods.mods[0].mod_id.clone()
@@ -80,8 +80,6 @@ impl Execute for PackageNeoforgeMod {
             Err(_) => parse_or_prompt(&select_mod.version, "semver").await?,
         };
 
-        let license = prompt_correct_license(&mods.license).await?;
-
         let name = if let Some(name) = &select_mod.display_name {
             name.clone()
         } else {
@@ -97,7 +95,7 @@ impl Execute for PackageNeoforgeMod {
             name,
             authors,
             desc: select_mod.description.clone(),
-            license: Some(license),
+            license: Some(mods.license),
         };
 
         let mut dep = BTreeMap::new();

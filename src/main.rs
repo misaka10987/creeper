@@ -11,7 +11,6 @@ mod index;
 mod install;
 mod launch;
 mod lock;
-mod maven;
 mod ms;
 mod neoforge;
 mod pack;

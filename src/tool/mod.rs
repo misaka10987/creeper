@@ -1,6 +1,8 @@
-pub mod download;
-pub mod pack_fabric_mod;
-pub mod pack_nf_mod;
+mod build_index;
+mod download;
+mod pack_fabric_mod;
+mod pack_nf_mod;
+
 mod prelude;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -22,17 +24,28 @@ pub use prelude::*;
 /// Collection of CLI tools.
 #[derive(Clone, Debug, Parser)]
 pub enum Tool {
+    BuildIndex(BuildIndex),
+
     LoadInst(LoadInst),
+
     Resolve(Resolve),
+
     GetPackage(GetPackage),
+
     ListVersion(ListVersion),
+
     GetInstall(GetInstall),
+
     DiscoverYggdrasil(DiscoverYggdrasil),
+
     #[command(name = "nf-version")]
     NeoForgeVersion(NeoForgeVersion),
+
     #[command(name = "pack-nf-mod")]
     PackageNeoforgeMod(PackageNeoforgeMod),
+
     Download(Download),
+
     #[command(name = "pack-fabric-mod")]
     PackageFabricMod(PackageFabricMod),
 }
@@ -40,6 +53,7 @@ pub enum Tool {
 impl Execute for Tool {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         match self {
+            Tool::BuildIndex(build_index) => lib.execute(build_index).await,
             Tool::LoadInst(load_inst) => lib.execute(load_inst).await,
             Tool::Resolve(resolve) => lib.execute(resolve).await,
             Tool::GetPackage(get_package) => lib.execute(get_package).await,

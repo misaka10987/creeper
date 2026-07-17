@@ -1,13 +1,12 @@
 use crate::Creeper;
 
-pub mod add;
-pub mod build_index;
-pub mod complete;
-pub mod init;
-pub mod install;
-pub mod launch;
-pub mod login;
-pub mod nuke;
+mod add;
+mod complete;
+mod init;
+mod install;
+mod launch;
+mod login;
+mod nuke;
 mod prelude;
 
 pub use prelude::*;

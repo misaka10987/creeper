@@ -283,8 +283,6 @@ pub enum SubCommand {
 
     Launch(cmd::Launch),
 
-    BuildIndex(cmd::BuildIndex),
-
     Install(cmd::Install),
 
     Nuke(cmd::Nuke),
@@ -307,7 +305,6 @@ impl Execute for SubCommand {
         match self {
             SubCommand::Tool(tool) => lib.execute(tool).await,
             SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
-            SubCommand::BuildIndex(build_index) => lib.execute(build_index).await,
             SubCommand::Install(install) => lib.execute(install).await,
             SubCommand::Launch(launch) => lib.execute(launch).await,
             SubCommand::Nuke(nuke) => lib.execute(nuke).await,

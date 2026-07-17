@@ -18,9 +18,9 @@ use url::Url;
 
 use crate::{
     Creeper, Id, Package,
-    cmd::BuildIndex,
     index::{Index, IndexLine, VersionRev},
     path::creeper_cache_dir,
+    tool::BuildIndex,
 };
 
 pub struct Registry {

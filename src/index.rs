@@ -286,6 +286,7 @@ impl Creeper {
                 "neoforge" => self.neoforge.get_index().await?,
                 "fabric" => self.fabric.get_index().await?,
                 "intermediary" => self.intermediary.get_index().await?,
+                "server" => self.server.get_index().await?,
                 _ => todo!(),
             }
         } else {
@@ -325,6 +326,7 @@ impl Creeper {
                 "neoforge" => self.neoforge.blocking_get_index()?,
                 "fabric" => self.fabric.blocking_get_index()?,
                 "intermediary" => self.intermediary.blocking_get_index()?,
+                "server" => self.server.blocking_get_index()?,
                 s => todo!("builtin package {s}"),
             }
         } else {
@@ -352,4 +354,11 @@ impl Creeper {
             .ok_or(anyhow!("no {version} rev {rev} for {package}"))?;
         Ok(node.clone())
     }
+}
+
+pub fn independent_index(versions: impl IntoIterator<Item = VersionRev>) -> Index {
+    versions
+        .into_iter()
+        .map(|version| (version, PackNode::default()))
+        .collect()
 }

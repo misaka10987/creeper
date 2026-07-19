@@ -75,6 +75,10 @@ pub struct Install {
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shader_pack: Vec<Artifact>,
+
+    #[serde_inline_default(false)]
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub user: bool,
 }
 
 impl Install {
@@ -109,6 +113,7 @@ impl Extend<Self> for Install {
                 mc_mod,
                 resource_pack,
                 shader_pack,
+                user,
             } = next;
             self.java_lib_class.extend(java_lib_class);
             self.java_lib_mod.extend(java_lib_mod);
@@ -124,6 +129,7 @@ impl Extend<Self> for Install {
             self.mc_mod.extend(mc_mod);
             self.resource_pack.extend(resource_pack);
             self.shader_pack.extend(shader_pack);
+            self.user = self.user || user;
         }
 
         self.simplify();
@@ -211,6 +217,7 @@ impl Creeper {
                 "neoforge" => self.neoforge_install(version).await?,
                 "fabric" => self.fabric_install(version).await?,
                 "intermediary" => self.intermediary_install(version).await?,
+                "server" => self.server_install(version).await?,
                 _ => todo!(),
             }
         } else {

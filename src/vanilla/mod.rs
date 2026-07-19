@@ -1,8 +1,9 @@
 mod prelude;
 mod rule;
+mod server;
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     env::consts::OS,
     iter::once,
     path::{Path, PathBuf},
@@ -13,8 +14,7 @@ use std::{
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, VERSION,
     builtin::{SyncBuiltinIndex, UpdateIndex},
-    index::{Index, VersionRev},
-    pack::PackNode,
+    index::{Index, VersionRev, independent_index},
     util::skip_two,
 };
 
@@ -35,21 +35,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, trace};
 
 pub use prelude::*;
-
-fn vanilla_index(versions: impl IntoIterator<Item = Version>) -> Index {
-    versions
-        .into_iter()
-        .map(|version| {
-            (
-                VersionRev::new(version),
-                PackNode {
-                    dep: BTreeMap::new(),
-                    ..Default::default()
-                },
-            )
-        })
-        .collect()
-}
 
 pub fn check_class(class: &str) -> bool {
     match class {
@@ -106,7 +91,7 @@ impl SyncBuiltinIndex for VanillaManager {
             versions.len()
         );
 
-        let index = vanilla_index(versions);
+        let index = independent_index(versions.into_iter().map(VersionRev::new));
 
         Ok(index)
     }
@@ -261,6 +246,11 @@ impl Creeper {
         let mc_version = self.vanilla_version(version.clone()).await?;
 
         let install = self.vanilla_version_install(mc_version.into()).await?;
+
+        let install = Install {
+            user: true,
+            ..install
+        };
 
         Ok(install)
     }

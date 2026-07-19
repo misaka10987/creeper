@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    iter::once,
     path::{Path, PathBuf},
 };
 
@@ -20,7 +19,9 @@ impl Creeper {
 
         let mut install = serde_json::from_str::<Install>(&json)?;
 
-        install.extend(once(self.user_install().await?));
+        if install.user {
+            install.extend([self.user_install().await?]);
+        }
 
         let mut cmd = Command::new("java");
 
@@ -90,35 +91,37 @@ impl Creeper {
             cmd.arg(java_main_class);
         }
 
-        let asset_path = game_dir.join(".creeper").join("asset");
-        create_dir_all(&asset_path).await?;
+        if !install.mc_asset.is_empty() {
+            let asset_path = game_dir.join(".creeper").join("asset");
+            create_dir_all(&asset_path).await?;
 
-        fn sha1_indexed_path(sha1: &str) -> anyhow::Result<PathBuf> {
-            ensure!(sha1.len() == 40, "invalid sha1 length");
-            let first2 = &sha1[0..2];
-            let path = PathBuf::from(".").join(first2).join(sha1);
-            Ok(path)
+            fn sha1_indexed_path(sha1: &str) -> anyhow::Result<PathBuf> {
+                ensure!(sha1.len() == 40, "invalid sha1 length");
+                let first2 = &sha1[0..2];
+                let path = PathBuf::from(".").join(first2).join(sha1);
+                Ok(path)
+            }
+
+            let mut assets = HashMap::new();
+
+            for (_, art) in &install.mc_asset {
+                let sha1 = art.sha1.as_ref().ok_or(anyhow!("missing SHA-1 checksum"))?;
+                assets.insert(sha1_indexed_path(sha1)?, art.clone());
+            }
+
+            self.batch_retrieve_artifact_to(assets, asset_path.join("objects"))
+                .await?;
+
+            let asset_index = AssetIndex::from_map(install.mc_asset)?;
+
+            let json = serde_json::to_string(&asset_index)?;
+            let path = asset_path.join("indexes").join("index.json");
+            create_dir_all(path.parent().unwrap()).await?;
+            write(path, json).await?;
+
+            cmd.arg("--assetsDir").arg(asset_path);
+            cmd.arg("--assetIndex").arg("index");
         }
-
-        let mut assets = HashMap::new();
-
-        for (_, art) in &install.mc_asset {
-            let sha1 = art.sha1.as_ref().ok_or(anyhow!("missing SHA-1 checksum"))?;
-            assets.insert(sha1_indexed_path(sha1)?, art.clone());
-        }
-
-        self.batch_retrieve_artifact_to(assets, asset_path.join("objects"))
-            .await?;
-
-        let asset_index = AssetIndex::from_map(install.mc_asset)?;
-
-        let json = serde_json::to_string(&asset_index)?;
-        let path = asset_path.join("indexes").join("index.json");
-        create_dir_all(path.parent().unwrap()).await?;
-        write(path, json).await?;
-
-        cmd.arg("--assetsDir").arg(asset_path);
-        cmd.arg("--assetIndex").arg("index");
 
         for flag in install.mc_flag {
             cmd.arg(flag);

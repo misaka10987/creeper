@@ -66,9 +66,13 @@ impl Id {
         "intermediary".parse().unwrap()
     }
 
+    pub fn server() -> Self {
+        "server".parse().unwrap()
+    }
+
     /// Whether this is a regular package or a package to be specially handled by package manager.
     pub fn is_regular(&self) -> bool {
-        const SPECIAL: [&str; 7] = [
+        const SPECIAL: [&str; 8] = [
             "root",
             "minecraft",
             "vanilla",
@@ -76,6 +80,7 @@ impl Id {
             "neoforge",
             "fabric",
             "intermediary",
+            "server",
         ];
         !SPECIAL.contains(&self.as_str())
     }

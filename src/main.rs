@@ -57,7 +57,7 @@ use crate::{
     registry::Registry,
     tool::Tool,
     user::UserManager,
-    vanilla::VanillaManager,
+    vanilla::{ServerManager, VanillaManager},
 };
 
 pub use prelude::*;
@@ -69,6 +69,7 @@ pub struct CreeperInner {
     pub config: Config,
     artifact: ArtifactManager,
     vanilla: VanillaManager,
+    server: ServerManager,
     http: Client,
     registry: Registry,
     index_cache: IndexCache,
@@ -132,11 +133,14 @@ impl Creeper {
         let user = UserManager::new();
         let fabric = FabricManager::new(http.clone());
         let intermediary = IntermediaryManager::new(http.clone());
+        let server = ServerManager::new(http.clone());
+
         let val = CreeperInner {
             args,
             config,
             artifact,
             vanilla,
+            server,
             http,
             registry,
             index_cache: IndexCache::new(),
@@ -161,6 +165,7 @@ impl Creeper {
 
         self.update_registry().await?;
         self.update_vanilla().await?;
+        self.update_server().await?;
         self.update_neoforge().await?;
         self.update_fabric().await?;
         self.update_intermediary().await?;

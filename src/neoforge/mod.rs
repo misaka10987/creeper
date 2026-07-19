@@ -154,10 +154,8 @@ impl Creeper {
 
         info!("preparing neoforge install environment");
 
-        for (path, art) in &java_lib_file {
-            let path = tmp_lib_dir.join(path);
-            self.retrieve_artifact_to(art, path).await?;
-        }
+        self.batch_retrieve_artifact_to(java_lib_file.clone(), &tmp_lib_dir)
+            .await?;
 
         let vanilla_install = {
             // repeat code from [`Self::install`] to avoid async recursion

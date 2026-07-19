@@ -9,6 +9,7 @@ mod game;
 mod id;
 mod index;
 mod install;
+mod jar;
 mod launch;
 mod lock;
 mod ms;

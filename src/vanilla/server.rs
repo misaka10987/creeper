@@ -10,8 +10,7 @@ use crate::{
     Checksum, Creeper, Id, Install, VersionRev,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::independent_index,
-    util::JarManifest,
-    zip::extract_zip,
+    jar::jar_main_class,
 };
 
 pub struct ServerManager {
@@ -95,13 +94,7 @@ impl Creeper {
 
         let jar = self.retrieve_artifact(&server).await?;
 
-        let manifest = extract_zip(jar, "META-INF/MANIFEST.MF")
-            .await?
-            .parse::<JarManifest>()?;
-
-        let main_class = manifest
-            .main_class
-            .ok_or(anyhow!("{} missing main class", server.name))?;
+        let main_class = jar_main_class(jar).await?;
 
         let install = Install {
             java_lib_class: [(server.name.clone().into(), server)].into_iter().collect(),

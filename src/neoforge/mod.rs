@@ -17,10 +17,10 @@ use crate::{
     Artifact, Checksum, Creeper, Id, Install, McVersionExt,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
+    jar::jar_main_class,
     neoforge::fmt::maven_coord_format,
     pack::PackNode,
     path::creeper_cache_dir,
-    util::JarManifest,
     zip::{extract_zip, extract_zip_to},
 };
 
@@ -218,13 +218,7 @@ impl Creeper {
 
             let jar = self.retrieve_artifact(jar).await?;
 
-            let manifest = extract_zip(&jar, "META-INF/MANIFEST.MF")
-                .await?
-                .parse::<JarManifest>()?;
-
-            let main_class = manifest
-                .main_class
-                .ok_or(anyhow!("processor missing java main class"))?;
+            let main_class = jar_main_class(&jar).await?;
 
             let mut cp = vec![jar.display().to_string()];
 

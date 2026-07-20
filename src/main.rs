@@ -53,7 +53,7 @@ use crate::{
     fabric::{FabricManager, IntermediaryManager},
     game::GameManager,
     index::IndexCache,
-    neoforge::NeoforgeManager,
+    neoforge::{NeoforgeManager, NeoforgeServerManager},
     path::{creeper_config_dir, init_creeper_dirs},
     registry::Registry,
     tool::Tool,
@@ -76,6 +76,7 @@ pub struct CreeperInner {
     index_cache: IndexCache,
     game: GameManager,
     neoforge: NeoforgeManager,
+    neoforge_server: NeoforgeServerManager,
     fabric: FabricManager,
     intermediary: IntermediaryManager,
     user: UserManager,
@@ -135,6 +136,7 @@ impl Creeper {
         let fabric = FabricManager::new(http.clone());
         let intermediary = IntermediaryManager::new(http.clone());
         let server = ServerManager::new(http.clone());
+        let neoforge_server = NeoforgeServerManager::new(http.clone());
 
         let val = CreeperInner {
             args,
@@ -146,6 +148,7 @@ impl Creeper {
             registry,
             index_cache: IndexCache::new(),
             neoforge,
+            neoforge_server,
             game,
             user,
             fabric,

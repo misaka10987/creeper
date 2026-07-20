@@ -284,6 +284,7 @@ impl Creeper {
             match package.as_str() {
                 "vanilla" => self.vanilla.get_index().await?,
                 "neoforge" => self.neoforge.get_index().await?,
+                "neoforge-server" => self.neoforge_server.get_index().await?,
                 "fabric" => self.fabric.get_index().await?,
                 "intermediary" => self.intermediary.get_index().await?,
                 "server" => self.server.get_index().await?,
@@ -324,6 +325,7 @@ impl Creeper {
             match package.as_str() {
                 "vanilla" => self.vanilla.blocking_get_index()?,
                 "neoforge" => self.neoforge.blocking_get_index()?,
+                "neoforge-server" => self.neoforge_server.blocking_get_index()?,
                 "fabric" => self.fabric.blocking_get_index()?,
                 "intermediary" => self.intermediary.blocking_get_index()?,
                 "server" => self.server.blocking_get_index()?,

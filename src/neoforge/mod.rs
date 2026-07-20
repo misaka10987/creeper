@@ -1,5 +1,7 @@
 mod container;
 mod fmt;
+mod prelude;
+mod server;
 
 use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr, time::Duration};
 
@@ -19,13 +21,12 @@ use crate::{
     zip::{extract_zip, extract_zip_to},
 };
 
+pub use prelude::*;
+
 fn cache_path() -> anyhow::Result<PathBuf> {
     let path = creeper_cache_dir()?.join("builtin").join("neoforge");
     Ok(path)
 }
-
-const VERSIONS_URL: &str =
-    "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
 
 pub struct NeoforgeManager {
     http: Client,
@@ -37,6 +38,28 @@ impl NeoforgeManager {
     }
 }
 
+async fn query_neoforge_versions(http: &Client) -> anyhow::Result<Vec<String>> {
+    const VERSIONS_URL: &str =
+        "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    struct Versions {
+        is_snapshot: bool,
+        versions: Vec<String>,
+    }
+
+    let versions = http
+        .get(VERSIONS_URL)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<Versions>()
+        .await?;
+
+    Ok(versions.versions)
+}
+
 impl SyncBuiltinIndex for NeoforgeManager {
     fn package(&self) -> Id {
         Id::neoforge()
@@ -45,22 +68,11 @@ impl SyncBuiltinIndex for NeoforgeManager {
     async fn sync_index(&self) -> anyhow::Result<Index> {
         info!("updating NeoForge metadata");
 
-        let req = self.http.get(VERSIONS_URL).build()?;
-        let res = self.http.execute(req).await?;
+        let versions = query_neoforge_versions(&self.http).await?;
 
-        #[derive(Clone, Debug, Serialize, Deserialize)]
-        struct Versions {
-            #[serde(rename = "isSnapshot")]
-            is_snapshot: bool,
-            versions: Vec<String>,
-        }
-
-        let versions = res.json::<Versions>().await?;
-
-        let count = versions.versions.len();
+        let count = versions.len();
 
         let versions = versions
-            .versions
             .into_iter()
             .filter_map(|s| parse_neoforge_version(&s));
 
@@ -132,8 +144,6 @@ impl Creeper {
         let mut install = self.vanilla_version_install(mc_version).await?;
 
         // handle install as defined in `install_profile.json`
-
-        // let tmp_dir = cache_path()?.join("tmp").join(version.to_string());
 
         let mut container =
             self.new_install_container(cache_path()?.join("tmp").join(version.to_string()));

@@ -97,7 +97,7 @@ impl Creeper {
         let main_class = jar_main_class(jar).await?;
 
         let install = Install {
-            java_lib_class: [(server.name.clone().into(), server)].into_iter().collect(),
+            mc_jar: Some(server),
 
             java_main_class: Some(main_class),
 

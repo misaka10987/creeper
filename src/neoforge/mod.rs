@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install, McVersionExt,
+    Artifact, Checksum, Creeper, Id, Install,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
     pack::PackNode,
@@ -139,7 +139,7 @@ impl Creeper {
         // handle install as defined in `version.json`
 
         let mc_version = extract_zip(&installer, "version.json").await?;
-        let mc_version = serde_json::from_str::<McVersionExt>(&mc_version)?;
+        let mc_version = serde_json::from_str(&mc_version)?;
 
         let mut install = self.vanilla_version_install(mc_version).await?;
 

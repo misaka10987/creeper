@@ -1,24 +1,19 @@
+mod container;
 mod fmt;
 
 use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
-use creeper_maven_coord::MavenCoord;
 use neoforge::NfInstallProfile;
 use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use strfmt::Format;
-use tokio::process::Command;
-use tracing::{debug, error, info, trace};
-use walkdir::WalkDir;
+use tracing::{debug, info};
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, McVersionExt,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, VersionRev},
-    jar::jar_main_class,
-    neoforge::fmt::maven_coord_format,
     pack::PackNode,
     path::creeper_cache_dir,
     zip::{extract_zip, extract_zip_to},
@@ -138,24 +133,22 @@ impl Creeper {
 
         // handle install as defined in `install_profile.json`
 
-        let tmp_dir = cache_path()?.join("tmp").join(version.to_string());
-        let tmp_lib_dir = tmp_dir.join("lib");
+        // let tmp_dir = cache_path()?.join("tmp").join(version.to_string());
+
+        let mut container =
+            self.new_install_container(cache_path()?.join("tmp").join(version.to_string()));
+        container.init().await?;
 
         let install_profile = extract_zip(&installer, "install_profile.json").await?;
         let install_profile = serde_json::from_str::<NfInstallProfile>(&install_profile)?;
 
-        let mut java_lib_file = HashMap::new();
-
         // libraries defined in `install_profile.json` does not require being prepended to `--module-path`
         // because they are loaded by neoforge's custom class loader
-        java_lib_file.extend(self.vanilla_lib(install_profile.libraries).await?);
+        let mut java_lib_file = self.vanilla_lib(install_profile.libraries).await?;
 
-        // TODO: run processors
+        container.add_lib_file(java_lib_file.clone());
 
         info!("preparing neoforge install environment");
-
-        self.batch_retrieve_artifact_to(java_lib_file.clone(), &tmp_lib_dir)
-            .await?;
 
         let vanilla_install = {
             // repeat code from [`Self::install`] to avoid async recursion
@@ -189,9 +182,16 @@ impl Creeper {
 
         // special case: BINPATCH /data/client.lzma is packaged in the installer jar
         // extract it first
-        let binpatch = tmp_dir.join("installer").join("data").join("client.lzma");
+        let binpatch = container
+            .path()
+            .join(".installer")
+            .join("data")
+            .join("client.lzma");
         extract_zip_to(&installer, "data/client.lzma", &binpatch).await?;
         vars.insert("BINPATCH".into(), binpatch.display().to_string());
+
+        container.add_var(vars);
+        container.deploy_lib().await?;
 
         info!("running neoforge install processors");
 
@@ -205,86 +205,28 @@ impl Creeper {
                 continue;
             }
 
-            info!("running processor: {proc}");
-
-            let jar = java_lib_file
-                .get(&proc.jar.parse::<MavenCoord>()?.path())
-                .ok_or(anyhow!(
-                    "processor runs {} but the jar file not found",
-                    proc.jar
-                ))?;
-
-            let jar = self.retrieve_artifact(jar).await?;
-
-            let main_class = jar_main_class(&jar).await?;
-
-            let mut cp = vec![jar.display().to_string()];
-
-            for c in proc.classpath {
-                let coord = c.parse::<MavenCoord>()?;
-
-                let jar = java_lib_file.get(&coord.path()).ok_or(anyhow!(
-                    "processor classpath {} not found in java libraries",
-                    c
-                ))?;
-
-                let jar = self.retrieve_artifact(jar).await?;
-
-                cp.push(jar.display().to_string());
-            }
-
-            let mut cmd = Command::new("java");
-
-            cmd.arg("--class-path").arg(cp.join(":"));
-
-            cmd.arg(main_class);
-
-            for arg in proc.args {
-                let arg = arg.format(&vars)?;
-                let arg = maven_coord_format(&arg, &tmp_lib_dir)?;
-                cmd.arg(arg);
-            }
-
-            debug!("running command {cmd:?}");
-
-            let mut proc = cmd.spawn()?;
-
-            let exit = proc.wait().await;
-
-            if let Err(e) = exit {
-                error!("a processor failed: {e}");
-            }
+            container.run(&proc).await?;
         }
 
         info!("collecting neoforge install result");
 
-        for i in WalkDir::new(&tmp_lib_dir) {
-            let entry = i?;
-            let file = entry.path();
+        let collect = container
+            .collect_lib_file(
+                java_lib_file
+                    .keys()
+                    .chain(install.java_lib_class.keys())
+                    .chain(install.java_lib_mod.keys())
+                    .chain(install.java_lib_file.keys())
+                    .chain(vanilla_install.java_lib_class.keys())
+                    .chain(vanilla_install.java_lib_mod.keys())
+                    .chain(vanilla_install.java_lib_file.keys())
+                    .map(|k| k.as_path()),
+            )
+            .await?;
 
-            let relative = file.strip_prefix(&tmp_lib_dir).unwrap();
+        container.deinit().await?;
 
-            if file.is_dir() {
-                continue;
-            }
-
-            if java_lib_file.contains_key(relative)
-                || install.java_lib_class.contains_key(relative)
-                || install.java_lib_mod.contains_key(relative)
-                || install.java_lib_file.contains_key(relative)
-                || vanilla_install.java_lib_class.contains_key(relative)
-                || vanilla_install.java_lib_mod.contains_key(relative)
-                || vanilla_install.java_lib_file.contains_key(relative)
-            {
-                continue;
-            }
-
-            trace!("found file {}", file.display());
-
-            let art = self.store_artifact(file).await?;
-
-            java_lib_file.insert(relative.to_path_buf(), art);
-        }
+        java_lib_file.extend(collect);
 
         install.extend(once(Install {
             java_lib_file,

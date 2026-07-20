@@ -75,6 +75,8 @@ impl Creeper {
         self.batch_retrieve_artifact_to(install.java_lib_file, &lib_path)
             .await?;
 
+        try_symlink(&lib_path, self.game_dir().await?.join("libraries")).await?;
+
         for (file, arg) in install.java_agent {
             let art = self.retrieve_artifact(&file).await?;
 

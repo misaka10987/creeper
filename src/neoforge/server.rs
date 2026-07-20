@@ -10,7 +10,10 @@ use crate::{
     Creeper, Id, Install, VersionRev,
     builtin::{SyncBuiltinIndex, UpdateIndex},
     index::{Index, independent_index},
-    neoforge::{nf_required_mc_version, parse_neoforge_version, query_neoforge_versions},
+    neoforge::{
+        decode_neoforge_version, nf_required_mc_version, parse_neoforge_version,
+        query_neoforge_versions,
+    },
     path::creeper_cache_dir,
     zip::{extract_zip, extract_zip_to},
 };
@@ -76,7 +79,13 @@ impl Creeper {
         let mc_version = extract_zip(&installer, "version.json").await?;
         let mc_version = serde_json::from_str(&mc_version)?;
 
-        let mut install = self.vanilla_version_install(mc_version).await?;
+        let mut install = Install::default();
+
+        let version_install = self.vanilla_version_install(mc_version).await?;
+
+        install.java_lib_file.extend(version_install.java_lib_class);
+        install.java_lib_file.extend(version_install.java_lib_mod);
+        install.java_lib_file.extend(version_install.java_lib_file);
 
         let mut container =
             self.new_install_container(cache_path()?.join("tmp").join(version.to_string()));
@@ -115,7 +124,7 @@ impl Creeper {
         let mut vars = install_profile
             .data
             .into_iter()
-            .map(|(k, v)| (k, v.client))
+            .map(|(k, v)| (k, v.server))
             .chain([
                 ("SIDE".into(), "server".into()),
                 ("MINECRAFT_JAR".into(), mc_jar.display().to_string()),
@@ -148,7 +157,52 @@ impl Creeper {
             container.run(&proc).await?;
         }
 
-        todo!()
+        let collect = container
+            .collect_lib_file(
+                java_lib_file
+                    .keys()
+                    .chain(install.java_lib_class.keys())
+                    .chain(install.java_lib_mod.keys())
+                    .chain(install.java_lib_file.keys())
+                    .chain(vanilla_install.java_lib_class.keys())
+                    .chain(vanilla_install.java_lib_mod.keys())
+                    .chain(vanilla_install.java_lib_file.keys())
+                    .map(|k| k.as_path()),
+            )
+            .await?;
+
+        container.deinit().await?;
+
+        java_lib_file.extend(collect);
+
+        install.extend([Install {
+            java_lib_file,
+            ..Default::default()
+        }]);
+
+        install.java_lib_file.extend(install.java_lib_class.drain());
+
+        #[cfg(unix)]
+        const SCRIPT: &str = "unix_args.txt";
+        #[cfg(windows)]
+        const SCRIPT: &str = "win_args.txt";
+
+        let script = PathBuf::from("./libraries")
+            .join("net")
+            .join("neoforged")
+            .join("neoforge")
+            .join(decode_neoforge_version(version))
+            .join(SCRIPT);
+
+        let arg = format!("@{}", script.display());
+
+        install.extend([Install {
+            java_flag: vec![arg],
+            mc_flag: vec!["nogui".into()],
+            ..Default::default()
+        }]);
+
+        Ok(install)
     }
 }
 

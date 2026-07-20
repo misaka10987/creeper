@@ -173,6 +173,7 @@ impl Creeper {
         self.update_neoforge().await?;
         self.update_fabric().await?;
         self.update_intermediary().await?;
+        self.update_neoforge_server().await?;
         Ok(())
     }
 }

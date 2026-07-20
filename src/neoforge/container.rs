@@ -46,7 +46,7 @@ impl InstallContainer {
         Ok(())
     }
 
-    fn lib_dir(&self) -> PathBuf {
+    pub fn lib_dir(&self) -> PathBuf {
         self.path.join("libraries")
     }
 

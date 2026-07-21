@@ -14,7 +14,7 @@ use tracing::{debug, info};
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install,
-    builtin::{SyncBuiltinIndex, UpdateIndex},
+    builtin::SyncBuiltinIndex,
     index::{Index, VersionRev},
     pack::PackNode,
     path::creeper_cache_dir,
@@ -92,15 +92,6 @@ impl SyncBuiltinIndex for NeoforgeManager {
 }
 
 impl Creeper {
-    pub async fn update_neoforge(&self) -> anyhow::Result<()> {
-        if self.args.offline {
-            info!("skipping neoforge update because offline mode enabled");
-            return Ok(());
-        }
-
-        self.neoforge.update_index().await
-    }
-
     async fn neoforge_installer_jar(&self, version: &Version) -> anyhow::Result<Artifact> {
         let nf_version = decode_neoforge_version(version);
 

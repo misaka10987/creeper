@@ -13,7 +13,7 @@ use std::{
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install, VERSION,
-    builtin::{SyncBuiltinIndex, UpdateIndex},
+    builtin::SyncBuiltinIndex,
     index::{Index, VersionRev, independent_index},
     util::skip_two,
 };
@@ -102,15 +102,6 @@ impl SyncBuiltinIndex for VanillaManager {
 }
 
 impl Creeper {
-    pub async fn update_vanilla(&self) -> anyhow::Result<()> {
-        if self.args.offline {
-            info!("skipping vanilla update because offline mode enabled");
-            return Ok(());
-        }
-
-        self.vanilla.update_index().await
-    }
-
     fn vanilla_args_install(&self, args: &mc_version::Arguments, version_name: &str) -> Install {
         let rule = RuleChecker::default();
 

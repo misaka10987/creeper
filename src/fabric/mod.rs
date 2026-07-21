@@ -13,17 +13,12 @@ use anyhow::{anyhow, ensure};
 use fabric_meta_api::{FabricMetaClient, Game, Library, LoaderWithIntermediary};
 use reqwest::Client;
 use semver::{Version, VersionReq};
-use tracing::{Span, info, instrument};
+use tracing::{Span, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
-    Checksum, Creeper, Id, Install,
-    builtin::{SyncBuiltinIndex, UpdateIndex},
-    index::VersionRev,
-    pack::PackNode,
-    pbar::PROGRESS_STYLE_DEFAULT,
-    util::rebuild_req,
-    vanilla::RuleChecker,
+    Checksum, Creeper, Id, Install, builtin::SyncBuiltinIndex, index::VersionRev, pack::PackNode,
+    pbar::PROGRESS_STYLE_DEFAULT, util::rebuild_req, vanilla::RuleChecker,
 };
 
 pub struct FabricManager {
@@ -41,6 +36,7 @@ impl SyncBuiltinIndex for FabricManager {
         Id::fabric()
     }
 
+    #[instrument(skip(self))]
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
         let client = FabricMetaClient::new(self.http.clone());
 
@@ -107,18 +103,6 @@ impl SyncBuiltinIndex for FabricManager {
 }
 
 impl Creeper {
-    #[instrument(skip(self))]
-    pub async fn update_fabric(&self) -> anyhow::Result<()> {
-        if self.args.offline {
-            info!("skipping fabric update because offline mode enabled");
-            return Ok(());
-        }
-
-        self.fabric.update_index().await?;
-
-        Ok(())
-    }
-
     pub(crate) async fn fabric_install(&self, version: &Version) -> anyhow::Result<Install> {
         let index = self.get_node(&Id::fabric(), version, 0).await?;
 
@@ -203,6 +187,7 @@ impl SyncBuiltinIndex for IntermediaryManager {
         Id::intermediary()
     }
 
+    #[instrument(skip(self))]
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
         let client = FabricMetaClient::new(self.http.clone());
 
@@ -233,17 +218,7 @@ impl SyncBuiltinIndex for IntermediaryManager {
 }
 
 impl Creeper {
-    #[instrument(skip(self))]
-    pub async fn update_intermediary(&self) -> anyhow::Result<()> {
-        if self.args.offline {
-            info!("skipping intermediary update because offline mode enabled");
-            return Ok(());
-        }
-
-        self.intermediary.update_index().await
-    }
-
-    pub async fn intermediary_install(&self, version: &Version) -> anyhow::Result<Install> {
+    pub(crate) async fn intermediary_install(&self, version: &Version) -> anyhow::Result<Install> {
         let client = FabricMetaClient::new(self.http.clone());
 
         let loader = client

@@ -212,15 +212,7 @@ impl Creeper {
         }
 
         let install = if !package.is_regular() {
-            match package.as_str() {
-                "vanilla" => self.vanilla_install(version).await?,
-                "neoforge" => self.neoforge_install(version).await?,
-                "neoforge-server" => self.neoforge_server_install(version).await?,
-                "fabric" => self.fabric_install(version).await?,
-                "intermediary" => self.intermediary_install(version).await?,
-                "vanilla-server" => self.vanilla_server_install(version).await?,
-                _ => todo!(),
-            }
+            self.builtin_install(package, version).await?
         } else {
             let package = self.query_registry(package, version, rev).await?;
             package.install

@@ -18,11 +18,7 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::{
-    Creeper, Id, Package,
-    builtin::{BlockingGetIndex, GetIndex},
-    pack::PackNode,
-};
+use crate::{Creeper, Id, Package, pack::PackNode};
 
 pub type Index = BTreeMap<VersionRev, PackNode>;
 
@@ -281,15 +277,7 @@ impl Creeper {
         }
 
         let index = if !package.is_regular() {
-            match package.as_str() {
-                "vanilla" => self.vanilla.get_index().await?,
-                "neoforge" => self.neoforge.get_index().await?,
-                "neoforge-server" => self.neoforge_server.get_index().await?,
-                "fabric" => self.fabric.get_index().await?,
-                "intermediary" => self.intermediary.get_index().await?,
-                "vanilla-server" => self.vanilla_server.get_index().await?,
-                _ => todo!(),
-            }
+            self.get_builtin_index(package).await?
         } else {
             self.registry.get_index(package).await?
         };
@@ -322,15 +310,7 @@ impl Creeper {
         }
 
         let index = if !package.is_regular() {
-            match package.as_str() {
-                "vanilla" => self.vanilla.blocking_get_index()?,
-                "neoforge" => self.neoforge.blocking_get_index()?,
-                "neoforge-server" => self.neoforge_server.blocking_get_index()?,
-                "fabric" => self.fabric.blocking_get_index()?,
-                "intermediary" => self.intermediary.blocking_get_index()?,
-                "vanilla-server" => self.vanilla_server.blocking_get_index()?,
-                s => todo!("builtin package {s}"),
-            }
+            self.blocking_get_builtin_index(package)?
         } else {
             self.registry.blocking_get_index(package)?
         };

@@ -4,13 +4,11 @@ use anyhow::anyhow;
 use mc_launchermeta::{VERSION_MANIFEST_URL, version_manifest::Manifest};
 use reqwest::Client;
 use semver::Version;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 use crate::{
-    Checksum, Creeper, Id, Install, VersionRev,
-    builtin::{SyncBuiltinIndex, UpdateIndex},
-    index::independent_index,
-    jar::jar_main_class,
+    Checksum, Creeper, Id, Install, VersionRev, builtin::SyncBuiltinIndex,
+    index::independent_index, jar::jar_main_class,
 };
 
 pub struct VanillaServerManager {
@@ -66,15 +64,6 @@ impl SyncBuiltinIndex for VanillaServerManager {
 }
 
 impl Creeper {
-    pub async fn update_vanilla_server(&self) -> anyhow::Result<()> {
-        if self.args.offline {
-            info!("skipping vanilla update because offline mode enabled");
-            return Ok(());
-        }
-
-        self.vanilla_server.update_index().await
-    }
-
     pub(crate) async fn vanilla_server_install(
         &self,
         version: &Version,

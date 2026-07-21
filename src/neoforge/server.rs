@@ -4,11 +4,11 @@ use anyhow::anyhow;
 use neoforge::NfInstallProfile;
 use reqwest::Client;
 use semver::Version;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::{
     Creeper, Id, Install, VersionRev,
-    builtin::{SyncBuiltinIndex, UpdateIndex},
+    builtin::SyncBuiltinIndex,
     index::{Index, independent_index},
     neoforge::{
         decode_neoforge_version, nf_required_mc_version, parse_neoforge_version,
@@ -59,15 +59,6 @@ impl SyncBuiltinIndex for NeoforgeServerManager {
 }
 
 impl Creeper {
-    pub async fn update_neoforge_server(&self) -> anyhow::Result<()> {
-        if self.args.offline {
-            info!("skipping neoforge server update because offline mode enabled");
-            return Ok(());
-        }
-
-        self.neoforge_server.update_index().await
-    }
-
     pub(crate) async fn neoforge_server_install(
         &self,
         version: &Version,

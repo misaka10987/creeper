@@ -33,7 +33,7 @@ impl Execute for Install {
             _ => {
                 info!("ignoring package lock file");
 
-                lib.update_all().await?;
+                lib.update().await?;
                 let sol = lib.resolve(package.node.dep.clone())?;
 
                 let lock = Lock {

@@ -178,7 +178,7 @@ impl Registry {
 }
 
 impl Creeper {
-    pub async fn update_registry(&self) -> anyhow::Result<()> {
+    pub(crate) async fn update_registry(&self) -> anyhow::Result<()> {
         if self.args.offline {
             info!("skipping registry update because offline mode enabled");
             return Ok(());

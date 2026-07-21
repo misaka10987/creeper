@@ -161,19 +161,15 @@ impl Creeper {
         cmd.execute(self).await
     }
 
-    pub async fn update_all(&self) -> anyhow::Result<()> {
+    pub async fn update(&self) -> anyhow::Result<()> {
         if self.args.offline {
             info!("skipping update because offline mode enabled");
             return Ok(());
         }
 
         self.update_registry().await?;
-        self.update_vanilla().await?;
-        self.update_vanilla_server().await?;
-        self.update_neoforge().await?;
-        self.update_fabric().await?;
-        self.update_intermediary().await?;
-        self.update_neoforge_server().await?;
+        self.update_builtin_index().await?;
+
         Ok(())
     }
 }

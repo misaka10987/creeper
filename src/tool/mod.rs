@@ -107,7 +107,7 @@ impl Execute for Resolve {
             bail!("nothing to resolve, please specify at least one requirement");
         }
 
-        lib.update_all().await?;
+        lib.update().await?;
 
         let sol = match lib.resolve(req) {
             Ok(x) => x,

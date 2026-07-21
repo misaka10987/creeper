@@ -287,7 +287,7 @@ impl Creeper {
                 "neoforge-server" => self.neoforge_server.get_index().await?,
                 "fabric" => self.fabric.get_index().await?,
                 "intermediary" => self.intermediary.get_index().await?,
-                "server" => self.server.get_index().await?,
+                "vanilla-server" => self.vanilla_server.get_index().await?,
                 _ => todo!(),
             }
         } else {
@@ -328,7 +328,7 @@ impl Creeper {
                 "neoforge-server" => self.neoforge_server.blocking_get_index()?,
                 "fabric" => self.fabric.blocking_get_index()?,
                 "intermediary" => self.intermediary.blocking_get_index()?,
-                "server" => self.server.blocking_get_index()?,
+                "vanilla-server" => self.vanilla_server.blocking_get_index()?,
                 s => todo!("builtin package {s}"),
             }
         } else {

@@ -104,13 +104,13 @@ impl Creeper {
             // repeat code from [`Self::install`] to avoid async recursion
             let version = nf_required_mc_version(version);
             if let Some(install) = self
-                .get_install_cache(&Id::server(), &version.clone().into())
+                .get_install_cache(&Id::vanilla_server(), &version.clone().into())
                 .await?
             {
                 install
             } else {
-                let install = self.server_install(&version).await?;
-                self.set_install_cache(&Id::server(), &version.into(), Some(&install))
+                let install = self.vanilla_server_install(&version).await?;
+                self.set_install_cache(&Id::vanilla_server(), &version.into(), Some(&install))
                     .await?;
                 install
             }

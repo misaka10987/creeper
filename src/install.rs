@@ -218,7 +218,7 @@ impl Creeper {
                 "neoforge-server" => self.neoforge_server_install(version).await?,
                 "fabric" => self.fabric_install(version).await?,
                 "intermediary" => self.intermediary_install(version).await?,
-                "server" => self.server_install(version).await?,
+                "vanilla-server" => self.vanilla_server_install(version).await?,
                 _ => todo!(),
             }
         } else {

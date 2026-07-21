@@ -13,19 +13,19 @@ use crate::{
     jar::jar_main_class,
 };
 
-pub struct ServerManager {
+pub struct VanillaServerManager {
     http: Client,
 }
 
-impl ServerManager {
+impl VanillaServerManager {
     pub fn new(http: Client) -> Self {
         Self { http }
     }
 }
 
-impl SyncBuiltinIndex for ServerManager {
+impl SyncBuiltinIndex for VanillaServerManager {
     fn package(&self) -> Id {
-        Id::server()
+        Id::vanilla_server()
     }
 
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
@@ -66,16 +66,19 @@ impl SyncBuiltinIndex for ServerManager {
 }
 
 impl Creeper {
-    pub async fn update_server(&self) -> anyhow::Result<()> {
+    pub async fn update_vanilla_server(&self) -> anyhow::Result<()> {
         if self.args.offline {
             info!("skipping vanilla update because offline mode enabled");
             return Ok(());
         }
 
-        self.server.update_index().await
+        self.vanilla_server.update_index().await
     }
 
-    pub(crate) async fn server_install(&self, version: &Version) -> anyhow::Result<Install> {
+    pub(crate) async fn vanilla_server_install(
+        &self,
+        version: &Version,
+    ) -> anyhow::Result<Install> {
         let mc_version = self.vanilla_version(version.clone()).await?;
 
         let server = mc_version

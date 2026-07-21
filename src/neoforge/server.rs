@@ -72,7 +72,7 @@ impl Creeper {
 
         let mut install = Install::default();
 
-        let version_install = self.vanilla_version_install(mc_version).await?;
+        let version_install = self.mc_version_install(mc_version).await?;
 
         install.java_lib_file.extend(version_install.java_lib_class);
         install.java_lib_file.extend(version_install.java_lib_mod);

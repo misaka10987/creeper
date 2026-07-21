@@ -132,7 +132,7 @@ impl Creeper {
         let mc_version = extract_zip(&installer, "version.json").await?;
         let mc_version = serde_json::from_str(&mc_version)?;
 
-        let mut install = self.vanilla_version_install(mc_version).await?;
+        let mut install = self.mc_version_install(mc_version).await?;
 
         // handle install as defined in `install_profile.json`
 

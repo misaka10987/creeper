@@ -77,10 +77,10 @@ impl Creeper {
 
         try_symlink(&lib_path, self.game_dir().await?.join("libraries")).await?;
 
-        for (file, arg) in install.java_agent {
-            let art = self.retrieve_artifact(&file).await?;
+        for agent in install.java_agent {
+            let art = self.retrieve_artifact(&agent.file).await?;
 
-            let arg = if let Some(arg) = arg {
+            let arg = if let Some(arg) = agent.option {
                 format!("-javaagent:{}={arg}", art.display())
             } else {
                 format!("-javaagent:{}", art.display())

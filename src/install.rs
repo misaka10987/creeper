@@ -31,7 +31,7 @@ pub struct Install {
 
     /// Java agent files and arguments.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub java_agent: Vec<(Artifact, Option<String>)>,
+    pub java_agent: Vec<JavaAgent>,
 
     /// Java main class override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -260,4 +260,13 @@ impl Creeper {
 
         Ok(install)
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct JavaAgent {
+    pub file: Artifact,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub option: Option<String>,
 }

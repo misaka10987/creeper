@@ -14,7 +14,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    Artifact, Checksum, Creeper, Install, YggdrasilClient, ms::MicrosoftClient,
+    Artifact, Checksum, Creeper, Install, YggdrasilClient, install::JavaAgent, ms::MicrosoftClient,
     path::creeper_config_dir, util::TomlFile,
 };
 
@@ -281,7 +281,10 @@ impl Creeper {
         let jar = self.latest_authlib_injector().await?;
 
         let install = Install {
-            java_agent: vec![(jar, Some(api.to_string()))],
+            java_agent: vec![JavaAgent {
+                file: jar,
+                option: Some(api.to_string()),
+            }],
             java_flag: vec![prefetch_arg],
             mc_flag: vec![
                 "--username".into(),

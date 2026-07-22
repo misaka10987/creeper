@@ -11,7 +11,7 @@ use crate::{Artifact, Creeper, Id, Package, VersionRev, path::creeper_cache_dir}
 
 /// Things installed to the game instance by a package.
 #[serde_inline_default]
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Install {
     /// Additional java libraries (classical), prepended to the `--class-path` command line argument when launching the game.
@@ -81,6 +81,28 @@ pub struct Install {
     pub user: bool,
 }
 
+impl Default for Install {
+    fn default() -> Self {
+        Self {
+            java_lib_class: HashMap::new(),
+            java_lib_mod: HashMap::new(),
+            java_lib_file: HashMap::new(),
+            java_agent: vec![],
+            java_main_class: None,
+            native: HashMap::new(),
+            java_flag: vec![],
+            mc_jar: None,
+            disable_mc_jar: false,
+            mc_flag: vec![],
+            mc_asset: HashMap::new(),
+            mc_mod: vec![],
+            resource_pack: vec![],
+            shader_pack: vec![],
+            user: false,
+        }
+    }
+}
+
 impl Install {
     pub fn merge(self, next: Self) -> Self {
         let mut new = self;
@@ -92,6 +114,10 @@ impl Install {
         self.java_lib_file.retain(|k, _v| {
             !self.java_lib_class.contains_key(k) && !self.java_lib_mod.contains_key(k)
         });
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
     }
 }
 
@@ -262,7 +288,7 @@ impl Creeper {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct JavaAgent {
     pub file: Artifact,

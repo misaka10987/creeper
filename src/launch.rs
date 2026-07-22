@@ -75,7 +75,11 @@ impl Creeper {
         self.batch_retrieve_artifact_to(install.java_lib_file, &lib_path)
             .await?;
 
-        try_symlink(&lib_path, self.game_dir().await?.join("libraries")).await?;
+        try_symlink(
+            PathBuf::from(".").join(".creeper").join("lib"),
+            self.game_dir().await?.join("libraries"),
+        )
+        .await?;
 
         for agent in install.java_agent {
             let art = self.retrieve_artifact(&agent.file).await?;
@@ -138,7 +142,11 @@ impl Creeper {
         self.retrieve_ordered(&mod_dir, &install.mc_mod, Some("jar"))
             .await?;
 
-        try_symlink(&mod_dir, self.game_mod_dir().await?).await?;
+        try_symlink(
+            PathBuf::from(".").join(".creeper").join("mod"),
+            self.game_mod_dir().await?,
+        )
+        .await?;
 
         let resource_dir = self.game_env_dir().await?.join("resource");
 
@@ -149,7 +157,11 @@ impl Creeper {
         self.retrieve_ordered(&resource_dir, &install.resource_pack, Some("zip"))
             .await?;
 
-        try_symlink(&resource_dir, self.game_resource_dir().await?).await?;
+        try_symlink(
+            PathBuf::from(".").join(".creeper").join("resource"),
+            self.game_resource_dir().await?,
+        )
+        .await?;
 
         let shader_dir = self.game_env_dir().await?.join("shader");
 
@@ -160,7 +172,11 @@ impl Creeper {
         self.retrieve_ordered(&shader_dir, &install.shader_pack, Some("zip"))
             .await?;
 
-        try_symlink(&shader_dir, self.game_shader_dir().await?).await?;
+        try_symlink(
+            PathBuf::from(".").join(".creeper").join("shader"),
+            self.game_shader_dir().await?,
+        )
+        .await?;
 
         Ok(cmd)
     }
@@ -193,20 +209,26 @@ impl Creeper {
     }
 }
 
-async fn try_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
-    let src = src.as_ref();
-    let dst = dst.as_ref();
+async fn try_symlink(original: impl AsRef<Path>, link: impl AsRef<Path>) -> anyhow::Result<()> {
+    let original = original.as_ref();
+    let link = link.as_ref();
 
-    if try_exists(dst).await? {
-        if !dst.is_symlink() {
-            bail!("{} not managed by creeper, please remove it", dst.display());
+    if try_exists(link).await? {
+        if !link.is_symlink() {
+            bail!(
+                "{} not managed by creeper, please remove it",
+                link.display()
+            );
         }
 
-        if read_link(dst).await? != src {
-            bail!("{} not managed by creeper, please remove it", dst.display());
+        if read_link(link).await? != original {
+            bail!(
+                "{} not managed by creeper, please remove it",
+                link.display()
+            );
         }
     } else {
-        symlink_auto(src, dst).await?;
+        symlink_auto(original, link).await?;
     }
 
     Ok(())

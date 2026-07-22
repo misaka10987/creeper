@@ -1,13 +1,21 @@
-use std::{collections::HashMap, iter::once, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::PathBuf,
+};
 
 use anyhow::bail;
+use futures::{StreamExt, TryStreamExt, stream};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use tokio::fs::{create_dir_all, read_to_string, remove_file, try_exists, write};
-use tracing::debug;
+use tracing::{Span, debug, instrument};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::{Artifact, Creeper, Id, Package, VersionRev, path::creeper_cache_dir};
+use crate::{
+    Artifact, Creeper, Id, Package, VersionRev, path::creeper_cache_dir,
+    pbar::PROGRESS_STYLE_DEFAULT,
+};
 
 /// Things installed to the game instance by a package.
 #[serde_inline_default]
@@ -256,16 +264,35 @@ impl Creeper {
 
     /// Install all specified packages in the input.
     /// Automatically merging them with the latter overriding the former.
+    #[instrument(skip(self, packages))]
     pub async fn install_all(
         &self,
         packages: impl IntoIterator<Item = (Id, VersionRev)>,
     ) -> anyhow::Result<Install> {
-        let mut install = Install::default();
+        let packages = packages.into_iter().collect::<Vec<_>>();
 
-        for (id, version) in packages {
-            let package = self.install(&id, &version.version, version.rev).await?;
-            install.extend(once(package));
-        }
+        let span = Span::current();
+        span.pb_set_message("packages");
+        span.pb_set_style(&PROGRESS_STYLE_DEFAULT);
+        span.pb_set_length(packages.len() as u64);
+
+        let map = stream::iter(packages.into_iter().enumerate())
+            .map(|(idx, (id, version))| async move {
+                let result = self
+                    .install(&id, &version.version, version.rev)
+                    .await
+                    .map(|x| (idx, x));
+
+                let span = Span::current();
+                span.pb_inc(1);
+
+                result
+            })
+            .buffer_unordered(self.config.parallel_download)
+            .try_collect::<BTreeMap<_, _>>()
+            .await?;
+
+        let install = map.into_values().collect();
 
         Ok(install)
     }
@@ -275,14 +302,9 @@ impl Creeper {
         let dep = self.resolve(package.node.dep)?;
         let sorted = self.sort_dependency(dep)?;
 
-        let mut install = Install::default();
-
-        for (id, version) in sorted {
-            let package = self.install(&id, &version.version, version.rev).await?;
-            install.extend(once(package));
-        }
-
-        install.extend(once(package.install));
+        let install = [self.install_all(sorted).await?, package.install]
+            .into_iter()
+            .collect();
 
         Ok(install)
     }
@@ -295,4 +317,14 @@ pub struct JavaAgent {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub option: Option<String>,
+}
+
+impl FromIterator<Self> for Install {
+    fn from_iter<T: IntoIterator<Item = Self>>(iter: T) -> Self {
+        let mut install = Self::default();
+
+        install.extend(iter);
+
+        install
+    }
 }

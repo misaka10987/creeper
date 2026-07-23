@@ -29,7 +29,7 @@ use mc_launchermeta::{
     version_manifest::Manifest,
 };
 use reqwest::Client;
-use semver::Version;
+use semver::{Version, VersionReq};
 use tokio::sync::RwLock;
 use tracing::{debug, info, trace};
 
@@ -173,6 +173,7 @@ impl Creeper {
 
         let install = Install {
             user: true,
+            require_java: mc_java_req(version),
             ..install
         };
 
@@ -228,4 +229,19 @@ fn java_module_path<'a>(
     }
 
     Ok(p)
+}
+
+/// The java version requirement for a specific Minecraft version.
+///
+/// See [Minecraft Wiki](https://minecraft.wiki/w/Tutorial:Update_Java#Why_update?) for more details.
+pub fn mc_java_req(version: &Version) -> VersionReq {
+    match version {
+        v if v >= &Version::new(26, 1, 0) => ">=25".parse().unwrap(),
+        v if v >= &Version::new(1, 20, 5) => ">=21".parse().unwrap(),
+        v if v >= &Version::new(1, 18, 0) => ">=17".parse().unwrap(),
+        v if v >= &Version::new(1, 17, 0) => ">=16".parse().unwrap(),
+        v if v >= &Version::new(1, 12, 0) => ">=1.8.0".parse().unwrap(),
+        v if v >= &Version::new(1, 6, 1) => ">=1.6.0".parse().unwrap(),
+        _ => ">=1.5.0".parse().unwrap(),
+    }
 }

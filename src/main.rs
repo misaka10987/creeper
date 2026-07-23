@@ -10,6 +10,7 @@ mod id;
 mod index;
 mod install;
 mod jar;
+mod java;
 mod launch;
 mod lock;
 mod ms;
@@ -53,6 +54,7 @@ use crate::{
     fabric::{FabricManager, IntermediaryManager},
     game::GameManager,
     index::IndexCache,
+    java::JavaManager,
     neoforge::{NeoforgeManager, NeoforgeServerManager},
     path::{creeper_config_dir, init_creeper_dirs},
     registry::Registry,
@@ -80,6 +82,7 @@ pub struct CreeperInner {
     fabric: FabricManager,
     intermediary: IntermediaryManager,
     user: UserManager,
+    java: JavaManager,
 }
 
 #[derive(Clone)]
@@ -137,6 +140,7 @@ impl Creeper {
         let intermediary = IntermediaryManager::new(http.clone());
         let vanilla_server = VanillaServerManager::new(http.clone());
         let neoforge_server = NeoforgeServerManager::new(http.clone());
+        let java = JavaManager::new();
 
         let val = CreeperInner {
             args,
@@ -153,6 +157,7 @@ impl Creeper {
             user,
             fabric,
             intermediary,
+            java,
         };
         Ok(Self(Arc::new(val)))
     }

@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::bail;
 use futures::{StreamExt, TryStreamExt, stream};
-use semver::Version;
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use tokio::fs::{create_dir_all, read_to_string, remove_file, try_exists, write};
@@ -87,6 +87,14 @@ pub struct Install {
     #[serde_inline_default(false)]
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub user: bool,
+
+    #[serde_inline_default(VersionReq::STAR)]
+    #[serde(skip_serializing_if = "is_star")]
+    pub require_java: VersionReq,
+}
+
+fn is_star(v: &VersionReq) -> bool {
+    v == &VersionReq::STAR
 }
 
 impl Default for Install {
@@ -107,6 +115,7 @@ impl Default for Install {
             resource_pack: vec![],
             shader_pack: vec![],
             user: false,
+            require_java: VersionReq::STAR,
         }
     }
 }
@@ -148,6 +157,7 @@ impl Extend<Self> for Install {
                 resource_pack,
                 shader_pack,
                 user,
+                require_java,
             } = next;
             self.java_lib_class.extend(java_lib_class);
             self.java_lib_mod.extend(java_lib_mod);
@@ -164,6 +174,9 @@ impl Extend<Self> for Install {
             self.resource_pack.extend(resource_pack);
             self.shader_pack.extend(shader_pack);
             self.user = self.user || user;
+            self.require_java
+                .comparators
+                .extend(require_java.comparators);
         }
 
         self.simplify();
@@ -172,6 +185,8 @@ impl Extend<Self> for Install {
 
 impl Creeper {
     fn install_cache_path(&self, package: &Id, version: &VersionRev) -> anyhow::Result<PathBuf> {
+        // semver::VersionReq::STAR.
+
         let path = creeper_cache_dir()?
             .join("install")
             .join(package.indexed_path())

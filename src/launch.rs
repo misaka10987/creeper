@@ -23,7 +23,13 @@ impl Creeper {
             install.extend([self.user_install().await?]);
         }
 
-        let mut cmd = Command::new("java");
+        let java = self.prompt_select_java(&install.require_java).await?;
+
+        if !java.check_version().await? {
+            bail!("invalid Java configuration {java}: version mismatch");
+        }
+
+        let mut cmd = Command::new(java.path);
 
         cmd.current_dir(game_dir);
 

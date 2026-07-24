@@ -17,7 +17,7 @@ use walkdir::WalkDir;
 
 use crate::{
     Artifact, Creeper, jar::jar_main_class, neoforge::fmt::maven_coord_format,
-    path::creeper_cache_dir,
+    path::creeper_tmp_dir, util::summarize,
 };
 
 pub struct InstallContainer {
@@ -121,11 +121,9 @@ impl InstallContainer {
 
             let cmd = format!("{:?}", cmd.as_std());
 
-            let hash = &blake3::hash(cmd.as_bytes()).to_hex()[..8];
+            let name = format!("[{}] {proc}", now.to_rfc3339());
 
-            let name = format!("{}-{hash}", now.to_rfc3339());
-
-            let path = creeper_cache_dir()?.join("log").join(name);
+            let path = creeper_tmp_dir()?.join("log").join(summarize(&name));
 
             create_dir_all(&path).await?;
 

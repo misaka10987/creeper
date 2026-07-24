@@ -67,3 +67,4 @@ fabric-meta-api = { version = "1.0.0-rc.1", features = ["client"] }
 creeper-maven-coord = "1.0.0"
 neoforge = "0.1.0"
 maven-version-range = "0.1.1"
+whoami = "2.1.2"

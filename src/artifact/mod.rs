@@ -7,7 +7,6 @@ use std::iter::once;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail};
-use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
@@ -19,7 +18,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
-use crate::util::{mv, set_readonly};
+use crate::util::{mv, set_readonly, summarize};
 use crate::{
     Checksum, Creeper,
     checksum::{HashFunc, blake3},
@@ -226,7 +225,7 @@ impl ArtifactManager {
 
         debug!("downloading from {}", src);
 
-        let cache = creeper_cache_dir()?.join(BASE64_URL_SAFE.encode(&src));
+        let cache = creeper_cache_dir()?.join(summarize(src));
         trace!("download caching to {cache:?}");
         create_dir_all(cache.parent().unwrap()).await?;
 

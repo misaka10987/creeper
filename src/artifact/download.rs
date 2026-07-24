@@ -1,5 +1,4 @@
 use anyhow::{bail, ensure};
-use base64::{Engine, prelude::BASE64_URL_SAFE};
 use tokio::{
     fs::{File, create_dir_all, metadata, remove_file, try_exists},
     io::{AsyncWriteExt, BufWriter},
@@ -14,7 +13,7 @@ use crate::{
     mv,
     path::creeper_cache_dir,
     pbar::PROGRESS_STYLE_DOWNLOAD,
-    util::set_readonly,
+    util::{set_readonly, summarize},
 };
 
 impl ArtifactManager {
@@ -67,9 +66,8 @@ impl ArtifactManager {
             bail!("offline mode enabled, cannot download {src}");
         }
 
-        let cache = creeper_cache_dir()?
-            .join("download")
-            .join(BASE64_URL_SAFE.encode(&src));
+        let cache = creeper_cache_dir()?.join("download").join(summarize(&src));
+
         trace!("download caching to {cache:?}");
         create_dir_all(cache.parent().unwrap()).await?;
 

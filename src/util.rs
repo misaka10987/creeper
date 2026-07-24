@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::bail;
+use base64::{Engine, prelude::BASE64_URL_SAFE};
 use inquire::{
     Confirm, Text,
     validator::{StringValidator, Validation},
@@ -386,4 +387,22 @@ pub fn skip_two<T>(skip: impl Fn(&T) -> bool, it: impl IntoIterator<Item = T>) -
     }
 
     keep
+}
+
+/// Summarize a string into a shorter valid filename.
+///
+/// While hashing a string directly also feasible for the purpose of generating a filename,
+/// this function provides a (partially) invertible summary of the string,
+/// so that the original string remains still recognizable.
+///
+/// # Format
+///
+/// 8 characters of hexadecimal blake3 hash of string followed by first 64 characters of base64-url-safe encoded string,
+/// separated by a dash `-`.
+pub fn summarize(name: &str) -> String {
+    let hash = blake3::hash(name.as_bytes()).to_hex();
+
+    let base64 = BASE64_URL_SAFE.encode(name);
+
+    format!("{}-{}", &hash[..8], &base64[..64.min(base64.len())])
 }

@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::bail;
-use base64::{Engine, prelude::BASE64_URL_SAFE};
 use reqwest::Client;
 use semver::Version;
 use tokio::{
@@ -21,6 +20,7 @@ use crate::{
     index::{Index, IndexLine, VersionRev},
     path::creeper_cache_dir,
     tool::BuildIndex,
+    util::summarize,
 };
 
 pub struct Registry {
@@ -33,8 +33,8 @@ impl Registry {
     pub fn cache_path(&self) -> anyhow::Result<PathBuf> {
         let path = creeper_cache_dir()?
             .join("registry")
-            // URL contains invalid characters for filesystem
-            .join(BASE64_URL_SAFE.encode(self.url.as_str()));
+            .join(summarize(self.url.as_str()));
+
         Ok(path)
     }
 

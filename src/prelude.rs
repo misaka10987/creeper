@@ -1,7 +1,7 @@
 pub use super::artifact::Artifact;
 pub use super::asset::AssetIndex;
 pub use super::checksum::Checksum;
-pub use super::id::Id;
+pub use super::id::{Id, display_package};
 pub use super::index::VersionRev;
 pub use super::install::Install;
 pub use super::lock::Lock;

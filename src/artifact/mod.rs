@@ -1,18 +1,18 @@
-use std::collections::HashMap;
+mod parallel;
+
 use std::fmt::Display;
-use std::hash::Hash;
 use std::iter::once;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, ensure};
 use base64::{Engine, prelude::BASE64_URL_SAFE};
-use futures::{StreamExt, TryStreamExt, stream};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{AssertSqlSafe, query, query_as};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use tokio::fs::{File, copy, create_dir_all, metadata, remove_file, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::sync::Semaphore;
 use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
@@ -140,21 +140,32 @@ pub struct ArtifactManager {
     pub offline: bool,
 
     http: Client,
+
     index: SqlitePool,
+
+    semaphore: Semaphore,
 }
 
 impl ArtifactManager {
-    pub async fn new(http: Client, offline: bool) -> anyhow::Result<Self> {
+    pub async fn new(
+        http: Client,
+        offline: bool,
+        parallel_download: usize,
+    ) -> anyhow::Result<Self> {
         let path = creeper_data_dir()?.join("artifact.db");
         let opt = SqliteConnectOptions::default()
             .filename(path)
             .create_if_missing(true);
         let index = SqlitePool::connect_with(opt).await?;
         index.execute(DB_INIT_QUERY).await?;
+
+        let semaphore = Semaphore::new(parallel_download);
+
         let val = Self {
             index,
             http,
             offline,
+            semaphore,
         };
         Ok(val)
     }
@@ -262,6 +273,8 @@ impl ArtifactManager {
         trace!("download caching to {cache:?}");
         create_dir_all(cache.parent().unwrap()).await?;
 
+        let semaphore = self.semaphore.acquire().await?;
+
         let mut writer = BufWriter::new(File::create(&cache).await?);
 
         let span = Span::current();
@@ -279,6 +292,8 @@ impl ArtifactManager {
         }
 
         writer.shutdown().await?;
+
+        drop(semaphore);
 
         info!("download finished");
 
@@ -355,6 +370,8 @@ impl ArtifactManager {
             remove_file(&cache).await?;
         }
 
+        let semaphore = self.semaphore.acquire().await?;
+
         let mut writer = BufWriter::new(File::create(&cache).await?);
 
         let span = Span::current();
@@ -376,6 +393,8 @@ impl ArtifactManager {
         }
 
         writer.shutdown().await?;
+
+        drop(semaphore);
 
         info!("download finished");
 
@@ -439,31 +458,6 @@ impl Creeper {
     /// the method will still succeed and potentially write poisoned records into the artifact database.
     pub async fn retrieve_artifact(&self, art: &Artifact) -> anyhow::Result<PathBuf> {
         self.artifact.retrieve(art).await
-    }
-
-    /// Parallel retrieve artifacts and create soft links.
-    /// Each artifact is keyed by its relative path under the base path.
-    ///
-    /// See [`Self::retrieve_artifact_to`] for details and caveats.
-    pub async fn batch_retrieve_artifact_to(
-        &self,
-        map: HashMap<PathBuf, Artifact>,
-        base: impl AsRef<Path>,
-    ) -> anyhow::Result<()> {
-        let base = base.as_ref();
-
-        let count = stream::iter(map)
-            .map(
-                |(path, art)| async move { self.retrieve_artifact_to(&art, base.join(path)).await },
-            )
-            .buffer_unordered(self.config.parallel_download)
-            .try_collect::<Vec<_>>()
-            .await?
-            .len();
-
-        debug!("deployed {count} artifacts under {}", base.display());
-
-        Ok(())
     }
 
     /// Retrieve an artifact and create a soft link to it at the specified path.
@@ -535,37 +529,6 @@ impl Creeper {
         checksum: impl IntoIterator<Item = Checksum> + Send,
     ) -> anyhow::Result<Artifact> {
         self.artifact.download(name, src, len, checksum).await
-    }
-
-    /// Parallel download a batch of files keyed by `K` and store them in the artifact storage.
-    /// Each file is described by a 4-tuple of `(name, src, len, checksum)`,
-    /// as specified in [`Self::download`].
-    pub async fn batch_download<K>(
-        &self,
-        download: HashMap<
-            K,
-            (
-                String,
-                String,
-                Option<u64>,
-                impl IntoIterator<Item = Checksum> + Send,
-            ),
-        >,
-    ) -> anyhow::Result<HashMap<K, Artifact>>
-    where
-        K: Eq + Hash,
-    {
-        let map = stream::iter(download)
-            .map(|(k, (name, src, len, checksum))| async move {
-                self.download(name, src, len, checksum)
-                    .await
-                    .map(|a| (k, a))
-            })
-            .buffer_unordered(self.config.parallel_download)
-            .try_collect::<HashMap<_, _>>()
-            .await?;
-
-        Ok(map)
     }
 
     /// Store a file to the artifact storage.

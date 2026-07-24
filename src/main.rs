@@ -134,7 +134,8 @@ impl Creeper {
         let game = GameManager::new(args.dir.clone());
         let neoforge = NeoforgeManager::new(http.clone());
         let vanilla = VanillaManager::new(http.clone());
-        let artifact = ArtifactManager::new(http.clone(), args.offline).await?;
+        let artifact =
+            ArtifactManager::new(http.clone(), args.offline, config.parallel_download).await?;
         let user = UserManager::new();
         let fabric = FabricManager::new(http.clone());
         let intermediary = IntermediaryManager::new(http.clone());

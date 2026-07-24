@@ -13,7 +13,7 @@ use tracing::{Span, debug, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
-    Artifact, Creeper, Id, Package, VersionRev, path::creeper_cache_dir,
+    Artifact, Creeper, Id, Package, VersionRev, display_package, path::creeper_cache_dir,
     pbar::PROGRESS_STYLE_DEFAULT,
 };
 
@@ -185,8 +185,6 @@ impl Extend<Self> for Install {
 
 impl Creeper {
     fn install_cache_path(&self, package: &Id, version: &VersionRev) -> anyhow::Result<PathBuf> {
-        // semver::VersionReq::STAR.
-
         let path = creeper_cache_dir()?
             .join("install")
             .join(package.indexed_path())
@@ -242,6 +240,7 @@ impl Creeper {
     ///
     /// Note that this does not install the dependencies of the package.
     /// Use [`Self::recursive_install`] for that.
+    #[instrument(skip(self, package, version, rev), fields(package = display_package(package, version, rev)))]
     pub async fn install(
         &self,
         package: &Id,

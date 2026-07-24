@@ -225,3 +225,11 @@ impl FromStr for IdVersionReq {
         Ok(value)
     }
 }
+
+pub fn display_package(id: &Id, version: &Version, rev: u32) -> String {
+    if rev == 0 {
+        return format!("{id}@{version}");
+    }
+
+    format!("{id}@{version}#{rev}")
+}

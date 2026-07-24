@@ -204,6 +204,8 @@ pub struct ListVersion {
 
 impl Execute for ListVersion {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        lib.update().await?;
+
         let index = lib.get_index(&self.package).await?;
 
         let versions = index

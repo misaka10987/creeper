@@ -134,7 +134,7 @@ impl Artifact {
     }
 }
 
-const DB_INIT_QUERY: &str = include_str!("artifact.sql");
+const DB_INIT_QUERY: &str = include_str!("init.sql");
 
 pub struct ArtifactManager {
     pub offline: bool,

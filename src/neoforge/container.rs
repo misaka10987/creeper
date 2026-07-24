@@ -4,17 +4,21 @@ use std::{
 };
 
 use anyhow::{anyhow, bail};
+use chrono::Utc;
 use creeper_maven_coord::MavenCoord;
 use neoforge::install::Processor;
 use strfmt::Format;
 use tokio::{
-    fs::{create_dir_all, metadata, remove_dir_all, try_exists},
+    fs::{create_dir_all, metadata, remove_dir_all, try_exists, write},
     process::Command,
 };
-use tracing::{debug, info, trace};
+use tracing::{debug, error, info, instrument, trace};
 use walkdir::WalkDir;
 
-use crate::{Artifact, Creeper, jar::jar_main_class, neoforge::fmt::maven_coord_format};
+use crate::{
+    Artifact, Creeper, jar::jar_main_class, neoforge::fmt::maven_coord_format,
+    path::creeper_cache_dir,
+};
 
 pub struct InstallContainer {
     path: PathBuf,
@@ -66,8 +70,9 @@ impl InstallContainer {
         Ok(())
     }
 
+    #[instrument(skip(self, proc), fields(proc = proc.jar))]
     pub async fn run(&self, proc: &Processor) -> anyhow::Result<()> {
-        info!("running processor in {}: {proc}", self.path().display());
+        info!("running in {}", self.path().display());
 
         let jar = proc.jar.parse::<MavenCoord>()?;
 
@@ -107,16 +112,34 @@ impl InstallContainer {
 
         debug!("running command {:?}", cmd.as_std());
 
-        let mut child = cmd.spawn()?;
+        let output = cmd.output().await?;
 
-        let exit = child.wait().await?;
+        if !output.status.success() {
+            error!("command failed");
 
-        if !exit.success() {
-            if let Some(code) = exit.code() {
-                bail!("processor {proc} exited with error {code}");
+            let now = Utc::now();
+
+            let cmd = format!("{:?}", cmd.as_std());
+
+            let hash = &blake3::hash(cmd.as_bytes()).to_hex()[..8];
+
+            let name = format!("{}-{hash}", now.to_rfc3339());
+
+            let path = creeper_cache_dir()?.join("log").join(name);
+
+            create_dir_all(&path).await?;
+
+            write(path.join("stdout.txt"), output.stdout).await?;
+            write(path.join("stderr.txt"), output.stderr).await?;
+            write(path.join("command.sh"), cmd).await?;
+
+            error!("log saved to {}", path.display());
+
+            if let Some(code) = output.status.code() {
+                bail!("processor exited with error {code}: {proc}");
             }
 
-            bail!("processor {proc} exited with error");
+            bail!("processor exited with error: {proc}");
         }
 
         Ok(())

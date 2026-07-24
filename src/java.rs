@@ -128,10 +128,8 @@ async fn get_java_version(bin: impl AsRef<Path>) -> anyhow::Result<Version> {
     let line = lines[0];
 
     let version = line
-        .strip_prefix("java")
-        .ok_or(anyhow!("invalid java --version output: {line}"))?
         .split_whitespace()
-        .next()
+        .nth(1)
         .ok_or(anyhow!("invalid java --version output: {line}"))?
         .parse()?;
 

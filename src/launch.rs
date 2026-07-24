@@ -4,14 +4,36 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, ensure};
+use semver::VersionReq;
 use tokio::{
     fs::{create_dir_all, read_link, read_to_string, remove_dir_all, try_exists, write},
     process::Command,
 };
 
-use crate::{Artifact, AssetIndex, Creeper, Install, symlink_auto};
+use crate::{Artifact, AssetIndex, Creeper, Install, java::Java, symlink_auto};
 
 impl Creeper {
+    async fn decide_java(&self, req: &VersionReq) -> anyhow::Result<Java> {
+        let path = self.game_env_dir().await?.join("java.json");
+
+        if try_exists(&path).await? {
+            let json = read_to_string(&path).await?;
+            Ok(serde_json::from_str(&json)?)
+        } else {
+            let java = self.prompt_select_java(req).await?;
+
+            if !java.check_version().await? {
+                bail!("invalid Java configuration {java}: version mismatch");
+            }
+
+            let json = serde_json::to_string(&java)?;
+
+            write(&path, json).await?;
+
+            Ok(java)
+        }
+    }
+
     pub async fn launch(&self) -> anyhow::Result<Command> {
         let game_dir = self.game_dir().await?;
 
@@ -23,11 +45,7 @@ impl Creeper {
             install.extend([self.user_install().await?]);
         }
 
-        let java = self.prompt_select_java(&install.require_java).await?;
-
-        if !java.check_version().await? {
-            bail!("invalid Java configuration {java}: version mismatch");
-        }
+        let java = self.decide_java(&install.require_java).await?;
 
         let mut cmd = Command::new(java.path);
 

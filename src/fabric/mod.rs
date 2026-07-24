@@ -1,6 +1,7 @@
 pub mod meta;
 mod prelude;
 
+use futures::{StreamExt, TryStreamExt, stream};
 pub use prelude::*;
 
 use std::{
@@ -22,12 +23,16 @@ use crate::{
 };
 
 pub struct FabricManager {
+    pub parallel_download: usize,
     http: Client,
 }
 
 impl FabricManager {
-    pub fn new(http: Client) -> Self {
-        Self { http }
+    pub fn new(http: Client, parallel_download: usize) -> Self {
+        Self {
+            http,
+            parallel_download,
+        }
     }
 }
 
@@ -48,31 +53,38 @@ impl SyncBuiltinIndex for FabricManager {
             .filter_map(|v| v.parse::<Version>().ok())
             .collect::<Vec<_>>();
 
-        let mut map = HashMap::<Version, Vec<Version>>::new();
-
         let span = Span::current();
         span.pb_set_message("versions");
         span.pb_set_style(&PROGRESS_STYLE_DEFAULT);
         span.pb_set_length(games.len() as u64);
 
-        for v in &games {
-            let loaders = client.game_loader_versions(&v.to_string()).await?;
+        // game version to supported loader versions
+        let game_loader = stream::iter(games.clone())
+            .map(|v| async move {
+                let client = FabricMetaClient::new(self.http.clone());
+                let loaders = client.game_loader_versions(&v.to_string()).await;
 
-            let loaders =
-                loaders
-                    .into_iter()
-                    .filter_map(|LoaderWithIntermediary { loader, .. }| {
-                        loader.version.parse::<Version>().ok()
-                    });
+                Span::current().pb_inc(1);
+
+                loaders.map(|loaders| (v.clone(), loaders))
+            })
+            .buffer_unordered(self.parallel_download)
+            .try_collect::<HashMap<_, _>>()
+            .await?;
+
+        let mut loader_game = HashMap::<Version, Vec<Version>>::new();
+
+        for (game, loaders) in game_loader {
+            let loaders = loaders
+                .into_iter()
+                .filter_map(|LoaderWithIntermediary { loader, .. }| loader.version.parse().ok());
 
             for loader in loaders {
-                map.entry(loader).or_default().push(v.clone());
+                loader_game.entry(loader).or_default().push(game.clone());
             }
-
-            span.pb_inc(1);
         }
 
-        let index = map
+        let index = loader_game
             .into_iter()
             .filter_map(|(k, v)| {
                 rebuild_req(v.into_iter().collect(), games.clone().into_iter().collect())

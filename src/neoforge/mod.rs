@@ -2,8 +2,9 @@ mod container;
 mod fmt;
 mod prelude;
 mod server;
+mod version;
 
-use std::{collections::HashMap, iter::once, path::PathBuf, str::FromStr, time::Duration};
+use std::{collections::HashMap, iter::once, path::PathBuf, time::Duration};
 
 use anyhow::anyhow;
 use neoforge::NfInstallProfile;
@@ -74,7 +75,8 @@ impl SyncBuiltinIndex for NeoforgeManager {
 
         let versions = versions
             .into_iter()
-            .filter_map(|s| parse_neoforge_version(&s));
+            .filter_map(|s| s.parse::<NfVersion>().ok())
+            .filter_map(|v| v.encode().ok());
 
         let index = neoforge_index(versions);
 
@@ -92,8 +94,9 @@ impl SyncBuiltinIndex for NeoforgeManager {
 }
 
 impl Creeper {
-    async fn neoforge_installer_jar(&self, version: &Version) -> anyhow::Result<Artifact> {
-        let nf_version = decode_neoforge_version(version);
+    async fn neoforge_installer_jar(&self, version: Version) -> anyhow::Result<Artifact> {
+        let nf_version = NfVersion::decode(version);
+        // let nf_version = decode_neoforge_version(version);
 
         let url = if self.config.use_bmclapi {
             format!(
@@ -122,8 +125,8 @@ impl Creeper {
         Ok(installer)
     }
 
-    pub(crate) async fn neoforge_install(&self, version: &Version) -> anyhow::Result<Install> {
-        let installer = self.neoforge_installer_jar(version).await?;
+    pub(crate) async fn neoforge_install(&self, version: Version) -> anyhow::Result<Install> {
+        let installer = self.neoforge_installer_jar(version.clone()).await?;
 
         let installer = self.retrieve_artifact(&installer).await?;
 
@@ -153,7 +156,7 @@ impl Creeper {
 
         let vanilla_install = {
             // repeat code from [`Self::install`] to avoid async recursion
-            let version = nf_required_mc_version(version);
+            let version = nf_mc_req(&version);
             if let Some(install) = self
                 .get_install_cache(&Id::vanilla(), &version.clone().into())
                 .await?
@@ -242,61 +245,7 @@ impl Creeper {
     }
 }
 
-/// NeoForge's versioning scheme does not always follow the semver standard:
-///
-/// - snapshots like `0.25w14craftmine.3-beta`;
-///
-/// - since minecraft 26, neoforge uses four components in its version number, like `26.1.0.0`.
-///
-/// This function attempts to parse a neoforge version following the semver standard.
-/// If this fails, we will assume the version has four components,
-/// and map the third and fourth component to the high and low 32-bits of patch number,
-/// then parse the version again under the semver standard.
-/// If all parsing attempts fail, will return `None`.
-pub fn parse_neoforge_version(version: &str) -> Option<Version> {
-    if let Ok(version) = version.parse() {
-        return Some(version);
-    }
-    let (major, rest) = version.split_once('.')?;
-    let rest = Version::from_str(rest).ok()?;
-    let minor = rest.major;
-    // since minecraft 26.*, neoforge has four version components, but semver only has three
-    // we map the thrid component to the high 32-bits of the patch version, and the fourth component to the low 32-bits
-    let (high, low) = (rest.minor, rest.patch);
-    if high > u32::MAX as u64 || low > u32::MAX as u64 {
-        return None;
-    }
-    let patch = (high << 32) | low;
-    let mut version = rest.clone();
-    version.major = major.parse().ok()?;
-    version.minor = minor;
-    version.patch = patch;
-    Some(version)
-}
-
-pub fn decode_neoforge_version(version: &Version) -> String {
-    if version.major < 26 {
-        return version.to_string();
-    }
-    let high = version.patch >> 32;
-    let low = version.patch & 0xFFFFFFFF;
-    let pre = if version.pre.is_empty() {
-        "".to_string()
-    } else {
-        format!("-{}", version.pre)
-    };
-    let build = if version.build.is_empty() {
-        "".to_string()
-    } else {
-        format!("+{}", version.build)
-    };
-
-    let version = format!("{}.{}.{}.{}", version.major, version.minor, high, low);
-    let version = format!("{}{}{}", version, pre, build);
-    version
-}
-
-fn nf_required_mc_version(version: &Version) -> Version {
+fn nf_mc_req(version: &Version) -> Version {
     if version.major >= 26 {
         let high = version.patch >> 32;
         Version::new(version.major, version.minor, high)
@@ -304,6 +253,16 @@ fn nf_required_mc_version(version: &Version) -> Version {
         Version::new(1, version.major, version.minor)
     }
 }
+
+// fn mc_nf_req(version: &Version) -> VersionReq {
+//     if version.major < 26 {
+//         return format!("=1.{}.{}", version.major, version.minor)
+//             .parse()
+//             .unwrap();
+//     }
+
+//     todo!()
+// }
 
 /// Generate NeoForge package index from list of versions, applying the following rules to each version:
 ///
@@ -324,7 +283,7 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
     versions
         .into_iter()
         .map(|version| {
-            let req = nf_required_mc_version(&version);
+            let req = nf_mc_req(&version);
             let req = format!("={}", req).parse().unwrap();
 
             let dep = Some((Id::vanilla(), req)).into_iter().collect();

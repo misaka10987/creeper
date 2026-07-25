@@ -135,8 +135,8 @@ impl Creeper {
         let install = match package.as_str() {
             "vanilla" => self.vanilla_install(version).await?,
             "vanilla-server" => self.vanilla_server_install(version).await?,
-            "neoforge" => self.neoforge_install(version).await?,
-            "neoforge-server" => self.neoforge_server_install(version).await?,
+            "neoforge" => self.neoforge_install(version.clone()).await?,
+            "neoforge-server" => self.neoforge_server_install(version.clone()).await?,
             "fabric" => self.fabric_install(version).await?,
             "intermediary" => self.intermediary_install(version).await?,
             p => todo!("install builtin package {p}"),

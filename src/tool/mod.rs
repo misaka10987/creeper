@@ -11,9 +11,9 @@ use crate::{
     Creeper, Id, YggdrasilClient,
     cmd::Execute,
     id::{IdVersion, IdVersionReq},
-    neoforge::{decode_neoforge_version, parse_neoforge_version},
+    neoforge::NfVersion,
 };
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use clap::Parser;
 use colored::Colorize;
 use indexmap::IndexMap;
@@ -253,12 +253,12 @@ pub struct NeoForgeVersion {
 impl Execute for NeoForgeVersion {
     async fn execute(self, _lib: &crate::Creeper) -> anyhow::Result<()> {
         if self.encode {
-            let encoded = parse_neoforge_version(&self.version)
-                .ok_or(anyhow!("unable to encode {} as semver", self.version))?;
+            let encoded = self.version.parse::<NfVersion>()?.encode()?;
             println!("{encoded}");
             return Ok(());
         }
-        let decoded = decode_neoforge_version(&self.version.parse()?);
+
+        let decoded = NfVersion::decode(self.version.parse()?);
         println!("{decoded}");
         Ok(())
     }

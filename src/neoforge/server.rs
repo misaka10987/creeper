@@ -10,10 +10,7 @@ use crate::{
     Creeper, Id, Install, VersionRev,
     builtin::SyncBuiltinIndex,
     index::{Index, independent_index},
-    neoforge::{
-        decode_neoforge_version, nf_required_mc_version, parse_neoforge_version,
-        query_neoforge_versions,
-    },
+    neoforge::{NfVersion, nf_mc_req, query_neoforge_versions},
     path::creeper_cache_dir,
     zip::{extract_zip, extract_zip_to},
 };
@@ -40,7 +37,8 @@ impl SyncBuiltinIndex for NeoforgeServerManager {
 
         let versions = versions
             .into_iter()
-            .filter_map(|s| parse_neoforge_version(&s))
+            .filter_map(|s| s.parse::<NfVersion>().ok())
+            .filter_map(|v| v.encode().ok())
             .map(VersionRev::new);
 
         let index = independent_index(versions);
@@ -61,9 +59,9 @@ impl SyncBuiltinIndex for NeoforgeServerManager {
 impl Creeper {
     pub(crate) async fn neoforge_server_install(
         &self,
-        version: &Version,
+        version: Version,
     ) -> anyhow::Result<Install> {
-        let installer = self.neoforge_installer_jar(version).await?;
+        let installer = self.neoforge_installer_jar(version.clone()).await?;
 
         let installer = self.retrieve_artifact(&installer).await?;
 
@@ -93,7 +91,7 @@ impl Creeper {
 
         let vanilla_install = {
             // repeat code from [`Self::install`] to avoid async recursion
-            let version = nf_required_mc_version(version);
+            let version = nf_mc_req(&version);
             if let Some(install) = self
                 .get_install_cache(&Id::vanilla_server(), &version.clone().into())
                 .await?
@@ -182,7 +180,7 @@ impl Creeper {
             .join("net")
             .join("neoforged")
             .join("neoforge")
-            .join(decode_neoforge_version(version))
+            .join(NfVersion::decode(version).to_string())
             .join(SCRIPT);
 
         let arg = format!("@{}", script.display());

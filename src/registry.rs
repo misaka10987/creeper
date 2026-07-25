@@ -12,7 +12,7 @@ use tokio::{
     io::AsyncWriteExt,
     process::Command,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 use url::Url;
 
 use crate::{
@@ -94,7 +94,8 @@ impl Registry {
             .with_added_extension("jsonl");
 
         if !path.exists() {
-            bail!("package {package} does not exist or missing from cache");
+            trace!("package {package} does not exist or missing from cache");
+            return Ok(Index::default());
         }
 
         let pack = IndexLine::blocking_read(path)?;
@@ -110,7 +111,8 @@ impl Registry {
             .with_added_extension("jsonl");
 
         if !try_exists(&path).await? {
-            bail!("package {package} does not exist or missing from cache");
+            trace!("package {package} does not exist or missing from cache");
+            return Ok(Index::default());
         }
 
         let pack = IndexLine::read(path).await?;

@@ -13,6 +13,7 @@ mod jar;
 mod java;
 mod launch;
 mod lock;
+mod mc;
 mod ms;
 mod neoforge;
 mod pack;
@@ -55,6 +56,7 @@ use crate::{
     game::GameManager,
     index::IndexCache,
     java::JavaManager,
+    mc::ManifestClient,
     neoforge::{NeoforgeManager, NeoforgeServerManager},
     path::{creeper_config_dir, init_creeper_dirs},
     registry::Registry,
@@ -70,19 +72,26 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct CreeperInner {
     pub args: Args,
     pub config: Config,
-    artifact: ArtifactManager,
-    vanilla: VanillaManager,
-    vanilla_server: VanillaServerManager,
+
     http: Client,
+    // manifest: ManifestClient,
+    artifact: ArtifactManager,
+
+    game: GameManager,
+
+    user: UserManager,
+    java: JavaManager,
+
     registry: Registry,
     index_cache: IndexCache,
-    game: GameManager,
+
+    // builtin packages
+    vanilla: VanillaManager,
+    vanilla_server: VanillaServerManager,
     neoforge: NeoforgeManager,
     neoforge_server: NeoforgeServerManager,
     fabric: FabricManager,
     intermediary: IntermediaryManager,
-    user: UserManager,
-    java: JavaManager,
 }
 
 #[derive(Clone)]
@@ -130,16 +139,18 @@ impl Creeper {
         let config = Self::load_config(path).await?;
 
         let http = Client::default();
+        let manifest = ManifestClient::new(http.clone());
+
         let registry = Registry::new(config.registry.clone(), http.clone())?;
         let game = GameManager::new(args.dir.clone());
         let neoforge = NeoforgeManager::new(http.clone());
-        let vanilla = VanillaManager::new(http.clone());
+        let vanilla = VanillaManager::new(manifest.clone());
         let artifact =
             ArtifactManager::new(http.clone(), args.offline, config.parallel_download).await?;
         let user = UserManager::new();
         let fabric = FabricManager::new(http.clone(), config.parallel_download);
         let intermediary = IntermediaryManager::new(http.clone());
-        let vanilla_server = VanillaServerManager::new(http.clone());
+        let vanilla_server = VanillaServerManager::new(manifest.clone());
         let neoforge_server = NeoforgeServerManager::new(http.clone());
         let java = JavaManager::new();
 
@@ -159,6 +170,7 @@ impl Creeper {
             fabric,
             intermediary,
             java,
+            // manifest,
         };
         Ok(Self(Arc::new(val)))
     }

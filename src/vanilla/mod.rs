@@ -8,7 +8,6 @@ use std::{
     env::consts::OS,
     iter::once,
     path::PathBuf,
-    sync::OnceLock,
     time::Duration,
 };
 
@@ -16,22 +15,14 @@ use crate::{
     Artifact, Checksum, Creeper, Id, Install,
     builtin::SyncBuiltinIndex,
     index::{Index, VersionRev, independent_index},
+    mc::ManifestClient,
 };
 
 use anyhow::anyhow;
 use creeper_maven_coord::MavenCoord;
-use mc_launchermeta::{
-    VERSION_MANIFEST_URL,
-    version::{
-        Version as McVersion,
-        library::{Artifact as McArtifact, Library},
-    },
-    version_manifest::Manifest,
-};
-use reqwest::Client;
+use mc_launchermeta::version::library::{Artifact as McArtifact, Library};
 use semver::{Version, VersionReq};
-use tokio::sync::RwLock;
-use tracing::{debug, info, trace};
+use tracing::info;
 
 pub use prelude::*;
 
@@ -45,18 +36,12 @@ pub fn check_class(class: &str) -> bool {
 }
 
 pub struct VanillaManager {
-    http: Client,
-    manifest: OnceLock<Manifest>,
-    version: RwLock<HashMap<Version, McVersion>>,
+    manifest: ManifestClient,
 }
 
 impl VanillaManager {
-    pub fn new(http: Client) -> Self {
-        Self {
-            http,
-            manifest: OnceLock::new(),
-            version: RwLock::new(HashMap::new()),
-        }
+    pub fn new(manifest: ManifestClient) -> Self {
+        Self { manifest }
     }
 }
 
@@ -66,31 +51,9 @@ impl SyncBuiltinIndex for VanillaManager {
     }
 
     async fn sync_index(&self) -> anyhow::Result<Index> {
-        info!("updating vanilla metadata");
+        let versions = self.manifest.get_version_list().await?;
 
-        let req = self.http.get(VERSION_MANIFEST_URL).build()?;
-        let res = self.http.execute(req).await?;
-
-        let manifest = res.json::<Manifest>().await?;
-
-        let mut versions = vec![];
-
-        let count = manifest.versions.len();
-
-        for version in manifest.versions {
-            if let Some(version) = version.id.parse().ok() {
-                versions.push(version);
-            } else {
-                trace!("ignoring invalid vanilla version {}", version.id);
-            }
-        }
-
-        debug!(
-            "retrieved {count} vanilla versions, of which {} valid",
-            versions.len()
-        );
-
-        let index = independent_index(versions.into_iter().map(VersionRev::new));
+        let index = independent_index(versions.into_iter().cloned().map(VersionRev::new));
 
         Ok(index)
     }
@@ -128,46 +91,8 @@ impl Creeper {
         Ok(map)
     }
 
-    pub async fn vanilla_manifest(&self) -> anyhow::Result<&Manifest> {
-        if let Some(manifest) = self.vanilla.manifest.get() {
-            return Ok(manifest);
-        }
-        info!("synchronizing minecraft version manifest");
-
-        let req = self.http.get(VERSION_MANIFEST_URL).build()?;
-        let res = self.http.execute(req).await?;
-
-        let manifest = res.json().await?;
-
-        Ok(self.vanilla.manifest.get_or_init(|| manifest))
-    }
-
-    pub async fn vanilla_version(&self, version: Version) -> anyhow::Result<McVersion> {
-        if let Some(mc_version) = self.vanilla.version.read().await.get(&version) {
-            return Ok(mc_version.clone());
-        }
-        info!("synchronizing minecraft {version} version metadata");
-        let manifest = self.vanilla_manifest().await?;
-        let url = manifest
-            .get_version(&version.to_string())
-            .ok_or(anyhow!("minecraft version {version} not found in manifest"))?
-            .url
-            .to_owned();
-
-        let req = self.http.get(url).build()?;
-        let res = self.http.execute(req).await?;
-        let mc_version = res.json::<McVersion>().await?;
-
-        self.vanilla
-            .version
-            .write()
-            .await
-            .insert(version, mc_version.clone());
-        Ok(mc_version)
-    }
-
     pub(crate) async fn vanilla_install(&self, version: &Version) -> anyhow::Result<Install> {
-        let mc_version = self.vanilla_version(version.clone()).await?;
+        let mc_version = self.vanilla.manifest.get_version(version).await?;
 
         let install = self.mc_version_install(mc_version.into()).await?;
 

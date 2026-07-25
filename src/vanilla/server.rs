@@ -1,23 +1,20 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
-use mc_launchermeta::{VERSION_MANIFEST_URL, version_manifest::Manifest};
-use reqwest::Client;
 use semver::Version;
-use tracing::{debug, trace};
 
 use crate::{
     Checksum, Creeper, Id, Install, VersionRev, builtin::SyncBuiltinIndex,
-    index::independent_index, jar::jar_main_class,
+    index::independent_index, jar::jar_main_class, mc::ManifestClient,
 };
 
 pub struct VanillaServerManager {
-    http: Client,
+    manifest: ManifestClient,
 }
 
 impl VanillaServerManager {
-    pub fn new(http: Client) -> Self {
-        Self { http }
+    pub fn new(manifest: ManifestClient) -> Self {
+        Self { manifest }
     }
 }
 
@@ -27,33 +24,9 @@ impl SyncBuiltinIndex for VanillaServerManager {
     }
 
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let manifest = self
-            .http
-            .get(VERSION_MANIFEST_URL)
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<Manifest>()
-            .await?;
+        let versions = self.manifest.get_version_list().await?;
 
-        let mut versions = vec![];
-
-        let count = manifest.versions.len();
-
-        for version in manifest.versions {
-            if let Some(version) = version.id.parse().ok() {
-                versions.push(version);
-            } else {
-                trace!("ignoring invalid vanilla version {}", version.id);
-            }
-        }
-
-        debug!(
-            "retrieved {count} vanilla versions, of which {} valid",
-            versions.len()
-        );
-
-        let index = independent_index(versions.into_iter().map(VersionRev::new));
+        let index = independent_index(versions.into_iter().cloned().map(VersionRev::new));
 
         Ok(index)
     }
@@ -68,7 +41,7 @@ impl Creeper {
         &self,
         version: &Version,
     ) -> anyhow::Result<Install> {
-        let mc_version = self.vanilla_version(version.clone()).await?;
+        let mc_version = self.vanilla_server.manifest.get_version(version).await?;
 
         let server = mc_version
             .downloads

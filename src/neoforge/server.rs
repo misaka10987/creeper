@@ -3,14 +3,15 @@ use std::{collections::HashMap, path::PathBuf, time::Duration};
 use anyhow::anyhow;
 use neoforge::NfInstallProfile;
 use reqwest::Client;
-use semver::Version;
+use semver::{Version, VersionReq};
 use tracing::debug;
 
 use crate::{
     Creeper, Id, Install, VersionRev,
     builtin::SyncBuiltinIndex,
-    index::{Index, independent_index},
+    index::Index,
     neoforge::{NfVersion, nf_mc_req, query_neoforge_versions},
+    pack::PackNode,
     path::creeper_cache_dir,
     zip::{extract_zip, extract_zip_to},
 };
@@ -35,13 +36,25 @@ impl SyncBuiltinIndex for NeoforgeServerManager {
 
         let count = versions.len();
 
-        let versions = versions
+        let index = versions
             .into_iter()
             .filter_map(|s| s.parse::<NfVersion>().ok())
             .filter_map(|v| v.encode().ok())
-            .map(VersionRev::new);
+            .map(|v| {
+                let conflict = [
+                    (Id::vanilla_server(), VersionReq::STAR),
+                    ("server-provider".parse().unwrap(), VersionReq::STAR),
+                ]
+                .into();
 
-        let index = independent_index(versions);
+                let node = PackNode {
+                    conflict,
+                    ..Default::default()
+                };
+
+                (VersionRev::new(v), node)
+            })
+            .collect::<Index>();
 
         debug!(
             "retrieved {count} NeoForge versions, of which {} valid",

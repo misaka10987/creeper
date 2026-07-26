@@ -133,12 +133,17 @@ impl Creeper {
         }
 
         let install = match package.as_str() {
+            "server" => Install::default(),
+
             "vanilla" => self.vanilla_install(version).await?,
             "vanilla-server" => self.vanilla_server_install(version).await?,
+
             "neoforge" => self.neoforge_install(version.clone()).await?,
             "neoforge-server" => self.neoforge_server_install(version.clone()).await?,
+
             "fabric" => self.fabric_install(version).await?,
             "intermediary" => self.intermediary_install(version).await?,
+
             p => todo!("install builtin package {p}"),
         };
 
@@ -146,10 +151,14 @@ impl Creeper {
     }
 
     pub(crate) async fn update_builtin_index(&self) -> anyhow::Result<()> {
+        self.server.update_index().await?;
+
         self.vanilla.update_index().await?;
         self.vanilla_server.update_index().await?;
+
         self.neoforge.update_index().await?;
         self.neoforge_server.update_index().await?;
+
         self.fabric.update_index().await?;
         self.intermediary.update_index().await?;
 
@@ -162,12 +171,17 @@ impl Creeper {
         }
 
         let index = match package.as_str() {
+            "server" => self.server.get_index().await?,
+
             "vanilla" => self.vanilla.get_index().await?,
             "vanilla-server" => self.vanilla_server.get_index().await?,
+
             "neoforge" => self.neoforge.get_index().await?,
             "neoforge-server" => self.neoforge_server.get_index().await?,
+
             "fabric" => self.fabric.get_index().await?,
             "intermediary" => self.intermediary.get_index().await?,
+
             p => todo!("index builtin package {p}"),
         };
 
@@ -180,12 +194,17 @@ impl Creeper {
         }
 
         let index = match package.as_str() {
+            "server" => self.server.blocking_get_index()?,
+
             "vanilla" => self.vanilla.blocking_get_index()?,
             "vanilla-server" => self.vanilla_server.blocking_get_index()?,
+
             "neoforge" => self.neoforge.blocking_get_index()?,
             "neoforge-server" => self.neoforge_server.blocking_get_index()?,
+
             "fabric" => self.fabric.blocking_get_index()?,
             "intermediary" => self.intermediary.blocking_get_index()?,
+
             p => todo!("blocking index builtin package {p}"),
         };
 

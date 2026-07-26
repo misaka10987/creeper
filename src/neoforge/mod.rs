@@ -9,7 +9,7 @@ use std::{collections::HashMap, iter::once, path::PathBuf, time::Duration};
 use anyhow::anyhow;
 use neoforge::NfInstallProfile;
 use reqwest::Client;
-use semver::Version;
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -245,7 +245,7 @@ impl Creeper {
     }
 }
 
-fn nf_mc_req(version: &Version) -> Version {
+pub fn nf_mc_req(version: &Version) -> Version {
     if version.major >= 26 {
         let high = version.patch >> 32;
         Version::new(version.major, version.minor, high)
@@ -254,15 +254,24 @@ fn nf_mc_req(version: &Version) -> Version {
     }
 }
 
-// fn mc_nf_req(version: &Version) -> VersionReq {
-//     if version.major < 26 {
-//         return format!("=1.{}.{}", version.major, version.minor)
-//             .parse()
-//             .unwrap();
-//     }
+pub fn mc_nf_req(version: &Version) -> VersionReq {
+    if version.major < 26 {
+        return format!("{}.{}.*", version.minor, version.patch)
+            .parse()
+            .unwrap();
+    }
 
-//     todo!()
-// }
+    // The higher half 32-bits of corresponding NeoForge version patch number shall match the Minecraft version patch number.
+    let lower = version.patch << 32;
+    let upper = (version.patch + 1) << 32;
+
+    format!(
+        ">={0}.{1}.{2}, <{0}.{1}.{3}",
+        version.major, version.minor, lower, upper
+    )
+    .parse()
+    .unwrap()
+}
 
 /// Generate NeoForge package index from list of versions, applying the following rules to each version:
 ///

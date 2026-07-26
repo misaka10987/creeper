@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
-use semver::Version;
+use semver::{Version, VersionReq};
 
 use crate::{
-    Checksum, Creeper, Id, Install, VersionRev, builtin::SyncBuiltinIndex,
-    index::independent_index, jar::jar_main_class, mc::ManifestClient,
+    Checksum, Creeper, Id, Install, VersionRev, builtin::SyncBuiltinIndex, jar::jar_main_class,
+    mc::ManifestClient, pack::PackNode,
 };
 
 pub struct VanillaServerManager {
@@ -26,7 +26,23 @@ impl SyncBuiltinIndex for VanillaServerManager {
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
         let versions = self.manifest.get_version_list().await?;
 
-        let index = independent_index(versions.into_iter().cloned().map(VersionRev::new));
+        let index = versions
+            .into_iter()
+            .map(|v| {
+                let conflict = [
+                    (Id::vanilla_server(), VersionReq::STAR),
+                    ("server-provider".parse().unwrap(), VersionReq::STAR),
+                ]
+                .into();
+
+                let node = PackNode {
+                    conflict,
+                    ..Default::default()
+                };
+
+                (VersionRev::new(v.clone()), node)
+            })
+            .collect();
 
         Ok(index)
     }

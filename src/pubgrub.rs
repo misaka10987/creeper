@@ -194,16 +194,34 @@ impl ConflictManager {
     /// in order to improve performance.
     // the function shall not exceed O(n^2) in time complexity
     fn simp(&mut self) {
-        self.clause
-            .retain(|x| !x.keys().all(|k| [Id::neoforge(), Id::fabric()].contains(k)));
-        self.clause.insert(Conflict(
+        self.clause.retain(|x| {
+            !x.keys().all(|k| {
+                [Id::neoforge(), Id::fabric()].contains(k)
+                    || [
+                        Id::vanilla_server(),
+                        Id::neoforge_server(),
+                        "server-provider".parse().unwrap(),
+                    ]
+                    .contains(k)
+            })
+        });
+
+        let conflict = [
             [
                 (Id::neoforge(), VersionReq::STAR),
                 (Id::fabric(), VersionReq::STAR),
             ]
-            .into_iter()
-            .collect(),
-        ));
+            .into(),
+            [
+                (Id::vanilla_server(), VersionReq::STAR),
+                (Id::neoforge_server(), VersionReq::STAR),
+                ("server-provider".parse().unwrap(), VersionReq::STAR),
+            ]
+            .into(),
+        ];
+
+        self.clause.extend(conflict.into_iter().map(Conflict));
+
         warn!("TODO: simplify conflict clauses to improve performance");
     }
 }

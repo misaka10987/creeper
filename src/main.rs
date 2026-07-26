@@ -56,7 +56,7 @@ use crate::{
     game::GameManager,
     index::IndexCache,
     java::JavaManager,
-    mc::ManifestClient,
+    mc::{ManifestClient, ServerManager},
     neoforge::{NeoforgeManager, NeoforgeServerManager},
     path::{creeper_config_dir, init_creeper_dirs},
     registry::Registry,
@@ -86,6 +86,8 @@ pub struct CreeperInner {
     index_cache: IndexCache,
 
     // builtin packages
+    server: ServerManager,
+
     vanilla: VanillaManager,
     vanilla_server: VanillaServerManager,
     neoforge: NeoforgeManager,
@@ -143,6 +145,9 @@ impl Creeper {
 
         let registry = Registry::new(config.registry.clone(), http.clone())?;
         let game = GameManager::new(args.dir.clone());
+
+        let server = ServerManager::new(manifest.clone());
+
         let neoforge = NeoforgeManager::new(http.clone());
         let vanilla = VanillaManager::new(manifest.clone());
         let artifact =
@@ -158,6 +163,7 @@ impl Creeper {
             args,
             config,
             artifact,
+            server,
             vanilla,
             vanilla_server,
             http,

@@ -176,9 +176,7 @@ impl IndexLine {
 ///
 /// This is used to modify package definitions without changing the version number (which should correspond to the upstream),
 /// while still allowing package version locking.
-#[derive(
-    Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, SerializeDisplay, DeserializeFromStr,
-)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeDisplay, DeserializeFromStr)]
 pub struct VersionRev {
     /// The version number.
     pub version: Version,
@@ -216,6 +214,12 @@ impl Display for VersionRev {
         }
 
         write!(f, "{}#{}", self.version, self.rev)
+    }
+}
+
+impl Debug for VersionRev {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
     }
 }
 

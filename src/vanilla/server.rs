@@ -5,7 +5,7 @@ use semver::{Version, VersionReq};
 
 use crate::{
     Checksum, Creeper, Id, Install, VersionRev,
-    builtin::{SyncBuiltinIndex, vanilla_server_id},
+    builtin::{SyncBuiltinIndex, vanilla_id, vanilla_server_id},
     jar::jar_main_class,
     mc::ManifestClient,
     pack::PackNode,
@@ -33,7 +33,7 @@ impl SyncBuiltinIndex for VanillaServerManager {
             .into_iter()
             .map(|v| {
                 let conflict = [
-                    (vanilla_server_id(), VersionReq::STAR),
+                    (vanilla_id(), VersionReq::STAR),
                     ("server-provider".parse().unwrap(), VersionReq::STAR),
                 ]
                 .into();

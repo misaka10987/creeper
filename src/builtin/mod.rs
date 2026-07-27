@@ -1,3 +1,6 @@
+mod id;
+mod prelude;
+
 use std::{
     path::PathBuf,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -13,6 +16,8 @@ use crate::{
     index::{Index, IndexLine},
     path::creeper_cache_dir,
 };
+
+pub use prelude::*;
 
 pub trait SyncBuiltinIndex {
     fn package(&self) -> Id;
@@ -128,7 +133,7 @@ impl Creeper {
         package: &Id,
         version: &Version,
     ) -> anyhow::Result<Install> {
-        if package.is_regular() {
+        if !is_builtin(package) {
             bail!("{package} is not builtin package");
         }
 
@@ -166,7 +171,7 @@ impl Creeper {
     }
 
     pub(crate) async fn get_builtin_index(&self, package: &Id) -> anyhow::Result<Index> {
-        if package.is_regular() {
+        if !is_builtin(package) {
             bail!("{package} is not builtin package");
         }
 
@@ -189,7 +194,7 @@ impl Creeper {
     }
 
     pub(crate) fn blocking_get_builtin_index(&self, package: &Id) -> anyhow::Result<Index> {
-        if package.is_regular() {
+        if !is_builtin(package) {
             bail!("{package} is not builtin package");
         }
 
@@ -210,4 +215,21 @@ impl Creeper {
 
         Ok(index)
     }
+}
+
+pub fn is_builtin(id: &Id) -> bool {
+    const BUILTIN: [&str; 10] = [
+        "root",
+        "minecraft",
+        "client",
+        "server",
+        "vanilla",
+        "vanilla-server",
+        "neoforge",
+        "neoforge-server",
+        "fabric",
+        "intermediary",
+    ];
+
+    BUILTIN.contains(&id.as_str())
 }

@@ -18,8 +18,13 @@ use tracing::{Span, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
-    Checksum, Creeper, Id, Install, builtin::SyncBuiltinIndex, index::VersionRev, pack::PackNode,
-    pbar::PROGRESS_STYLE_DEFAULT, util::rebuild_req, vanilla::RuleChecker,
+    Checksum, Creeper, Id, Install,
+    builtin::{SyncBuiltinIndex, fabric_id, intermediary_id, neoforge_id, vanilla_id},
+    index::VersionRev,
+    pack::PackNode,
+    pbar::PROGRESS_STYLE_DEFAULT,
+    util::rebuild_req,
+    vanilla::RuleChecker,
 };
 
 pub struct FabricManager {
@@ -38,7 +43,7 @@ impl FabricManager {
 
 impl SyncBuiltinIndex for FabricManager {
     fn package(&self) -> crate::prelude::Id {
-        Id::fabric()
+        fabric_id()
     }
 
     #[instrument(skip(self))]
@@ -95,10 +100,10 @@ impl SyncBuiltinIndex for FabricManager {
                 (
                     VersionRev::new(k),
                     PackNode {
-                        dep: [(Id::vanilla(), v), (Id::intermediary(), VersionReq::STAR)]
+                        dep: [(vanilla_id(), v), (intermediary_id(), VersionReq::STAR)]
                             .into_iter()
                             .collect(),
-                        conflict: once((Id::neoforge(), VersionReq::STAR)).collect(),
+                        conflict: once((neoforge_id(), VersionReq::STAR)).collect(),
                         ..Default::default()
                     },
                 )
@@ -116,14 +121,14 @@ impl SyncBuiltinIndex for FabricManager {
 
 impl Creeper {
     pub(crate) async fn fabric_install(&self, version: &Version) -> anyhow::Result<Install> {
-        let index = self.get_node(&Id::fabric(), version, 0).await?;
+        let index = self.get_node(&fabric_id(), version, 0).await?;
 
         let req = index
             .dep
-            .get(&Id::vanilla())
+            .get(&vanilla_id())
             .ok_or(anyhow!("fabric@{version} does not have vanilla dependency"))?;
 
-        let index = self.get_index(&Id::vanilla()).await?;
+        let index = self.get_index(&vanilla_id()).await?;
 
         let all = index.keys().map(|VersionRev { version, .. }| version);
 
@@ -196,7 +201,7 @@ impl IntermediaryManager {
 
 impl SyncBuiltinIndex for IntermediaryManager {
     fn package(&self) -> Id {
-        Id::intermediary()
+        intermediary_id()
     }
 
     #[instrument(skip(self))]
@@ -214,7 +219,7 @@ impl SyncBuiltinIndex for IntermediaryManager {
                 (
                     VersionRev::new(v.clone()),
                     PackNode {
-                        dep: once((Id::vanilla(), format!("={v}").parse().unwrap())).collect(),
+                        dep: once((vanilla_id(), format!("={v}").parse().unwrap())).collect(),
                         ..Default::default()
                     },
                 )

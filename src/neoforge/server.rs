@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::{
     Creeper, Id, Install, VersionRev,
-    builtin::SyncBuiltinIndex,
+    builtin::{SyncBuiltinIndex, neoforge_server_id, vanilla_server_id},
     index::Index,
     neoforge::{NfVersion, nf_mc_req, query_neoforge_versions},
     pack::PackNode,
@@ -28,7 +28,7 @@ impl NeoforgeServerManager {
 
 impl SyncBuiltinIndex for NeoforgeServerManager {
     fn package(&self) -> Id {
-        Id::neoforge_server()
+        neoforge_server_id()
     }
 
     async fn sync_index(&self) -> anyhow::Result<Index> {
@@ -42,7 +42,7 @@ impl SyncBuiltinIndex for NeoforgeServerManager {
             .filter_map(|v| v.encode().ok())
             .map(|v| {
                 let conflict = [
-                    (Id::vanilla_server(), VersionReq::STAR),
+                    (vanilla_server_id(), VersionReq::STAR),
                     ("server-provider".parse().unwrap(), VersionReq::STAR),
                 ]
                 .into();
@@ -106,13 +106,13 @@ impl Creeper {
             // repeat code from [`Self::install`] to avoid async recursion
             let version = nf_mc_req(&version);
             if let Some(install) = self
-                .get_install_cache(&Id::vanilla_server(), &version.clone().into())
+                .get_install_cache(&vanilla_server_id(), &version.clone().into())
                 .await?
             {
                 install
             } else {
                 let install = self.vanilla_server_install(&version).await?;
-                self.set_install_cache(&Id::vanilla_server(), &version.into(), Some(&install))
+                self.set_install_cache(&vanilla_server_id(), &version.into(), Some(&install))
                     .await?;
                 install
             }

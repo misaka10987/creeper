@@ -5,13 +5,7 @@ use tracing::{error, info};
 use url::Url;
 
 use crate::{
-    Id, Install, Package,
-    cmd::Execute,
-    fabric::FabricMod,
-    pack::{PackMeta, PackNode},
-    path::creeper_cache_dir,
-    util::{parse_or_prompt, prompt_correct_license, prompt_save},
-    zip::{extract_zip, extract_zip_to},
+    Id, Install, Package, builtin::fabric_id, cmd::Execute, fabric::FabricMod, pack::{PackMeta, PackNode}, path::creeper_cache_dir, util::{parse_or_prompt, prompt_correct_license, prompt_save}, zip::{extract_zip, extract_zip_to},
 };
 
 #[derive(Clone, Debug, Parser)]
@@ -47,7 +41,7 @@ impl Execute for PackageFabricMod {
             };
 
             let id = if id.as_str() == "fabricloader" {
-                Id::fabric()
+                fabric_id()
             } else {
                 id
             };

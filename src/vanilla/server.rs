@@ -4,8 +4,11 @@ use anyhow::anyhow;
 use semver::{Version, VersionReq};
 
 use crate::{
-    Checksum, Creeper, Id, Install, VersionRev, builtin::SyncBuiltinIndex, jar::jar_main_class,
-    mc::ManifestClient, pack::PackNode,
+    Checksum, Creeper, Id, Install, VersionRev,
+    builtin::{SyncBuiltinIndex, vanilla_server_id},
+    jar::jar_main_class,
+    mc::ManifestClient,
+    pack::PackNode,
 };
 
 pub struct VanillaServerManager {
@@ -20,7 +23,7 @@ impl VanillaServerManager {
 
 impl SyncBuiltinIndex for VanillaServerManager {
     fn package(&self) -> Id {
-        Id::vanilla_server()
+        vanilla_server_id()
     }
 
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
@@ -30,7 +33,7 @@ impl SyncBuiltinIndex for VanillaServerManager {
             .into_iter()
             .map(|v| {
                 let conflict = [
-                    (Id::vanilla_server(), VersionReq::STAR),
+                    (vanilla_server_id(), VersionReq::STAR),
                     ("server-provider".parse().unwrap(), VersionReq::STAR),
                 ]
                 .into();

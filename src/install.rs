@@ -13,8 +13,8 @@ use tracing::{Span, debug, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
-    Artifact, Creeper, Id, Package, VersionRev, display_package, path::creeper_cache_dir,
-    pbar::PROGRESS_STYLE_DEFAULT,
+    Artifact, Creeper, Id, Package, VersionRev, builtin::is_builtin, display_package,
+    path::creeper_cache_dir, pbar::PROGRESS_STYLE_DEFAULT,
 };
 
 /// Things installed to the game instance by a package.
@@ -259,7 +259,7 @@ impl Creeper {
             bail!("{package}@{version}#{rev} is missing from cache");
         }
 
-        let install = if !package.is_regular() {
+        let install = if is_builtin(package) {
             self.builtin_install(package, version).await?
         } else {
             let package = self.query_registry(package, version, rev).await?;

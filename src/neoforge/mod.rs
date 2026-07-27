@@ -15,7 +15,7 @@ use tracing::{debug, info};
 
 use crate::{
     Artifact, Checksum, Creeper, Id, Install,
-    builtin::SyncBuiltinIndex,
+    builtin::{SyncBuiltinIndex, neoforge_id, vanilla_id},
     index::{Index, VersionRev},
     pack::PackNode,
     path::creeper_cache_dir,
@@ -63,7 +63,7 @@ async fn query_neoforge_versions(http: &Client) -> anyhow::Result<Vec<String>> {
 
 impl SyncBuiltinIndex for NeoforgeManager {
     fn package(&self) -> Id {
-        Id::neoforge()
+        neoforge_id()
     }
 
     async fn sync_index(&self) -> anyhow::Result<Index> {
@@ -158,13 +158,13 @@ impl Creeper {
             // repeat code from [`Self::install`] to avoid async recursion
             let version = nf_mc_req(&version);
             if let Some(install) = self
-                .get_install_cache(&Id::vanilla(), &version.clone().into())
+                .get_install_cache(&vanilla_id(), &version.clone().into())
                 .await?
             {
                 install
             } else {
                 let install = self.vanilla_install(&version).await?;
-                self.set_install_cache(&Id::vanilla(), &version.into(), Some(&install))
+                self.set_install_cache(&vanilla_id(), &version.into(), Some(&install))
                     .await?;
                 install
             }
@@ -295,7 +295,7 @@ fn neoforge_index(versions: impl IntoIterator<Item = Version>) -> Index {
             let req = nf_mc_req(&version);
             let req = format!("={}", req).parse().unwrap();
 
-            let dep = Some((Id::vanilla(), req)).into_iter().collect();
+            let dep = Some((vanilla_id(), req)).into_iter().collect();
             let node = PackNode {
                 dep,
                 ..Default::default()

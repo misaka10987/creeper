@@ -42,59 +42,6 @@ impl Id {
             .join(&self.as_str())
     }
 
-    pub fn minecraft() -> Self {
-        "minecraft".parse().unwrap()
-    }
-
-    pub fn vanilla() -> Self {
-        "vanilla".parse().unwrap()
-    }
-
-    pub fn forge() -> Self {
-        "forge".parse().unwrap()
-    }
-
-    pub fn neoforge() -> Self {
-        "neoforge".parse().unwrap()
-    }
-
-    pub fn fabric() -> Self {
-        "fabric".parse().unwrap()
-    }
-
-    pub fn intermediary() -> Self {
-        "intermediary".parse().unwrap()
-    }
-
-    pub fn server() -> Self {
-        "server".parse().unwrap()
-    }
-
-    pub fn vanilla_server() -> Self {
-        "vanilla-server".parse().unwrap()
-    }
-
-    pub fn neoforge_server() -> Self {
-        "neoforge-server".parse().unwrap()
-    }
-
-    /// Whether this is a regular package or a package to be specially handled by package manager.
-    pub fn is_regular(&self) -> bool {
-        const SPECIAL: [&str; 10] = [
-            "root",
-            "minecraft",
-            "vanilla",
-            "forge",
-            "neoforge",
-            "fabric",
-            "intermediary",
-            "server",
-            "vanilla-server",
-            "neoforge-server",
-        ];
-        !SPECIAL.contains(&self.as_str())
-    }
-
     pub fn is_valid_index_lv1(name: &str) -> bool {
         if name.len() != 2 {
             return false;

@@ -15,7 +15,12 @@ use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter}
 use semver::{BuildMetadata, Prerelease, Version, VersionReq};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{Creeper, Id, index::VersionRev, pack::PackNode};
+use crate::{
+    Creeper, Id,
+    builtin::{fabric_id, neoforge_id, neoforge_server_id, vanilla_server_id},
+    index::VersionRev,
+    pack::PackNode,
+};
 
 struct Error(anyhow::Error);
 
@@ -196,10 +201,10 @@ impl ConflictManager {
     fn simp(&mut self) {
         self.clause.retain(|x| {
             !x.keys().all(|k| {
-                [Id::neoforge(), Id::fabric()].contains(k)
+                [neoforge_id(), fabric_id()].contains(k)
                     || [
-                        Id::vanilla_server(),
-                        Id::neoforge_server(),
+                        vanilla_server_id(),
+                        neoforge_server_id(),
                         "server-provider".parse().unwrap(),
                     ]
                     .contains(k)
@@ -208,13 +213,13 @@ impl ConflictManager {
 
         let conflict = [
             [
-                (Id::neoforge(), VersionReq::STAR),
-                (Id::fabric(), VersionReq::STAR),
+                (neoforge_id(), VersionReq::STAR),
+                (fabric_id(), VersionReq::STAR),
             ]
             .into(),
             [
-                (Id::vanilla_server(), VersionReq::STAR),
-                (Id::neoforge_server(), VersionReq::STAR),
+                (vanilla_server_id(), VersionReq::STAR),
+                (neoforge_server_id(), VersionReq::STAR),
                 ("server-provider".parse().unwrap(), VersionReq::STAR),
             ]
             .into(),

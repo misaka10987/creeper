@@ -1,8 +1,12 @@
 use std::time::Duration;
 
 use crate::{
-    Id, VersionRev, builtin::SyncBuiltinIndex, index::Index, mc::manifest::ManifestClient,
-    neoforge::mc_nf_req, pack::PackNode,
+    Id, VersionRev,
+    builtin::{SyncBuiltinIndex, neoforge_server_id, server_id, vanilla_server_id},
+    index::Index,
+    mc::manifest::ManifestClient,
+    neoforge::mc_nf_req,
+    pack::PackNode,
 };
 
 pub struct ServerManager {
@@ -17,7 +21,7 @@ impl ServerManager {
 
 impl SyncBuiltinIndex for ServerManager {
     fn package(&self) -> Id {
-        Id::server()
+        server_id()
     }
 
     async fn sync_index(&self) -> anyhow::Result<Index> {
@@ -27,8 +31,8 @@ impl SyncBuiltinIndex for ServerManager {
             .into_iter()
             .map(|v| {
                 let grp = [
-                    (Id::vanilla_server(), format!("={v}").parse().unwrap()),
-                    (Id::neoforge_server(), mc_nf_req(v)),
+                    (vanilla_server_id(), format!("={v}").parse().unwrap()),
+                    (neoforge_server_id(), mc_nf_req(v)),
                     (
                         "server-provider".parse().unwrap(),
                         format!("={v}").parse().unwrap(),

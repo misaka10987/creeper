@@ -12,10 +12,7 @@ use std::{
 };
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install,
-    builtin::SyncBuiltinIndex,
-    index::{Index, VersionRev, independent_index},
-    mc::ManifestClient,
+    Artifact, Checksum, Creeper, Id, Install, builtin::{SyncBuiltinIndex, vanilla_id}, index::{Index, VersionRev, independent_index}, mc::ManifestClient,
 };
 
 use anyhow::anyhow;
@@ -47,7 +44,7 @@ impl VanillaManager {
 
 impl SyncBuiltinIndex for VanillaManager {
     fn package(&self) -> Id {
-        Id::vanilla()
+        vanilla_id()
     }
 
     async fn sync_index(&self) -> anyhow::Result<Index> {

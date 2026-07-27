@@ -18,7 +18,7 @@ use tokio::{
 };
 use tracing::debug;
 
-use crate::{Creeper, Id, Package, pack::PackNode};
+use crate::{Creeper, Id, Package, builtin::is_builtin, pack::PackNode};
 
 pub type Index = BTreeMap<VersionRev, PackNode>;
 
@@ -280,7 +280,7 @@ impl Creeper {
             return Ok(index.clone());
         }
 
-        let index = if !package.is_regular() {
+        let index = if is_builtin(package) {
             self.get_builtin_index(package).await?
         } else {
             self.registry.get_index(package).await?
@@ -313,7 +313,7 @@ impl Creeper {
             return Ok(index.clone());
         }
 
-        let index = if !package.is_regular() {
+        let index = if is_builtin(package) {
             self.blocking_get_builtin_index(package)?
         } else {
             self.registry.blocking_get_index(package)?

@@ -5,20 +5,79 @@ mod prelude;
 mod server;
 mod version;
 
-use std::iter::once;
+use std::{iter::once, time::Duration};
 
 use reqwest::Client;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 use crate::{
     Artifact, Checksum, Creeper,
-    builtin::vanilla_id,
+    builtin::{
+        SyncBuiltinIndex, fabric_id, neoforge_client_id, neoforge_id, neoforge_server_id,
+        vanilla_id,
+    },
     index::{Index, VersionRev},
     pack::PackNode,
 };
 
 pub use prelude::*;
+
+pub struct NeoforgeManager {
+    http: Client,
+}
+
+impl NeoforgeManager {
+    pub fn new(http: Client) -> Self {
+        Self { http }
+    }
+}
+
+impl SyncBuiltinIndex for NeoforgeManager {
+    fn package(&self) -> crate::prelude::Id {
+        neoforge_id()
+    }
+
+    async fn sync_index(&self) -> anyhow::Result<Index> {
+        let versions = query_neoforge_versions(&self.http).await?;
+
+        let count = versions.len();
+
+        let index = versions
+            .into_iter()
+            .filter_map(|s| s.parse::<NfVersion>().ok())
+            .filter_map(|v| v.encode().ok())
+            .map(|v| {
+                let grp = [
+                    (neoforge_client_id(), format!("={v}").parse().unwrap()),
+                    (neoforge_server_id(), format!("={v}").parse().unwrap()),
+                ];
+
+                let conflict = [(fabric_id(), VersionReq::STAR)].into();
+
+                let node = PackNode {
+                    either_dep: vec![grp.into()],
+                    conflict,
+                    ..Default::default()
+                };
+
+                (VersionRev::new(v), node)
+            })
+            .collect::<Index>();
+
+        debug!(
+            "retrieved {count} NeoForge versions, of which {} valid",
+            index.len()
+        );
+
+        Ok(index)
+    }
+
+    fn cache_expiry(&self) -> std::time::Duration {
+        Duration::from_hours(72)
+    }
+}
 
 async fn query_neoforge_versions(http: &Client) -> anyhow::Result<Vec<String>> {
     const VERSIONS_URL: &str =

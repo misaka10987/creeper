@@ -143,7 +143,7 @@ impl Creeper {
             "vanilla" => self.vanilla_install(version).await?,
             "vanilla-server" => self.vanilla_server_install(version).await?,
 
-            "neoforge" => self.neoforge_install(version.clone()).await?,
+            "neoforge-client" => self.neoforge_client_install(version.clone()).await?,
             "neoforge-server" => self.neoforge_server_install(version.clone()).await?,
 
             "fabric" => self.fabric_install(version).await?,
@@ -161,7 +161,7 @@ impl Creeper {
         self.vanilla.update_index().await?;
         self.vanilla_server.update_index().await?;
 
-        self.neoforge.update_index().await?;
+        self.neoforge_client.update_index().await?;
         self.neoforge_server.update_index().await?;
 
         self.fabric.update_index().await?;
@@ -181,7 +181,7 @@ impl Creeper {
             "vanilla" => self.vanilla.get_index().await?,
             "vanilla-server" => self.vanilla_server.get_index().await?,
 
-            "neoforge" => self.neoforge.get_index().await?,
+            "neoforge-client" => self.neoforge_client.get_index().await?,
             "neoforge-server" => self.neoforge_server.get_index().await?,
 
             "fabric" => self.fabric.get_index().await?,
@@ -204,7 +204,7 @@ impl Creeper {
             "vanilla" => self.vanilla.blocking_get_index()?,
             "vanilla-server" => self.vanilla_server.blocking_get_index()?,
 
-            "neoforge" => self.neoforge.blocking_get_index()?,
+            "neoforge-client" => self.neoforge_client.blocking_get_index()?,
             "neoforge-server" => self.neoforge_server.blocking_get_index()?,
 
             "fabric" => self.fabric.blocking_get_index()?,
@@ -218,7 +218,7 @@ impl Creeper {
 }
 
 pub fn is_builtin(id: &Id) -> bool {
-    const BUILTIN: [&str; 10] = [
+    const BUILTIN: [&str; 11] = [
         "root",
         "minecraft",
         "client",
@@ -226,6 +226,7 @@ pub fn is_builtin(id: &Id) -> bool {
         "vanilla",
         "vanilla-server",
         "neoforge",
+        "neoforge-client",
         "neoforge-server",
         "fabric",
         "intermediary",

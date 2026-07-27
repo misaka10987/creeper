@@ -24,6 +24,10 @@ pub fn neoforge_id() -> Id {
     "neoforge".parse().unwrap()
 }
 
+pub fn neoforge_client_id() -> Id {
+    "neoforge-client".parse().unwrap()
+}
+
 pub fn neoforge_server_id() -> Id {
     "neoforge-server".parse().unwrap()
 }

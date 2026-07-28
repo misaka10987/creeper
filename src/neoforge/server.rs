@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::{
     Creeper, Id, Install, VersionRev,
-    builtin::{SyncBuiltinIndex, neoforge_server_id, vanilla_server_id},
+    builtin::{SyncBuiltinIndex, neoforge_server_id, vanilla_id, vanilla_server_id},
     index::Index,
     neoforge::{NfVersion, nf_mc_req, query_neoforge_versions},
     pack::PackNode,
@@ -42,6 +42,7 @@ impl SyncBuiltinIndex for NeoforgeServerManager {
             .filter_map(|v| v.encode().ok())
             .map(|v| {
                 let conflict = [
+                    (vanilla_id(), VersionReq::STAR),
                     (vanilla_server_id(), VersionReq::STAR),
                     ("server-provider".parse().unwrap(), VersionReq::STAR),
                 ]

@@ -17,7 +17,7 @@ use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     Creeper, Id,
-    builtin::{fabric_id, neoforge_id, neoforge_server_id, vanilla_server_id},
+    builtin::{fabric_id, neoforge_id, neoforge_server_id, vanilla_id, vanilla_server_id},
     index::VersionRev,
     pack::PackNode,
 };
@@ -203,6 +203,7 @@ impl ConflictManager {
             !x.keys().all(|k| {
                 [neoforge_id(), fabric_id()].contains(k)
                     || [
+                        vanilla_id(),
                         vanilla_server_id(),
                         neoforge_server_id(),
                         "server-provider".parse().unwrap(),
@@ -218,6 +219,7 @@ impl ConflictManager {
             ]
             .into(),
             [
+                (vanilla_id(), VersionReq::STAR),
                 (vanilla_server_id(), VersionReq::STAR),
                 (neoforge_server_id(), VersionReq::STAR),
                 ("server-provider".parse().unwrap(), VersionReq::STAR),

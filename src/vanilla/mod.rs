@@ -12,7 +12,11 @@ use std::{
 };
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install, builtin::{SyncBuiltinIndex, vanilla_id}, index::{Index, VersionRev, independent_index}, mc::ManifestClient,
+    Artifact, Checksum, Creeper, Id, Install,
+    builtin::{SyncBuiltinIndex, neoforge_server_id, vanilla_id, vanilla_server_id},
+    index::{Index, VersionRev},
+    mc::ManifestClient,
+    pack::PackNode,
 };
 
 use anyhow::anyhow;
@@ -50,7 +54,24 @@ impl SyncBuiltinIndex for VanillaManager {
     async fn sync_index(&self) -> anyhow::Result<Index> {
         let versions = self.manifest.get_version_list().await?;
 
-        let index = independent_index(versions.into_iter().cloned().map(VersionRev::new));
+        let index = versions
+            .into_iter()
+            .map(|v| {
+                let conflict = [
+                    (vanilla_server_id(), VersionReq::STAR),
+                    (neoforge_server_id(), VersionReq::STAR),
+                    ("server-provider".parse().unwrap(), VersionReq::STAR),
+                ]
+                .into();
+
+                let node = PackNode {
+                    conflict,
+                    ..Default::default()
+                };
+
+                (VersionRev::new(v.clone()), node)
+            })
+            .collect();
 
         Ok(index)
     }

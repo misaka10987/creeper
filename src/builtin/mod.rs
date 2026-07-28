@@ -138,6 +138,7 @@ impl Creeper {
         }
 
         let install = match package.as_str() {
+            "minecraft" => Install::default(),
             "client" => Install::default(),
             "server" => Install::default(),
 
@@ -158,6 +159,7 @@ impl Creeper {
     }
 
     pub(crate) async fn update_builtin_index(&self) -> anyhow::Result<()> {
+        self.minecraft.update_index().await?;
         self.client.update_index().await?;
         self.server.update_index().await?;
 
@@ -180,6 +182,7 @@ impl Creeper {
         }
 
         let index = match package.as_str() {
+            "minecraft" => self.minecraft.get_index().await?,
             "client" => self.client.get_index().await?,
             "server" => self.server.get_index().await?,
 
@@ -205,6 +208,7 @@ impl Creeper {
         }
 
         let index = match package.as_str() {
+            "minecraft" => self.minecraft.blocking_get_index()?,
             "client" => self.client.blocking_get_index()?,
             "server" => self.server.blocking_get_index()?,
 

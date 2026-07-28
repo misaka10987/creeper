@@ -1,3 +1,4 @@
+mod client;
 mod manifest;
 mod prelude;
 mod server;

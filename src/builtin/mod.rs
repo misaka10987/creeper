@@ -138,6 +138,7 @@ impl Creeper {
         }
 
         let install = match package.as_str() {
+            "client" => Install::default(),
             "server" => Install::default(),
 
             "vanilla" => self.vanilla_install(version).await?,
@@ -157,6 +158,7 @@ impl Creeper {
     }
 
     pub(crate) async fn update_builtin_index(&self) -> anyhow::Result<()> {
+        self.client.update_index().await?;
         self.server.update_index().await?;
 
         self.vanilla.update_index().await?;
@@ -178,6 +180,7 @@ impl Creeper {
         }
 
         let index = match package.as_str() {
+            "client" => self.client.get_index().await?,
             "server" => self.server.get_index().await?,
 
             "vanilla" => self.vanilla.get_index().await?,
@@ -202,6 +205,7 @@ impl Creeper {
         }
 
         let index = match package.as_str() {
+            "client" => self.client.blocking_get_index()?,
             "server" => self.server.blocking_get_index()?,
 
             "vanilla" => self.vanilla.blocking_get_index()?,

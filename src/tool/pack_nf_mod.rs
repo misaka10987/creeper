@@ -15,7 +15,6 @@ use url::Url;
 
 use crate::{
     Id, Install, Package,
-    builtin::{minecraft_id, vanilla_id},
     cmd::Execute,
     pack::{PackMeta, PackNode},
     util::{parse_or_prompt, prompt_save, prompt_valid},
@@ -111,7 +110,6 @@ impl Execute for PackageNeoforgeMod {
 
         for d in deps {
             let id = match d.mod_id.parse::<Id>() {
-                Ok(id) if id == minecraft_id() => vanilla_id(),
                 Ok(id) => id,
                 Err(_) => {
                     prompt_valid::<Id>(&format!(

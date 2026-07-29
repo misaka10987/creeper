@@ -345,7 +345,7 @@ pub enum SubCommand {
 
     Init(cmd::Init),
 
-    #[command(subcommand)]
+    #[command(subcommand, hide = true)]
     Dev(Dev),
 
     Complete(cmd::Complete),

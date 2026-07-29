@@ -13,7 +13,7 @@ use creeper_semver_pubgrub::{SemverPubgrub, VersionLike};
 use petgraph::{algo::toposort, graph::DiGraph};
 use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
 use semver::{BuildMetadata, Prerelease, Version, VersionReq};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
     Creeper, Id,
@@ -381,7 +381,6 @@ impl DependencyProvider for Resolve {
         Ok(highest.cloned())
     }
 
-    // TODO: add conflict virtual packages to dependencies
     fn get_dependencies(
         &self,
         package: &Self::P,
@@ -448,12 +447,11 @@ impl DependencyProvider for Resolve {
 }
 
 impl Creeper {
+    #[instrument(skip(self, req), fields(req = req.len()))]
     pub fn resolve(
         &self,
         req: BTreeMap<Id, VersionReq>,
     ) -> anyhow::Result<HashMap<Id, VersionRev>> {
-        info!("resolving {} required packages", req.len());
-
         let resolve = Resolve::new(
             self.clone(),
             PackNode {

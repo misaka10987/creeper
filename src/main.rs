@@ -45,7 +45,7 @@ use tokio::{
 };
 use tracing::{Level, info, level_filters::LevelFilter};
 use tracing_indicatif::IndicatifLayer;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 use crate::{
@@ -305,20 +305,27 @@ pub struct Command {
     #[clap(flatten)]
     pub args: Args,
 
+    /// The log filtering directives.
+    ///
+    /// This is independent of the `--loglevel` option.
+    /// See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives for syntax.
+    #[arg(long, default_value = "trace,pubgrub=warn")]
+    pub log: String,
+
     /// Set the log filtering level.
     #[arg(name = "loglevel", long, default_value_t = Level::INFO)]
-    log_level: Level,
+    pub log_level: Level,
 
     /// Use verbose output, equivalent to overriding log level to DEBUG.
     #[arg(short, long)]
-    verbose: bool,
+    pub verbose: bool,
 
     /// Use noisy output, equivalent to overriding log level to TRACE.
     #[arg(short, long)]
-    noisy: bool,
+    pub noisy: bool,
 
     #[command(subcommand)]
-    cmd: SubCommand,
+    pub cmd: SubCommand,
 }
 
 #[derive(Clone, Debug, Parser)]
@@ -368,6 +375,7 @@ fn main() {
     let Command {
         args,
         cmd,
+        log,
         log_level,
         verbose,
         noisy,
@@ -384,6 +392,7 @@ fn main() {
     let layer = IndicatifLayer::new();
 
     tracing_subscriber::registry()
+        .with(EnvFilter::new(log))
         .with(LevelFilter::from_level(log_level))
         .with(fmt::layer().with_writer(layer.get_stderr_writer()))
         .with(layer)

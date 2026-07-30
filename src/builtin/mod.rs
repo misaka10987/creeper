@@ -7,9 +7,10 @@ use std::{
 };
 
 use anyhow::bail;
+use futures::{StreamExt, TryStreamExt, stream};
 use semver::Version;
 use tokio::fs::{create_dir_all, read_to_string, try_exists, write};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{
     Creeper, Id, Install,
@@ -42,6 +43,7 @@ pub trait UpdateIndex {
 }
 
 impl<T: SyncBuiltinIndex> UpdateIndex for T {
+    #[instrument(skip(self), fields(package = self.package().to_string()))]
     async fn update_index(&self) -> anyhow::Result<()> {
         let package = self.package();
 
@@ -159,6 +161,34 @@ impl Creeper {
     }
 
     pub(crate) async fn update_builtin_index(&self) -> anyhow::Result<()> {
+        // pass index `usize` as parameters instead of `&str` to avoid HRTB errors
+        // TODO: this might actually be a compiler bug to investigate later
+        stream::iter(0..BUILTIN_PACKAGE.len())
+            .map(|idx| async move {
+                match BUILTIN_PACKAGE[idx] {
+                    "minecraft" => self.minecraft.update_index().await,
+                    "client" => self.client.update_index().await,
+                    "server" => self.server.update_index().await,
+
+                    "vanilla" => self.vanilla.update_index().await,
+                    "vanilla-server" => self.vanilla_server.update_index().await,
+
+                    "neoforge" => self.neoforge.update_index().await,
+                    "neoforge-client" => self.neoforge_client.update_index().await,
+                    "neoforge-server" => self.neoforge_server.update_index().await,
+
+                    "fabric" => self.fabric.update_index().await,
+                    "intermediary" => self.intermediary.update_index().await,
+
+                    "root" => Ok(()),
+
+                    p => todo!("update index builtin package {p}"),
+                }
+            })
+            .buffer_unordered(self.config.parallel_download)
+            .try_collect::<()>()
+            .await?;
+
         self.minecraft.update_index().await?;
         self.client.update_index().await?;
         self.server.update_index().await?;
@@ -230,19 +260,19 @@ impl Creeper {
 }
 
 pub fn is_builtin(id: &Id) -> bool {
-    const BUILTIN: [&str; 11] = [
-        "root",
-        "minecraft",
-        "client",
-        "server",
-        "vanilla",
-        "vanilla-server",
-        "neoforge",
-        "neoforge-client",
-        "neoforge-server",
-        "fabric",
-        "intermediary",
-    ];
-
-    BUILTIN.contains(&id.as_str())
+    BUILTIN_PACKAGE.contains(&id.as_str())
 }
+
+pub const BUILTIN_PACKAGE: [&str; 11] = [
+    "root",
+    "minecraft",
+    "client",
+    "server",
+    "vanilla",
+    "vanilla-server",
+    "neoforge",
+    "neoforge-client",
+    "neoforge-server",
+    "fabric",
+    "intermediary",
+];

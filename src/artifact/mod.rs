@@ -222,8 +222,8 @@ impl ArtifactManager {
         let mut writer = BufWriter::new(File::create(&cache).await?);
 
         let span = Span::current();
-        let trunc: String = art.name.chars().take(8).collect();
-        span.pb_set_message(&trunc);
+
+        span.pb_set_message(&art.name);
         span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
         span.pb_set_length(art.len);
 

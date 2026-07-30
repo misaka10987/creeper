@@ -59,7 +59,8 @@ impl SyncBuiltinIndex for FabricManager {
             .collect::<Vec<_>>();
 
         let span = Span::current();
-        span.pb_set_message("versions");
+
+        // span.pb_set_message(span.metadata().unwrap().name());
         span.pb_set_style(&PROGRESS_STYLE_DEFAULT);
         span.pb_set_length(games.len() as u64);
 
@@ -204,7 +205,6 @@ impl SyncBuiltinIndex for IntermediaryManager {
         intermediary_id()
     }
 
-    #[instrument(skip(self))]
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
         let client = FabricMetaClient::new(self.http.as_client().clone());
 

@@ -5,7 +5,7 @@ mod prelude;
 mod server;
 mod version;
 
-use std::{iter::once, time::Duration};
+use std::time::Duration;
 
 use reqwest::Client;
 use semver::{Version, VersionReq};
@@ -119,14 +119,22 @@ impl Creeper {
             "https://maven.neoforged.net/releases/net/neoforged/neoforge/{nf_version}/neoforge-{nf_version}-installer.jar.sha1"
         );
 
-        let req = self.http.get(sha1_url).build()?;
-        let res = self.http.execute(req).await?;
-
-        let sha1 = res.text().await?.trim().to_string();
+        let sha1 = self
+            .http
+            .req()
+            .await
+            .get(sha1_url)
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?
+            .trim()
+            .into();
 
         let name = format!("neoforge-{nf_version}-installer.jar");
         let installer = self
-            .download(name, url, None, once(Checksum::sha1(sha1)))
+            .download(name, url, None, [Checksum::sha1(sha1)])
             .await?;
 
         Ok(installer)

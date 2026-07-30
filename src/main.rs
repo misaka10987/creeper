@@ -55,6 +55,7 @@ use crate::{
     dev::Dev,
     fabric::{FabricManager, IntermediaryManager},
     game::GameManager,
+    http::HttpThrottle,
     index::IndexCache,
     java::JavaManager,
     mc::{ClientManager, ManifestClient, MinecraftManager, ServerManager},
@@ -74,7 +75,7 @@ pub struct CreeperInner {
     pub args: Args,
     pub config: Config,
 
-    http: Client,
+    http: HttpThrottle,
     // manifest: ManifestClient,
     artifact: ArtifactManager,
 
@@ -170,6 +171,8 @@ impl Creeper {
             ArtifactManager::new(http.clone(), args.offline, config.parallel_download).await?;
         let user = UserManager::new();
         let java = JavaManager::new();
+
+        let http = HttpThrottle::new(http, config.parallel_download);
 
         let val = CreeperInner {
             args,

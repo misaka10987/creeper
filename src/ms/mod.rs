@@ -133,20 +133,17 @@ impl MicrosoftClient {
     //     };
     // }
 
-    pub fn new(http: Client) -> anyhow::Result<Self> {
+    pub fn new(http: Client) -> Self {
         let oauth = BasicClient::new(ClientId::new(CLIENT_ID.into()))
-            // .set_client_secret(ClientSecret::new("secret".into()))
-            .set_auth_uri(AuthUrl::new(AUTH_URL.into())?)
-            .set_token_uri(TokenUrl::new(TOKEN_URL.into())?)
-            .set_redirect_uri(RedirectUrl::new("http://localhost:5555".into())?);
+            .set_auth_uri(AuthUrl::new(AUTH_URL.into()).unwrap())
+            .set_token_uri(TokenUrl::new(TOKEN_URL.into()).unwrap())
+            .set_redirect_uri(RedirectUrl::new("http://localhost:5555".into()).unwrap());
 
-        let value = Self {
+        Self {
             http,
             oauth,
             data: RwLock::new(Default::default()),
-        };
-
-        Ok(value)
+        }
     }
 }
 

@@ -138,7 +138,7 @@ impl Creeper {
             .last()
             .ok_or(anyhow!("no available vanilla version for fabric@{version}"))?;
 
-        let client = FabricMetaClient::new(self.http.clone());
+        let client = FabricMetaClient::new(self.http.as_client().clone());
 
         let profile = client
             .profile(&game.to_string(), &version.to_string())
@@ -236,7 +236,7 @@ impl SyncBuiltinIndex for IntermediaryManager {
 
 impl Creeper {
     pub(crate) async fn intermediary_install(&self, version: &Version) -> anyhow::Result<Install> {
-        let client = FabricMetaClient::new(self.http.clone());
+        let client = FabricMetaClient::new(self.http.as_client().clone());
 
         let loader = client
             .game_loader_versions(&version.to_string())

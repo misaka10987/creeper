@@ -1,18 +1,19 @@
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
 
 use reqwest::Client;
 use tokio::sync::{Semaphore, SemaphorePermit};
 
+#[derive(Clone)]
 pub struct HttpThrottle {
     client: Client,
-    semaphore: Semaphore,
+    semaphore: Arc<Semaphore>,
 }
 
 impl HttpThrottle {
     pub fn new(client: Client, parallel: usize) -> Self {
         Self {
             client,
-            semaphore: Semaphore::new(parallel),
+            semaphore: Arc::new(Semaphore::new(parallel)),
         }
     }
 
@@ -23,6 +24,10 @@ impl HttpThrottle {
             client: &self.client,
             permit,
         }
+    }
+
+    pub fn as_client(&self) -> &Client {
+        &self.client
     }
 }
 

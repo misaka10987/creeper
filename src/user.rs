@@ -96,7 +96,7 @@ impl Creeper {
     }
 
     pub async fn prompt_new_microsoft_user(&self) -> anyhow::Result<User> {
-        let client = MicrosoftClient::new(self.http.clone())?;
+        let client = MicrosoftClient::new(self.http.as_client().clone());
 
         client.prompt_login().await?;
 
@@ -131,7 +131,8 @@ impl Creeper {
         let account =
             Text::new(&format!("Your account at {server} (usually an email):")).prompt()?;
 
-        let yggdrasil = YggdrasilClient::new(server, account.clone(), self.http.clone())?;
+        let yggdrasil =
+            YggdrasilClient::new(server, account.clone(), self.http.as_client().clone())?;
 
         yggdrasil.load_or_prompt_login().await?;
 
@@ -230,7 +231,7 @@ impl Creeper {
     }
 
     async fn user_install_microsoft(&self, uuid: Uuid) -> anyhow::Result<Install> {
-        let client = MicrosoftClient::new(self.http.clone())?;
+        let client = MicrosoftClient::new(self.http.as_client().clone());
         client.set_uuid(uuid).await;
         client.load().await?;
 
@@ -261,7 +262,8 @@ impl Creeper {
         account: String,
         uuid: Uuid,
     ) -> anyhow::Result<Install> {
-        let yggdrasil = YggdrasilClient::new(server.to_string(), account, self.http.clone())?;
+        let yggdrasil =
+            YggdrasilClient::new(server.to_string(), account, self.http.as_client().clone())?;
 
         yggdrasil.load_or_prompt_login().await?;
 
@@ -313,9 +315,12 @@ impl Creeper {
 
         let version = self
             .http
+            .req()
+            .await
             .get(url)
             .send()
             .await?
+            .error_for_status()?
             .json::<AuthlibInjectorVersion>()
             .await?;
 

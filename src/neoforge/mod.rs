@@ -7,7 +7,6 @@ mod version;
 
 use std::time::Duration;
 
-use reqwest::Client;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -18,6 +17,7 @@ use crate::{
         SyncBuiltinIndex, fabric_id, neoforge_client_id, neoforge_id, neoforge_server_id,
         vanilla_id,
     },
+    http::HttpThrottle,
     index::{Index, VersionRev},
     pack::PackNode,
 };
@@ -25,11 +25,11 @@ use crate::{
 pub use prelude::*;
 
 pub struct NeoforgeManager {
-    http: Client,
+    http: HttpThrottle,
 }
 
 impl NeoforgeManager {
-    pub fn new(http: Client) -> Self {
+    pub fn new(http: HttpThrottle) -> Self {
         Self { http }
     }
 }
@@ -79,7 +79,7 @@ impl SyncBuiltinIndex for NeoforgeManager {
     }
 }
 
-async fn query_neoforge_versions(http: &Client) -> anyhow::Result<Vec<String>> {
+async fn query_neoforge_versions(http: &HttpThrottle) -> anyhow::Result<Vec<String>> {
     const VERSIONS_URL: &str =
         "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
 
@@ -91,6 +91,8 @@ async fn query_neoforge_versions(http: &Client) -> anyhow::Result<Vec<String>> {
     }
 
     let versions = http
+        .req()
+        .await
         .get(VERSIONS_URL)
         .send()
         .await?

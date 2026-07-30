@@ -2,13 +2,13 @@ use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use anyhow::anyhow;
 use neoforge::NfInstallProfile;
-use reqwest::Client;
 use semver::{Version, VersionReq};
 use tracing::debug;
 
 use crate::{
     Creeper, Id, Install, VersionRev,
     builtin::{SyncBuiltinIndex, neoforge_server_id, vanilla_id, vanilla_server_id},
+    http::HttpThrottle,
     index::Index,
     neoforge::{NfVersion, nf_mc_req, query_neoforge_versions},
     pack::PackNode,
@@ -17,11 +17,11 @@ use crate::{
 };
 
 pub struct NeoforgeServerManager {
-    http: Client,
+    http: HttpThrottle,
 }
 
 impl NeoforgeServerManager {
-    pub fn new(http: Client) -> Self {
+    pub fn new(http: HttpThrottle) -> Self {
         Self { http }
     }
 }

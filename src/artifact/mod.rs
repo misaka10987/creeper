@@ -7,7 +7,6 @@ use std::iter::once;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail};
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use tokio::fs::{File, copy, create_dir_all, metadata, try_exists};
@@ -145,11 +144,7 @@ pub struct ArtifactManager {
 }
 
 impl ArtifactManager {
-    pub async fn new(
-        http: Client,
-        offline: bool,
-        parallel_download: usize,
-    ) -> anyhow::Result<Self> {
+    pub async fn new(http: HttpThrottle, offline: bool) -> anyhow::Result<Self> {
         let path = creeper_data_dir()?.join("artifact.db");
         let opt = SqliteConnectOptions::default()
             .filename(path)
@@ -159,7 +154,7 @@ impl ArtifactManager {
 
         let val = Self {
             index,
-            http: HttpThrottle::new(http, parallel_download),
+            http,
             offline,
         };
         Ok(val)

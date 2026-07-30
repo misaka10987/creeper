@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::bail;
-use reqwest::Client;
 use semver::Version;
 use tokio::{
     fs::{File, create_dir_all, read_to_string, try_exists},
@@ -17,6 +16,7 @@ use url::Url;
 
 use crate::{
     Creeper, Id, Package,
+    http::HttpThrottle,
     index::{Index, IndexLine, VersionRev},
     path::creeper_cache_dir,
     tool::BuildIndex,
@@ -25,7 +25,7 @@ use crate::{
 
 pub struct Registry {
     pub url: Url,
-    http: Client,
+    http: HttpThrottle,
     cache: RwLock<HashMap<Id, BTreeMap<VersionRev, Package>>>,
 }
 
@@ -42,7 +42,7 @@ impl Registry {
         Ok(self.cache_path()?.join("package-index"))
     }
 
-    pub fn new(url: Url, http: Client) -> anyhow::Result<Self> {
+    pub fn new(url: Url, http: HttpThrottle) -> anyhow::Result<Self> {
         match url.scheme() {
             "file" => debug!("using local registry at {url}"),
             "https" => debug!("using remote registry at {url}"),
@@ -73,11 +73,18 @@ impl Registry {
 
         let url_def = self.url.join("package-index.url")?;
 
-        let req = self.http.get(url_def).build()?;
-        let res = self.http.execute(req).await?;
-
-        let url = res.text().await?;
-        let url: Url = url.trim().parse()?;
+        let url = self
+            .http
+            .req()
+            .await
+            .get(url_def)
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?
+            .trim()
+            .parse::<Url>()?;
 
         create_dir_all(url_cache.parent().unwrap()).await?;
         let mut file = File::create(&url_cache).await?;
@@ -164,10 +171,16 @@ impl Registry {
             .join(&format!("{version}/"))?
             .join(&format!("{rev}.json"))?;
 
-        let req = self.http.get(url).build()?;
-        let res = self.http.execute(req).await?;
-
-        let pack = res.json::<Package>().await?;
+        let pack = self
+            .http
+            .req()
+            .await
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<Package>()
+            .await?;
 
         self.cache
             .write()

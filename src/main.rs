@@ -31,7 +31,6 @@ mod yggdrasil;
 mod zip;
 
 use clap::Parser;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use std::{
@@ -147,7 +146,7 @@ impl Creeper {
 
         let config = Self::load_config(path).await?;
 
-        let http = Client::default();
+        let http = HttpThrottle::new(Default::default(), config.parallel_download);
         let manifest = ManifestClient::new(http.clone());
 
         let registry = Registry::new(config.registry.clone(), http.clone())?;
@@ -167,12 +166,9 @@ impl Creeper {
         let fabric = FabricManager::new(http.clone(), config.parallel_download);
         let intermediary = IntermediaryManager::new(http.clone());
 
-        let artifact =
-            ArtifactManager::new(http.clone(), args.offline, config.parallel_download).await?;
+        let artifact = ArtifactManager::new(http.clone(), args.offline).await?;
         let user = UserManager::new();
         let java = JavaManager::new();
-
-        let http = HttpThrottle::new(http, config.parallel_download);
 
         let val = CreeperInner {
             args,

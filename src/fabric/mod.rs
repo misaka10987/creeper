@@ -12,7 +12,6 @@ use std::{
 
 use anyhow::{anyhow, ensure};
 use fabric_meta_api::{FabricMetaClient, Game, Library, LoaderWithIntermediary};
-use reqwest::Client;
 use semver::{Version, VersionReq};
 use tracing::{Span, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
@@ -20,6 +19,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 use crate::{
     Checksum, Creeper, Id, Install,
     builtin::{SyncBuiltinIndex, fabric_id, intermediary_id, neoforge_id, vanilla_id},
+    http::HttpThrottle,
     index::VersionRev,
     pack::PackNode,
     pbar::PROGRESS_STYLE_DEFAULT,
@@ -29,11 +29,11 @@ use crate::{
 
 pub struct FabricManager {
     pub parallel_download: usize,
-    http: Client,
+    http: HttpThrottle,
 }
 
 impl FabricManager {
-    pub fn new(http: Client, parallel_download: usize) -> Self {
+    pub fn new(http: HttpThrottle, parallel_download: usize) -> Self {
         Self {
             http,
             parallel_download,
@@ -48,7 +48,7 @@ impl SyncBuiltinIndex for FabricManager {
 
     #[instrument(skip(self))]
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let client = FabricMetaClient::new(self.http.clone());
+        let client = FabricMetaClient::new(self.http.as_client().clone());
 
         let games = client.game_versions().await?;
 
@@ -66,7 +66,7 @@ impl SyncBuiltinIndex for FabricManager {
         // game version to supported loader versions
         let game_loader = stream::iter(games.clone())
             .map(|v| async move {
-                let client = FabricMetaClient::new(self.http.clone());
+                let client = FabricMetaClient::new(self.http.as_client().clone());
                 let loaders = client.game_loader_versions(&v.to_string()).await;
 
                 Span::current().pb_inc(1);
@@ -190,11 +190,11 @@ impl Creeper {
 }
 
 pub struct IntermediaryManager {
-    http: Client,
+    http: HttpThrottle,
 }
 
 impl IntermediaryManager {
-    pub fn new(http: Client) -> Self {
+    pub fn new(http: HttpThrottle) -> Self {
         Self { http }
     }
 }
@@ -206,7 +206,7 @@ impl SyncBuiltinIndex for IntermediaryManager {
 
     #[instrument(skip(self))]
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let client = FabricMetaClient::new(self.http.clone());
+        let client = FabricMetaClient::new(self.http.as_client().clone());
 
         let versions = client.intermediary_versions().await?;
 

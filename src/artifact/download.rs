@@ -76,8 +76,6 @@ impl ArtifactManager {
             remove_file(&cache).await?;
         }
 
-        let semaphore = self.semaphore.acquire().await?;
-
         let mut writer = BufWriter::new(File::create(&cache).await?);
 
         let span = Span::current();
@@ -86,8 +84,14 @@ impl ArtifactManager {
         span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
         span.pb_set_length(len.unwrap_or(0));
 
-        let req = self.http.get(&src).build()?;
-        let mut res = self.http.execute(req).await?;
+        let mut res = self
+            .http
+            .req()
+            .await
+            .get(&src)
+            .send()
+            .await?
+            .error_for_status()?;
 
         if len.is_none() {
             span.pb_set_length(res.content_length().unwrap_or(0));
@@ -99,8 +103,6 @@ impl ArtifactManager {
         }
 
         writer.shutdown().await?;
-
-        drop(semaphore);
 
         info!("download finished");
 

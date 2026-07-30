@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use tokio::fs::{File, copy, create_dir_all, metadata, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
-use tokio::sync::Semaphore;
 use tracing::{Span, debug, info, instrument, trace};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
+use crate::http::HttpThrottle;
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
 use crate::util::{mv, set_readonly, summarize};
@@ -139,11 +139,9 @@ const DB_INIT_QUERY: &str = include_str!("init.sql");
 pub struct ArtifactManager {
     pub offline: bool,
 
-    http: Client,
+    http: HttpThrottle,
 
     index: SqlitePool,
-
-    semaphore: Semaphore,
 }
 
 impl ArtifactManager {
@@ -159,13 +157,10 @@ impl ArtifactManager {
         let index = SqlitePool::connect_with(opt).await?;
         index.execute(DB_INIT_QUERY).await?;
 
-        let semaphore = Semaphore::new(parallel_download);
-
         let val = Self {
             index,
-            http,
+            http: HttpThrottle::new(http, parallel_download),
             offline,
-            semaphore,
         };
         Ok(val)
     }
@@ -229,8 +224,6 @@ impl ArtifactManager {
         trace!("download caching to {cache:?}");
         create_dir_all(cache.parent().unwrap()).await?;
 
-        let semaphore = self.semaphore.acquire().await?;
-
         let mut writer = BufWriter::new(File::create(&cache).await?);
 
         let span = Span::current();
@@ -239,8 +232,14 @@ impl ArtifactManager {
         span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
         span.pb_set_length(art.len);
 
-        let req = self.http.get(src).build()?;
-        let mut res = self.http.execute(req).await?;
+        let mut res = self
+            .http
+            .req()
+            .await
+            .get(src)
+            .send()
+            .await?
+            .error_for_status()?;
 
         while let Some(chunk) = res.chunk().await? {
             writer.write_all(&chunk).await?;
@@ -248,8 +247,6 @@ impl ArtifactManager {
         }
 
         writer.shutdown().await?;
-
-        drop(semaphore);
 
         info!("download finished");
 

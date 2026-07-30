@@ -6,6 +6,7 @@ mod cmd;
 mod dev;
 mod fabric;
 mod game;
+mod http;
 mod id;
 mod index;
 mod install;

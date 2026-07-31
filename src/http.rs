@@ -25,10 +25,6 @@ impl HttpThrottle {
             permit,
         }
     }
-
-    pub fn as_client(&self) -> &Client {
-        &self.client
-    }
 }
 
 pub struct Request<'a> {
@@ -44,5 +40,11 @@ impl<'a> Deref for Request<'a> {
 
     fn deref(&self) -> &Self::Target {
         self.client
+    }
+}
+
+impl<'a> Request<'a> {
+    pub fn as_client(&self) -> Client {
+        self.client.clone()
     }
 }

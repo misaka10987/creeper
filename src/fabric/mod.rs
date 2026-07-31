@@ -48,9 +48,13 @@ impl SyncBuiltinIndex for FabricManager {
 
     #[instrument(skip(self))]
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let client = FabricMetaClient::new(self.http.as_client().clone());
+        let req = self.http.req().await;
+
+        let client = FabricMetaClient::new(req.as_client());
 
         let games = client.game_versions().await?;
+
+        drop(req);
 
         let games = games
             .into_iter()
@@ -67,8 +71,13 @@ impl SyncBuiltinIndex for FabricManager {
         // game version to supported loader versions
         let game_loader = stream::iter(games.clone())
             .map(|v| async move {
-                let client = FabricMetaClient::new(self.http.as_client().clone());
+                let req = self.http.req().await;
+
+                let client = FabricMetaClient::new(self.http.req().await.as_client());
+
                 let loaders = client.game_loader_versions(&v.to_string()).await;
+
+                drop(req);
 
                 Span::current().pb_inc(1);
 
@@ -139,11 +148,15 @@ impl Creeper {
             .last()
             .ok_or(anyhow!("no available vanilla version for fabric@{version}"))?;
 
-        let client = FabricMetaClient::new(self.http.as_client().clone());
+        let req = self.http.req().await;
+
+        let client = FabricMetaClient::new(req.as_client());
 
         let profile = client
             .profile(&game.to_string(), &version.to_string())
             .await?;
+
+        drop(req);
 
         let rule = RuleChecker::default();
 
@@ -206,9 +219,13 @@ impl SyncBuiltinIndex for IntermediaryManager {
     }
 
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let client = FabricMetaClient::new(self.http.as_client().clone());
+        let req = self.http.req().await;
+
+        let client = FabricMetaClient::new(req.as_client());
 
         let versions = client.intermediary_versions().await?;
+
+        drop(req);
 
         let versions = versions
             .into_iter()
@@ -236,7 +253,9 @@ impl SyncBuiltinIndex for IntermediaryManager {
 
 impl Creeper {
     pub(crate) async fn intermediary_install(&self, version: &Version) -> anyhow::Result<Install> {
-        let client = FabricMetaClient::new(self.http.as_client().clone());
+        let req = self.http.req().await;
+
+        let client = FabricMetaClient::new(req.as_client());
 
         let loader = client
             .game_loader_versions(&version.to_string())
@@ -244,6 +263,8 @@ impl Creeper {
             .into_iter()
             .filter_map(|v| v.loader.version.parse::<Version>().ok())
             .collect::<BTreeSet<_>>();
+
+        drop(req);
 
         let loader = loader
             .last()

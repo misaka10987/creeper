@@ -96,7 +96,9 @@ impl Creeper {
     }
 
     pub async fn prompt_new_microsoft_user(&self) -> anyhow::Result<User> {
-        let client = MicrosoftClient::new(self.http.as_client().clone());
+        let req = self.http.req().await;
+
+        let client = MicrosoftClient::new(req.as_client());
 
         client.prompt_login().await?;
 
@@ -107,6 +109,8 @@ impl Creeper {
         let uuid = client.get_mc_uuid().await?;
 
         client.save().await?;
+
+        drop(req);
 
         let user = User::Microsoft { uuid };
 
@@ -131,8 +135,9 @@ impl Creeper {
         let account =
             Text::new(&format!("Your account at {server} (usually an email):")).prompt()?;
 
-        let yggdrasil =
-            YggdrasilClient::new(server, account.clone(), self.http.as_client().clone())?;
+        let req = self.http.req().await;
+
+        let yggdrasil = YggdrasilClient::new(server, account.clone(), req.as_client())?;
 
         yggdrasil.load_or_prompt_login().await?;
 
@@ -164,6 +169,8 @@ impl Creeper {
         yggdrasil.select(uuid).await?;
 
         yggdrasil.save().await?;
+
+        drop(req);
 
         self.user.add(select.clone()).await?;
 
@@ -231,7 +238,9 @@ impl Creeper {
     }
 
     async fn user_install_microsoft(&self, uuid: Uuid) -> anyhow::Result<Install> {
-        let client = MicrosoftClient::new(self.http.as_client().clone());
+        let req = self.http.req().await;
+
+        let client = MicrosoftClient::new(req.as_client());
         client.set_uuid(uuid).await;
         client.load().await?;
 
@@ -240,6 +249,8 @@ impl Creeper {
         let token = client.get_mc_jwt().await?;
 
         client.save().await?;
+
+        drop(req);
 
         let install = Install {
             mc_flag: vec![
@@ -262,8 +273,9 @@ impl Creeper {
         account: String,
         uuid: Uuid,
     ) -> anyhow::Result<Install> {
-        let yggdrasil =
-            YggdrasilClient::new(server.to_string(), account, self.http.as_client().clone())?;
+        let req = self.http.req().await;
+
+        let yggdrasil = YggdrasilClient::new(server.to_string(), account, req.as_client())?;
 
         yggdrasil.load_or_prompt_login().await?;
 
@@ -279,6 +291,8 @@ impl Creeper {
         let api = yggdrasil.api().await?;
 
         yggdrasil.save().await?;
+
+        drop(req);
 
         let jar = self.latest_authlib_injector().await?;
 

@@ -6,7 +6,6 @@ mod cmd;
 mod dev;
 mod fabric;
 mod game;
-mod http;
 mod id;
 mod index;
 mod install;
@@ -23,6 +22,7 @@ mod pbar;
 mod prelude;
 mod pubgrub;
 mod registry;
+mod throttle;
 mod tool;
 mod user;
 mod util;
@@ -31,6 +31,7 @@ mod yggdrasil;
 mod zip;
 
 use clap::Parser;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 use std::{
@@ -54,13 +55,13 @@ use crate::{
     dev::Dev,
     fabric::{FabricManager, IntermediaryManager},
     game::GameManager,
-    http::HttpThrottle,
     index::IndexCache,
     java::JavaManager,
     mc::{ClientManager, ManifestClient, MinecraftManager, ServerManager},
     neoforge::{NeoforgeClientManager, NeoforgeManager, NeoforgeServerManager},
     path::{creeper_config_dir, init_creeper_dirs},
     registry::Registry,
+    throttle::Throttle,
     tool::Tool,
     user::UserManager,
     vanilla::{VanillaManager, VanillaServerManager},
@@ -74,7 +75,7 @@ pub struct CreeperInner {
     pub args: Args,
     pub config: Config,
 
-    http: HttpThrottle,
+    http: Throttle<Client>,
     // manifest: ManifestClient,
     artifact: ArtifactManager,
 
@@ -146,7 +147,7 @@ impl Creeper {
 
         let config = Self::load_config(path).await?;
 
-        let http = HttpThrottle::new(Default::default(), config.parallel_download);
+        let http = Throttle::new(Default::default(), config.parallel_download);
         let manifest = ManifestClient::new(http.clone());
 
         let registry = Registry::new(config.registry.clone(), http.clone())?;

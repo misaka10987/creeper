@@ -228,8 +228,8 @@ pub struct DiscoverYggdrasil {
 }
 
 impl Execute for DiscoverYggdrasil {
-    async fn execute(self, _lib: &Creeper) -> anyhow::Result<()> {
-        let client = YggdrasilClient::new(self.server, "".into(), Default::default())?;
+    async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
+        let client = YggdrasilClient::new(self.server, "".into(), lib.http.clone())?;
 
         let url = client.api().await?;
 

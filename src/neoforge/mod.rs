@@ -7,6 +7,7 @@ mod version;
 
 use std::time::Duration;
 
+use reqwest::Client;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -17,19 +18,19 @@ use crate::{
         SyncBuiltinIndex, fabric_id, neoforge_client_id, neoforge_id, neoforge_server_id,
         vanilla_id,
     },
-    http::HttpThrottle,
     index::{Index, VersionRev},
     pack::PackNode,
+    throttle::Throttle,
 };
 
 pub use prelude::*;
 
 pub struct NeoforgeManager {
-    http: HttpThrottle,
+    http: Throttle<Client>,
 }
 
 impl NeoforgeManager {
-    pub fn new(http: HttpThrottle) -> Self {
+    pub fn new(http: Throttle<Client>) -> Self {
         Self { http }
     }
 }
@@ -79,7 +80,7 @@ impl SyncBuiltinIndex for NeoforgeManager {
     }
 }
 
-async fn query_neoforge_versions(http: &HttpThrottle) -> anyhow::Result<Vec<String>> {
+async fn query_neoforge_versions(http: &Throttle<Client>) -> anyhow::Result<Vec<String>> {
     const VERSIONS_URL: &str =
         "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
 
@@ -91,7 +92,7 @@ async fn query_neoforge_versions(http: &HttpThrottle) -> anyhow::Result<Vec<Stri
     }
 
     let versions = http
-        .req()
+        .get()
         .await
         .get(VERSIONS_URL)
         .send()
@@ -123,7 +124,7 @@ impl Creeper {
 
         let sha1 = self
             .http
-            .req()
+            .get()
             .await
             .get(sha1_url)
             .send()

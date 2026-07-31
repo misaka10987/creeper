@@ -8,14 +8,15 @@ use anyhow::anyhow;
 use mc_launchermeta::{
     VERSION_MANIFEST_URL, version::Version as McVersion, version_manifest::Manifest,
 };
+use reqwest::Client;
 use semver::Version;
 use tokio::sync::RwLock;
 use tracing::{info, trace};
 
-use crate::http::HttpThrottle;
+use crate::throttle::Throttle;
 
 pub struct ManifestClientInner {
-    http: HttpThrottle,
+    http: Throttle<Client>,
 
     manifest: OnceLock<Manifest>,
 
@@ -36,7 +37,7 @@ impl Deref for ManifestClient {
 }
 
 impl ManifestClient {
-    pub fn new(http: HttpThrottle) -> Self {
+    pub fn new(http: Throttle<Client>) -> Self {
         let inner = ManifestClientInner {
             http,
             manifest: OnceLock::new(),
@@ -55,7 +56,7 @@ impl ManifestClient {
 
         let manifest = self
             .http
-            .req()
+            .get()
             .await
             .get(VERSION_MANIFEST_URL)
             .send()
@@ -107,7 +108,7 @@ impl ManifestClient {
 
         let mc_version = self
             .http
-            .req()
+            .get()
             .await
             .get(url)
             .send()

@@ -3,6 +3,7 @@ mod prelude;
 
 use futures::{StreamExt, TryStreamExt, stream};
 pub use prelude::*;
+use reqwest::Client;
 
 use std::{
     collections::{BTreeSet, HashMap},
@@ -19,21 +20,21 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 use crate::{
     Checksum, Creeper, Id, Install,
     builtin::{SyncBuiltinIndex, fabric_id, intermediary_id, neoforge_id, vanilla_id},
-    http::HttpThrottle,
     index::VersionRev,
     pack::PackNode,
     pbar::PROGRESS_STYLE_DEFAULT,
+    throttle::Throttle,
     util::rebuild_req,
     vanilla::RuleChecker,
 };
 
 pub struct FabricManager {
     pub parallel_download: usize,
-    http: HttpThrottle,
+    http: Throttle<Client>,
 }
 
 impl FabricManager {
-    pub fn new(http: HttpThrottle, parallel_download: usize) -> Self {
+    pub fn new(http: Throttle<Client>, parallel_download: usize) -> Self {
         Self {
             http,
             parallel_download,
@@ -48,9 +49,9 @@ impl SyncBuiltinIndex for FabricManager {
 
     #[instrument(skip(self))]
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let req = self.http.req().await;
+        let req = self.http.get().await;
 
-        let client = FabricMetaClient::new(req.as_client());
+        let client = FabricMetaClient::new(req.as_inner().clone());
 
         let games = client.game_versions().await?;
 
@@ -71,9 +72,9 @@ impl SyncBuiltinIndex for FabricManager {
         // game version to supported loader versions
         let game_loader = stream::iter(games.clone())
             .map(|v| async move {
-                let req = self.http.req().await;
+                let req = self.http.get().await;
 
-                let client = FabricMetaClient::new(self.http.req().await.as_client());
+                let client = FabricMetaClient::new(req.as_inner().clone());
 
                 let loaders = client.game_loader_versions(&v.to_string()).await;
 
@@ -148,9 +149,9 @@ impl Creeper {
             .last()
             .ok_or(anyhow!("no available vanilla version for fabric@{version}"))?;
 
-        let req = self.http.req().await;
+        let req = self.http.get().await;
 
-        let client = FabricMetaClient::new(req.as_client());
+        let client = FabricMetaClient::new(req.as_inner().clone());
 
         let profile = client
             .profile(&game.to_string(), &version.to_string())
@@ -204,11 +205,11 @@ impl Creeper {
 }
 
 pub struct IntermediaryManager {
-    http: HttpThrottle,
+    http: Throttle<Client>,
 }
 
 impl IntermediaryManager {
-    pub fn new(http: HttpThrottle) -> Self {
+    pub fn new(http: Throttle<Client>) -> Self {
         Self { http }
     }
 }
@@ -219,9 +220,9 @@ impl SyncBuiltinIndex for IntermediaryManager {
     }
 
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let req = self.http.req().await;
+        let req = self.http.get().await;
 
-        let client = FabricMetaClient::new(req.as_client());
+        let client = FabricMetaClient::new(req.as_inner().clone());
 
         let versions = client.intermediary_versions().await?;
 
@@ -253,9 +254,9 @@ impl SyncBuiltinIndex for IntermediaryManager {
 
 impl Creeper {
     pub(crate) async fn intermediary_install(&self, version: &Version) -> anyhow::Result<Install> {
-        let req = self.http.req().await;
+        let req = self.http.get().await;
 
-        let client = FabricMetaClient::new(req.as_client());
+        let client = FabricMetaClient::new(req.as_inner().clone());
 
         let loader = client
             .game_loader_versions(&version.to_string())

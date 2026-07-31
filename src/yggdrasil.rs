@@ -13,12 +13,12 @@ use tracing::{debug, info, warn};
 use url::Url;
 use uuid::Uuid;
 
-use crate::path::creeper_data_dir;
+use crate::{path::creeper_data_dir, throttle::Throttle};
 
 pub struct YggdrasilClient {
     pub server: Url,
     pub username: String,
-    http: Client,
+    http: Throttle<Client>,
     api: OnceLock<Url>,
     access_token: RwLock<Option<String>>,
     client_token: RwLock<Option<String>>,
@@ -53,7 +53,7 @@ impl YggdrasilClient {
         Ok(path)
     }
 
-    pub fn new(server: String, username: String, http: Client) -> anyhow::Result<Self> {
+    pub fn new(server: String, username: String, http: Throttle<Client>) -> anyhow::Result<Self> {
         let server = if !server.contains(":") {
             format!("https://{server}")
         } else {
@@ -203,6 +203,8 @@ impl YggdrasilClient {
     pub async fn prefetch(&self) -> anyhow::Result<serde_json::Value> {
         let res = self
             .http
+            .get()
+            .await
             .get(self.api().await?.clone())
             .send()
             .await?
@@ -216,7 +218,13 @@ impl YggdrasilClient {
             return Ok(api);
         }
 
-        let res = self.http.get(self.server.clone()).send().await?;
+        let res = self
+            .http
+            .get()
+            .await
+            .get(self.server.clone())
+            .send()
+            .await?;
 
         let mut api = if let Some(ali) = res.headers().get("X-Authlib-Injector-API-Location") {
             let new = self.server.join(ali.to_str()?)?;
@@ -282,7 +290,15 @@ impl YggdrasilClient {
 
         let url = self.api().await?.join("authserver/validate")?;
 
-        let res = self.http.post(url).json(&req).send().await?.status();
+        let res = self
+            .http
+            .get()
+            .await
+            .post(url)
+            .json(&req)
+            .send()
+            .await?
+            .status();
 
         let valid = res == StatusCode::NO_CONTENT;
 
@@ -314,6 +330,8 @@ impl YggdrasilClient {
 
         let res = self
             .http
+            .get()
+            .await
             .post(url)
             .json(&req)
             .send()
@@ -343,7 +361,7 @@ impl YggdrasilClient {
 
         let url = self.api().await?.join("authserver/invalidate")?;
 
-        let res = self.http.post(url).json(&req).send().await?;
+        let res = self.http.get().await.post(url).json(&req).send().await?;
 
         if res.status() != StatusCode::NO_CONTENT {
             bail!("failed to invalidate: server returned {}", res.status());
@@ -360,7 +378,7 @@ impl YggdrasilClient {
 
         let url = self.api().await?.join("authserver/signout")?;
 
-        let res = self.http.post(url).json(&req).send().await?;
+        let res = self.http.get().await.post(url).json(&req).send().await?;
 
         if res.status() == StatusCode::NO_CONTENT {
             *self.access_token.write().await = None;
@@ -411,6 +429,8 @@ impl YggdrasilClient {
 
         let res = self
             .http
+            .get()
+            .await
             .post(url)
             .json(&req)
             .send()

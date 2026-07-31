@@ -96,21 +96,17 @@ impl Creeper {
     }
 
     pub async fn prompt_new_microsoft_user(&self) -> anyhow::Result<User> {
-        let req = self.http.req().await;
+        let client = self.http.derive(|http| MicrosoftClient::new(http.clone()));
 
-        let client = MicrosoftClient::new(req.as_client());
+        client.get().await.prompt_login().await?;
 
-        client.prompt_login().await?;
-
-        if !client.owns_minecraft().await? {
+        if !client.get().await.owns_minecraft().await? {
             bail!("the Microsoft account does not own Minecraft, please purchase it first");
         }
 
-        let uuid = client.get_mc_uuid().await?;
+        let uuid = client.get().await.get_mc_uuid().await?;
 
-        client.save().await?;
-
-        drop(req);
+        client.unwrap().save().await?;
 
         let user = User::Microsoft { uuid };
 
@@ -135,9 +131,7 @@ impl Creeper {
         let account =
             Text::new(&format!("Your account at {server} (usually an email):")).prompt()?;
 
-        let req = self.http.req().await;
-
-        let yggdrasil = YggdrasilClient::new(server, account.clone(), req.as_client())?;
+        let yggdrasil = YggdrasilClient::new(server, account.clone(), self.http.clone())?;
 
         yggdrasil.load_or_prompt_login().await?;
 
@@ -169,8 +163,6 @@ impl Creeper {
         yggdrasil.select(uuid).await?;
 
         yggdrasil.save().await?;
-
-        drop(req);
 
         self.user.add(select.clone()).await?;
 
@@ -238,19 +230,15 @@ impl Creeper {
     }
 
     async fn user_install_microsoft(&self, uuid: Uuid) -> anyhow::Result<Install> {
-        let req = self.http.req().await;
+        let client = self.http.derive(|http| MicrosoftClient::new(http.clone()));
+        client.unwrap().set_uuid(uuid).await;
+        client.unwrap().load().await?;
 
-        let client = MicrosoftClient::new(req.as_client());
-        client.set_uuid(uuid).await;
-        client.load().await?;
+        let uuid = client.get().await.get_mc_uuid().await?;
+        let name = client.get().await.get_mc_name().await?;
+        let token = client.get().await.get_mc_jwt().await?;
 
-        let uuid = client.get_mc_uuid().await?;
-        let name = client.get_mc_name().await?;
-        let token = client.get_mc_jwt().await?;
-
-        client.save().await?;
-
-        drop(req);
+        client.unwrap().save().await?;
 
         let install = Install {
             mc_flag: vec![
@@ -273,9 +261,7 @@ impl Creeper {
         account: String,
         uuid: Uuid,
     ) -> anyhow::Result<Install> {
-        let req = self.http.req().await;
-
-        let yggdrasil = YggdrasilClient::new(server.to_string(), account, req.as_client())?;
+        let yggdrasil = YggdrasilClient::new(server.to_string(), account, self.http.clone())?;
 
         yggdrasil.load_or_prompt_login().await?;
 
@@ -291,8 +277,6 @@ impl Creeper {
         let api = yggdrasil.api().await?;
 
         yggdrasil.save().await?;
-
-        drop(req);
 
         let jar = self.latest_authlib_injector().await?;
 
@@ -329,7 +313,7 @@ impl Creeper {
 
         let version = self
             .http
-            .req()
+            .get()
             .await
             .get(url)
             .send()

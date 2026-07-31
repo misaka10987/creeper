@@ -7,6 +7,7 @@ use std::iter::once;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use tokio::fs::{File, copy, create_dir_all, metadata, try_exists};
@@ -14,9 +15,9 @@ use tokio::io::{AsyncWriteExt, BufWriter};
 use tracing::{Span, debug, info, instrument, trace};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::http::HttpThrottle;
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
+use crate::throttle::Throttle;
 use crate::util::{mv, set_readonly, summarize};
 use crate::{
     Checksum, Creeper,
@@ -138,13 +139,13 @@ const DB_INIT_QUERY: &str = include_str!("init.sql");
 pub struct ArtifactManager {
     pub offline: bool,
 
-    http: HttpThrottle,
+    http: Throttle<Client>,
 
     index: SqlitePool,
 }
 
 impl ArtifactManager {
-    pub async fn new(http: HttpThrottle, offline: bool) -> anyhow::Result<Self> {
+    pub async fn new(http: Throttle<Client>, offline: bool) -> anyhow::Result<Self> {
         let path = creeper_data_dir()?.join("artifact.db");
         let opt = SqliteConnectOptions::default()
             .filename(path)
@@ -229,7 +230,7 @@ impl ArtifactManager {
 
         let mut res = self
             .http
-            .req()
+            .get()
             .await
             .get(src)
             .send()

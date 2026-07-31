@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::bail;
+use reqwest::Client;
 use semver::Version;
 use tokio::{
     fs::{File, create_dir_all, read_to_string, try_exists},
@@ -16,16 +17,16 @@ use url::Url;
 
 use crate::{
     Creeper, Id, Package,
-    http::HttpThrottle,
     index::{Index, IndexLine, VersionRev},
     path::creeper_cache_dir,
+    throttle::Throttle,
     tool::BuildIndex,
     util::summarize,
 };
 
 pub struct Registry {
     pub url: Url,
-    http: HttpThrottle,
+    http: Throttle<Client>,
     cache: RwLock<HashMap<Id, BTreeMap<VersionRev, Package>>>,
 }
 
@@ -42,7 +43,7 @@ impl Registry {
         Ok(self.cache_path()?.join("package-index"))
     }
 
-    pub fn new(url: Url, http: HttpThrottle) -> anyhow::Result<Self> {
+    pub fn new(url: Url, http: Throttle<Client>) -> anyhow::Result<Self> {
         match url.scheme() {
             "file" => debug!("using local registry at {url}"),
             "https" => debug!("using remote registry at {url}"),
@@ -75,7 +76,7 @@ impl Registry {
 
         let url = self
             .http
-            .req()
+            .get()
             .await
             .get(url_def)
             .send()
@@ -173,7 +174,7 @@ impl Registry {
 
         let pack = self
             .http
-            .req()
+            .get()
             .await
             .get(url)
             .send()

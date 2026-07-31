@@ -2,25 +2,26 @@ use std::{collections::HashMap, iter::once, path::PathBuf, time::Duration};
 
 use anyhow::anyhow;
 use neoforge::NfInstallProfile;
+use reqwest::Client;
 use semver::Version;
 use tracing::{debug, info};
 
 use crate::{
     Creeper, Id, Install,
     builtin::{SyncBuiltinIndex, neoforge_client_id, vanilla_id},
-    http::HttpThrottle,
     index::Index,
     neoforge::{NfVersion, neoforge_index, nf_mc_req, query_neoforge_versions},
     path::creeper_cache_dir,
+    throttle::Throttle,
     zip::{extract_zip, extract_zip_to},
 };
 
 pub struct NeoforgeClientManager {
-    http: HttpThrottle,
+    http: Throttle<Client>,
 }
 
 impl NeoforgeClientManager {
-    pub fn new(http: HttpThrottle) -> Self {
+    pub fn new(http: Throttle<Client>) -> Self {
         Self { http }
     }
 }

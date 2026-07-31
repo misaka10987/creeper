@@ -86,7 +86,7 @@ impl ArtifactManager {
 
         let mut res = self
             .http
-            .req()
+            .get()
             .await
             .get(&src)
             .send()

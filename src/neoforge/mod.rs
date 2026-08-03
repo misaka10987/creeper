@@ -10,6 +10,7 @@ use std::time::Duration;
 use reqwest::Client;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
+use tokio_throttle::Throttle;
 use tracing::debug;
 
 use crate::{
@@ -20,7 +21,6 @@ use crate::{
     },
     index::{Index, VersionRev},
     pack::PackNode,
-    throttle::Throttle,
 };
 
 pub use prelude::*;

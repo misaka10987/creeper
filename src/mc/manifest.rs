@@ -11,9 +11,8 @@ use mc_launchermeta::{
 use reqwest::Client;
 use semver::Version;
 use tokio::sync::RwLock;
+use tokio_throttle::Throttle;
 use tracing::{info, trace};
-
-use crate::throttle::Throttle;
 
 pub struct ManifestClientInner {
     http: Throttle<Client>,

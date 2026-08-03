@@ -3,7 +3,6 @@ mod prelude;
 
 use futures::{StreamExt, TryStreamExt, stream};
 pub use prelude::*;
-use reqwest::Client;
 
 use std::{
     collections::{BTreeSet, HashMap},
@@ -23,20 +22,19 @@ use crate::{
     index::VersionRev,
     pack::PackNode,
     pbar::PROGRESS_STYLE_DEFAULT,
-    throttle::Throttle,
     util::rebuild_req,
     vanilla::RuleChecker,
 };
 
 pub struct FabricManager {
     pub parallel_download: usize,
-    http: Throttle<Client>,
+    meta: FabricMetaClient,
 }
 
 impl FabricManager {
-    pub fn new(http: Throttle<Client>, parallel_download: usize) -> Self {
+    pub fn new(meta: FabricMetaClient, parallel_download: usize) -> Self {
         Self {
-            http,
+            meta,
             parallel_download,
         }
     }
@@ -49,40 +47,27 @@ impl SyncBuiltinIndex for FabricManager {
 
     #[instrument(skip(self))]
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let req = self.http.get().await;
-
-        let client = FabricMetaClient::new(req.as_inner().clone());
-
-        let games = client.game_versions().await?;
-
-        drop(req);
+        let games = self.meta.game_versions().await?;
 
         let games = games
-            .into_iter()
+            .iter()
             .filter_map(|Game { version, stable }| stable.then_some(version))
             .filter_map(|v| v.parse::<Version>().ok())
             .collect::<Vec<_>>();
 
         let span = Span::current();
 
-        // span.pb_set_message(span.metadata().unwrap().name());
         span.pb_set_style(&PROGRESS_STYLE_DEFAULT);
         span.pb_set_length(games.len() as u64);
 
         // game version to supported loader versions
         let game_loader = stream::iter(games.clone())
             .map(|v| async move {
-                let req = self.http.get().await;
-
-                let client = FabricMetaClient::new(req.as_inner().clone());
-
-                let loaders = client.game_loader_versions(&v.to_string()).await;
-
-                drop(req);
+                let loaders = self.meta.game_loader_versions(&v.to_string()).await;
 
                 Span::current().pb_inc(1);
 
-                loaders.map(|loaders| (v.clone(), loaders))
+                loaders.map(|loaders| (v.clone(), loaders.clone()))
             })
             .buffer_unordered(self.parallel_download)
             .try_collect::<HashMap<_, _>>()
@@ -149,38 +134,44 @@ impl Creeper {
             .last()
             .ok_or(anyhow!("no available vanilla version for fabric@{version}"))?;
 
-        let req = self.http.get().await;
-
-        let client = FabricMetaClient::new(req.as_inner().clone());
-
-        let profile = client
+        let profile = self
+            .fabric_meta
             .profile(&game.to_string(), &version.to_string())
             .await?;
-
-        drop(req);
 
         let rule = RuleChecker::default();
 
         let java_flag = profile
             .arguments
             .jvm
-            .into_iter()
-            .filter_map(|x| x.rules.iter().all(rule.checker()).then_some(x.values))
+            .iter()
+            .filter_map(|x| {
+                x.rules
+                    .iter()
+                    .all(rule.checker())
+                    .then_some(x.values.clone())
+            })
             .flatten()
             .collect();
 
         let mc_flag = profile
             .arguments
             .game
-            .into_iter()
-            .filter_map(|x| x.rules.iter().all(rule.checker()).then_some(x.values))
+            .iter()
+            .filter_map(|x| {
+                x.rules
+                    .iter()
+                    .all(rule.checker())
+                    .then_some(x.values.clone())
+            })
             .flatten()
             .collect();
 
         let lib = profile
             .libraries
-            .into_iter()
-            .filter(|x| !(x.name.group == "net.fabricmc" && x.name.artifact == "intermediary"));
+            .iter()
+            .filter(|x| !(x.name.group == "net.fabricmc" && x.name.artifact == "intermediary"))
+            .cloned();
 
         let mut java_lib_class = HashMap::new();
 
@@ -195,7 +186,7 @@ impl Creeper {
         let install = Install {
             java_lib_class,
             java_flag,
-            java_main_class: Some(profile.main_class),
+            java_main_class: Some(profile.main_class.clone()),
             mc_flag,
             ..Default::default()
         };
@@ -205,12 +196,12 @@ impl Creeper {
 }
 
 pub struct IntermediaryManager {
-    http: Throttle<Client>,
+    meta: FabricMetaClient,
 }
 
 impl IntermediaryManager {
-    pub fn new(http: Throttle<Client>) -> Self {
-        Self { http }
+    pub fn new(meta: FabricMetaClient) -> Self {
+        Self { meta }
     }
 }
 
@@ -220,16 +211,10 @@ impl SyncBuiltinIndex for IntermediaryManager {
     }
 
     async fn sync_index(&self) -> anyhow::Result<crate::index::Index> {
-        let req = self.http.get().await;
-
-        let client = FabricMetaClient::new(req.as_inner().clone());
-
-        let versions = client.intermediary_versions().await?;
-
-        drop(req);
+        let versions = self.meta.intermediary_versions().await?;
 
         let versions = versions
-            .into_iter()
+            .iter()
             .filter_map(|v| v.version.parse::<Version>().ok());
 
         let index = versions
@@ -254,31 +239,28 @@ impl SyncBuiltinIndex for IntermediaryManager {
 
 impl Creeper {
     pub(crate) async fn intermediary_install(&self, version: &Version) -> anyhow::Result<Install> {
-        let req = self.http.get().await;
-
-        let client = FabricMetaClient::new(req.as_inner().clone());
-
-        let loader = client
+        let loader = self
+            .fabric_meta
             .game_loader_versions(&version.to_string())
             .await?
-            .into_iter()
+            .iter()
             .filter_map(|v| v.loader.version.parse::<Version>().ok())
             .collect::<BTreeSet<_>>();
-
-        drop(req);
 
         let loader = loader
             .last()
             .ok_or(anyhow!("no fabric loader with intermediary@{version}"))?;
 
-        let profile = client
+        let profile = self
+            .fabric_meta
             .profile(&version.to_string(), &loader.to_string())
             .await?;
 
         let lib = profile
             .libraries
-            .into_iter()
+            .iter()
             .filter(|x| x.name.group == "net.fabricmc" && x.name.artifact == "intermediary")
+            .cloned()
             .collect::<Vec<_>>();
 
         ensure!(lib.len() == 1, "multiple intermediary libraries found");

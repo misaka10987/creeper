@@ -22,7 +22,6 @@ mod pbar;
 mod prelude;
 mod pubgrub;
 mod registry;
-mod throttle;
 mod tool;
 mod user;
 mod util;
@@ -31,6 +30,7 @@ mod yggdrasil;
 mod zip;
 
 use clap::Parser;
+use fabric_meta_api::FabricMetaClient;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
@@ -44,6 +44,7 @@ use tokio::{
     fs::{read_to_string, write},
     runtime,
 };
+use tokio_throttle::{IntoThrottle, Throttle};
 use tracing::{Level, info, level_filters::LevelFilter};
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
@@ -61,7 +62,6 @@ use crate::{
     neoforge::{NeoforgeClientManager, NeoforgeManager, NeoforgeServerManager},
     path::{creeper_config_dir, init_creeper_dirs},
     registry::Registry,
-    throttle::Throttle,
     tool::Tool,
     user::UserManager,
     vanilla::{VanillaManager, VanillaServerManager},
@@ -77,6 +77,7 @@ pub struct CreeperInner {
 
     http: Throttle<Client>,
     // manifest: ManifestClient,
+    fabric_meta: FabricMetaClient,
     artifact: ArtifactManager,
 
     game: GameManager,
@@ -147,8 +148,10 @@ impl Creeper {
 
         let config = Self::load_config(path).await?;
 
-        let http = Throttle::new(Default::default(), config.parallel_download);
+        let http = Client::default().into_throttle(config.parallel_download);
+
         let manifest = ManifestClient::new(http.clone());
+        let fabric_meta = FabricMetaClient::new(http.clone());
 
         let registry = Registry::new(config.registry.clone(), http.clone())?;
         let game = GameManager::new(args.dir.clone());
@@ -164,8 +167,8 @@ impl Creeper {
         let neoforge_client = NeoforgeClientManager::new(http.clone());
         let neoforge_server = NeoforgeServerManager::new(http.clone());
 
-        let fabric = FabricManager::new(http.clone(), config.parallel_download);
-        let intermediary = IntermediaryManager::new(http.clone());
+        let fabric = FabricManager::new(fabric_meta.clone(), config.parallel_download);
+        let intermediary = IntermediaryManager::new(fabric_meta.clone());
 
         let artifact = ArtifactManager::new(http.clone(), args.offline).await?;
         let user = UserManager::new();
@@ -176,6 +179,7 @@ impl Creeper {
             config,
             artifact,
             http,
+            fabric_meta,
             registry,
             index_cache: IndexCache::new(),
             game,

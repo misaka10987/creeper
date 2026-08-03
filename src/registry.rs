@@ -12,6 +12,7 @@ use tokio::{
     io::AsyncWriteExt,
     process::Command,
 };
+use tokio_throttle::Throttle;
 use tracing::{debug, info, trace};
 use url::Url;
 
@@ -19,7 +20,6 @@ use crate::{
     Creeper, Id, Package,
     index::{Index, IndexLine, VersionRev},
     path::creeper_cache_dir,
-    throttle::Throttle,
     tool::BuildIndex,
     util::summarize,
 };

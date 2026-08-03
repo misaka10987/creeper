@@ -636,6 +636,7 @@ dependencies = [
  "stop",
  "strfmt",
  "tokio",
+ "tokio-throttle",
  "tokio-util",
  "toml",
  "tracing",
@@ -771,6 +772,20 @@ dependencies = [
  "darling_core",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "dashmap"
+version = "6.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6361d5c062261c78a176addb82d4c821ae42bed6089de0e12603cd25de2059c"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
 ]
 
 [[package]]
@@ -953,16 +968,18 @@ dependencies = [
 
 [[package]]
 name = "fabric-meta-api"
-version = "1.0.0-rc.1+v2"
+version = "1.0.0-rc.3+v2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8140ef02168afb47315b269bd941afce035bc0f78cb53c35b18c92797556a65d"
+checksum = "bab59757450cae06866b7e2c781f2ac65168d4687ea549c4f722a17516a4dee7"
 dependencies = [
  "anyhow",
  "creeper-maven-coord",
+ "dashmap",
  "mc-launchermeta",
  "reqwest 0.13.4",
  "serde",
  "serde_with",
+ "tokio-throttle",
  "url",
 ]
 
@@ -1232,6 +1249,12 @@ name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+
+[[package]]
+name = "hashbrown"
+version = "0.14.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
 name = "hashbrown"
@@ -3400,9 +3423,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.52.3"
+version = "1.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
+checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
 dependencies = [
  "bytes",
  "libc",
@@ -3444,6 +3467,15 @@ checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
 dependencies = [
  "futures-core",
  "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-throttle"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc8ecd26e4999434048062731b0c0658d0ee4a324a331dd907ee50fb2a5a3c04"
+dependencies = [
  "tokio",
 ]
 

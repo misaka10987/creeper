@@ -12,12 +12,12 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
 use tokio::fs::{File, copy, create_dir_all, metadata, try_exists};
 use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio_throttle::Throttle;
 use tracing::{Span, debug, info, instrument, trace};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
-use crate::throttle::Throttle;
 use crate::util::{mv, set_readonly, summarize};
 use crate::{
     Checksum, Creeper,

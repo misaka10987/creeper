@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use neoforge::NfInstallProfile;
 use reqwest::Client;
 use semver::Version;
+use tokio_throttle::Throttle;
 use tracing::{debug, info};
 
 use crate::{
@@ -12,7 +13,6 @@ use crate::{
     index::Index,
     neoforge::{NfVersion, neoforge_index, nf_mc_req, query_neoforge_versions},
     path::creeper_cache_dir,
-    throttle::Throttle,
     zip::{extract_zip, extract_zip_to},
 };
 

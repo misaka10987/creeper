@@ -9,11 +9,12 @@ use tokio::{
     fs::{create_dir_all, read_to_string, write},
     sync::RwLock,
 };
+use tokio_throttle::Throttle;
 use tracing::{debug, info, warn};
 use url::Url;
 use uuid::Uuid;
 
-use crate::{path::creeper_data_dir, throttle::Throttle};
+use crate::path::creeper_data_dir;
 
 pub struct YggdrasilClient {
     pub server: Url,

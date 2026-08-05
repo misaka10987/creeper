@@ -8,6 +8,7 @@ use anyhow::anyhow;
 use creeper_pubgrub::{DefaultStringReporter, Reporter};
 use petgraph::{algo::toposort, graph::DiGraph};
 use semver::{Version, VersionReq};
+use tokio::task::spawn_blocking;
 use tracing::{error, info, instrument};
 
 use crate::{
@@ -20,15 +21,18 @@ pub use prelude::*;
 
 impl Creeper {
     #[instrument(skip(self, req), fields(req = req.len()))]
-    pub fn resolve(
+    pub async fn resolve(
         &self,
         req: BTreeMap<Id, VersionReq>,
     ) -> anyhow::Result<HashMap<Id, VersionRev>> {
         let resolve = Resolve::new(self.clone(), req);
 
-        resolve.prepare()?;
+        resolve.prepare().await?;
 
-        let res = creeper_pubgrub::resolve(&resolve, Package::Root, Version::new(0, 0, 0));
+        let res = spawn_blocking(move || {
+            creeper_pubgrub::resolve(&resolve, Package::Root, Version::new(0, 0, 0))
+        })
+        .await?;
 
         let sol = res.map_err(|e| match e {
             creeper_pubgrub::PubGrubError::NoSolution(derivation_tree) => {
@@ -81,7 +85,7 @@ impl Creeper {
     /// Topologically sort the dependencies. Dependencies goes before dependents in the output.
     ///
     /// The behavior is undefined unless the input is a valid solution, i.e. dependencies of each package in the input are also present in the input.
-    pub fn sort_dependency(
+    pub async fn sort_dependency(
         &self,
         dep: HashMap<Id, VersionRev>,
     ) -> anyhow::Result<Vec<(Id, VersionRev)>> {
@@ -96,7 +100,9 @@ impl Creeper {
         }
 
         for (package, version) in &dep {
-            let node = self.blocking_get_node(package, &version.version, version.rev)?;
+            let node = self
+                .get_node(package, &version.version, version.rev)
+                .await?;
             let node_package = id_to_node[package];
 
             for (d, _) in node.dep {

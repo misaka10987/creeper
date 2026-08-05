@@ -40,15 +40,16 @@ impl Resolve {
         }
     }
 
-    pub fn prepare(&self) -> anyhow::Result<()> {
+    pub async fn prepare(&self) -> anyhow::Result<()> {
         let reachable = self
             .lib
-            .blocking_get_reachable_package(self.root.clone().neighbours())?;
+            .get_reachable_package(self.root.clone().neighbours())
+            .await?;
 
         let mut clause = vec![];
 
         for id in reachable {
-            let index = self.lib.blocking_get_index(&id)?;
+            let index = self.lib.get_index(&id).await?;
 
             clause.extend(
                 index

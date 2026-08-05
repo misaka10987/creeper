@@ -109,7 +109,7 @@ impl Execute for Resolve {
 
         lib.update().await?;
 
-        let sol = match lib.resolve(req) {
+        let sol = match lib.resolve(req).await {
             Ok(x) => x,
             Err(e) => {
                 fatal!("dependency resolution failed: {}", e);
@@ -118,7 +118,7 @@ impl Execute for Resolve {
         eprintln!("{} {} packages", "Resolved".bold().green(), sol.len());
 
         if self.sort {
-            let sorted = lib.sort_dependency(sol)?;
+            let sorted = lib.sort_dependency(sol).await?;
             let mut map = IndexMap::new();
             for (k, v) in sorted {
                 map.insert(k, v);

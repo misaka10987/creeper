@@ -34,7 +34,7 @@ impl Execute for Install {
                 info!("ignoring package lock file");
 
                 lib.update().await?;
-                let sol = lib.resolve(package.node.dep.clone())?;
+                let sol = lib.resolve(package.node.dep.clone()).await?;
 
                 let lock = Lock {
                     registry: lib.config.registry.clone(),
@@ -46,7 +46,7 @@ impl Execute for Install {
             }
         };
 
-        let sorted = lib.sort_dependency(dep)?;
+        let sorted = lib.sort_dependency(dep).await?;
 
         let mut install = lib.install_all(sorted).await?;
         install.extend(once(package.install.clone()));

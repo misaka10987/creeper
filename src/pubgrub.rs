@@ -9,9 +9,10 @@ use std::{
 };
 
 use anyhow::{anyhow, bail};
+use creeper_pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
 use creeper_semver_pubgrub::{SemverPubgrub, VersionLike};
+use itertools::Itertools;
 use petgraph::{algo::toposort, graph::DiGraph};
-use pubgrub::{DefaultStringReporter, Dependencies, DependencyProvider, Reporter};
 use semver::{BuildMetadata, Prerelease, Version, VersionReq};
 use tracing::{debug, error, info, instrument, trace, warn};
 
@@ -52,7 +53,6 @@ impl std::error::Error for Error {
 enum Package {
     Normal(Id),
     Root,
-    OneHot(Conflict),
     Either(Either),
 }
 
@@ -61,7 +61,7 @@ impl Display for Package {
         match self {
             Package::Normal(id) => write!(f, "{id}"),
             Package::Root => write!(f, "<root>"),
-            Package::OneHot(clause) => write!(f, "{clause}"),
+            // Package::OneHot(clause) => write!(f, "{clause}"),
             Package::Either(clause) => write!(f, "{clause}"),
         }
     }
@@ -165,7 +165,7 @@ impl Display for Conflict {
             .map(|(k, v)| format!("{k}@{v}"))
             .collect::<Vec<_>>()
             .join(" ");
-        write!(f, "<onehot: {data}>")
+        write!(f, "<conflict: {data}>")
     }
 }
 
@@ -178,21 +178,6 @@ impl ConflictManager {
         Self {
             clause: HashSet::new(),
         }
-    }
-
-    fn get_dependencies(&self, package: &Id, version: &Version) -> HashMap<Package, VersionReq> {
-        let mut deps = HashMap::new();
-
-        for clause in &self.clause {
-            if let Some(version) = clause.dep_of(package, version) {
-                deps.insert(
-                    Package::OneHot(clause.clone()),
-                    format!("={version}").parse().unwrap(),
-                );
-            }
-        }
-
-        deps
     }
 
     /// Simplify the conflict clauses logically, e.g. deduplication or removing clauses implied by others,
@@ -322,12 +307,11 @@ impl DependencyProvider for Resolve {
         range: &Self::VS,
         // TODO(konsti): Are we always refreshing the priorities when `PackageResolutionStatistics`
         // changed for a package?
-        _package_conflicts_counts: &pubgrub::PackageResolutionStatistics,
+        _package_conflicts_counts: &creeper_pubgrub::PackageResolutionStatistics,
     ) -> Self::Priority {
         let package = match package {
             Package::Normal(id) => id,
             Package::Root => return Reverse(usize::MAX),
-            Package::OneHot(btree_map) => return Reverse(btree_map.len()),
             Package::Either(btree_map) => return Reverse(btree_map.len()),
         };
 
@@ -358,11 +342,6 @@ impl DependencyProvider for Resolve {
                 .filter(|v| range.contains(v))
                 .collect::<BTreeSet<_>>(),
             Package::Root => return Ok(Some(Version::new(0, 0, 0).into())),
-            Package::OneHot(clause) => clause
-                .versions()
-                .map(VersionRev::new)
-                .filter(|v| range.contains(v))
-                .collect::<BTreeSet<_>>(),
             Package::Either(clause) => clause
                 .versions()
                 .map(VersionRev::new)
@@ -385,7 +364,7 @@ impl DependencyProvider for Resolve {
         &self,
         package: &Self::P,
         version: &Self::V,
-    ) -> Result<pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
+    ) -> Result<creeper_pubgrub::Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
         let package = match package {
             Package::Normal(id) => id,
             Package::Root => {
@@ -397,7 +376,6 @@ impl DependencyProvider for Resolve {
                         .collect(),
                 ));
             }
-            Package::OneHot(_) => return Ok(Dependencies::Available(Default::default())),
             Package::Either(clause) => {
                 if version.rev != 0 {
                     return Err(
@@ -415,14 +393,7 @@ impl DependencyProvider for Resolve {
 
         let index = self.lib.blocking_get_index(package)?;
 
-        // TODO: support revision number instead of defaulting to 0
         let node = &index[version];
-
-        let conflict = self
-            .conflict
-            .read()
-            .unwrap()
-            .get_dependencies(package, &version.version);
 
         let either = node
             .either_dep
@@ -435,14 +406,39 @@ impl DependencyProvider for Resolve {
             .iter()
             .map(|(k, v)| (Package::Normal(k.clone()), SemverPubgrub::from(v)))
             .chain(
-                conflict
-                    .into_iter()
-                    .chain(either)
-                    .map(|(k, v)| (k, SemverPubgrub::from(&v))),
+                // conflict
+                //     .into_iter()
+                // .chain(either)
+                either.map(|(k, v)| (k, SemverPubgrub::from(&v))),
             )
             .collect();
 
         Ok(Dependencies::Available(dep))
+    }
+
+    fn init_conflict(&self) -> Vec<HashMap<Self::P, Self::VS>> {
+        let read = self.conflict.read().unwrap();
+
+        let all = read
+            .clause
+            .iter()
+            .map(|clause| {
+                clause.iter().combinations(2).map(|pair| {
+                    pair.iter()
+                        .map(|(k, v)| (Package::Normal((*k).clone()), SemverPubgrub::from(*v)))
+                        .collect::<HashMap<_, _>>()
+                })
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+
+        debug!(
+            "converted {} conflict clauses into {} exclusive pairs",
+            read.clause.len(),
+            all.len()
+        );
+
+        all
     }
 }
 
@@ -462,10 +458,10 @@ impl Creeper {
 
         resolve.prepare()?;
 
-        let res = pubgrub::resolve(&resolve, Package::Root, Version::new(0, 0, 0));
+        let res = creeper_pubgrub::resolve(&resolve, Package::Root, Version::new(0, 0, 0));
 
         let sol = res.map_err(|e| match e {
-            pubgrub::PubGrubError::NoSolution(derivation_tree) => {
+            creeper_pubgrub::PubGrubError::NoSolution(derivation_tree) => {
                 let mut report = DefaultStringReporter::report(&derivation_tree);
 
                 // remove the ugly double newlines in the report
@@ -475,17 +471,17 @@ impl Creeper {
 
                 anyhow!("no solution:\n{report}")
             }
-            pubgrub::PubGrubError::ErrorRetrievingDependencies {
+            creeper_pubgrub::PubGrubError::ErrorRetrievingDependencies {
                 package,
                 version,
                 source,
             } => anyhow!(
                 "failed to retrieve dependencies for package {package} version {version}: {source}"
             ),
-            pubgrub::PubGrubError::ErrorChoosingVersion { package, source } => {
+            creeper_pubgrub::PubGrubError::ErrorChoosingVersion { package, source } => {
                 anyhow!("failed to choose version for package {package}: {source}")
             }
-            pubgrub::PubGrubError::ErrorInShouldCancel(_) => {
+            creeper_pubgrub::PubGrubError::ErrorInShouldCancel(_) => {
                 anyhow!("package resolution cancelled")
             }
         })?;

@@ -314,7 +314,7 @@ pub struct Command {
     ///
     /// This is independent of the `--loglevel` option.
     /// See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives for syntax.
-    #[arg(long, default_value = "trace,pubgrub=warn")]
+    #[arg(long, default_value = "trace,creeper_pubgrub=warn")]
     pub log: String,
 
     /// Set the log filtering level.

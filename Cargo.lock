@@ -607,6 +607,7 @@ dependencies = [
  "colored",
  "const-hex",
  "creeper-maven-coord",
+ "creeper-pubgrub",
  "creeper-semver-pubgrub",
  "dirs",
  "fabric-meta-api",
@@ -614,6 +615,7 @@ dependencies = [
  "indexmap 2.14.0",
  "indicatif",
  "inquire",
+ "itertools",
  "local-redirect-uri",
  "maven-version-range",
  "mc-launchermeta",
@@ -622,7 +624,6 @@ dependencies = [
  "open",
  "parse-display",
  "petgraph",
- "pubgrub",
  "reqwest 0.13.4",
  "ring",
  "semver",
@@ -660,12 +661,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "creeper-semver-pubgrub"
-version = "0.4.0"
+name = "creeper-pubgrub"
+version = "0.1.0+pubgrub-0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bb06f2370ce0b98180620212c6593f0c7fd86c2fa7037b1590737ed32a7b24f"
+checksum = "298cbc141a0c6f774ad0279d8ff9156d3420437956d6a966fb2d657d474056e9"
 dependencies = [
- "pubgrub",
+ "indexmap 2.14.0",
+ "log",
+ "priority-queue",
+ "rustc-hash",
+ "thiserror 2.0.18",
+ "version-ranges",
+]
+
+[[package]]
+name = "creeper-semver-pubgrub"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f787f84bf72a8909ffa912764d967e984d4f293e88e8f5eac74228fbb8fed95"
+dependencies = [
+ "creeper-pubgrub",
  "semver",
  "zerocopy",
 ]
@@ -1655,6 +1670,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2200,20 +2224,6 @@ dependencies = [
  "rand_xorshift",
  "regex-syntax",
  "unarray",
-]
-
-[[package]]
-name = "pubgrub"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1c3256d319f1ed35251223140ab8f29fd6b0528a1216344efd904c651fecd5e"
-dependencies = [
- "indexmap 2.14.0",
- "log",
- "priority-queue",
- "rustc-hash",
- "thiserror 2.0.18",
- "version-ranges",
 ]
 
 [[package]]

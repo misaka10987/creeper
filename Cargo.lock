@@ -609,6 +609,7 @@ dependencies = [
  "creeper-maven-coord",
  "creeper-pubgrub",
  "creeper-semver-pubgrub",
+ "dashmap",
  "dirs",
  "fabric-meta-api",
  "futures",

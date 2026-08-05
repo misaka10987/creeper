@@ -209,8 +209,8 @@ impl Execute for ListVersion {
         let index = lib.get_index(&self.package).await?;
 
         let versions = index
-            .into_keys()
-            .map(|v| v.version)
+            .keys()
+            .map(|v| v.version.clone())
             .collect::<BTreeSet<_>>();
 
         let json = serde_json::to_string(&versions)?;

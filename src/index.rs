@@ -4,10 +4,10 @@ use std::{
     io::BufRead,
     path::Path,
     str::FromStr,
-    sync::RwLock,
 };
 
 use anyhow::{anyhow, bail, ensure};
+use dashmap::{DashMap, mapref::one::Ref};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
@@ -238,13 +238,13 @@ impl FromStr for VersionRev {
 }
 
 pub struct IndexCache {
-    pub map: RwLock<HashMap<Id, Index>>,
+    pub map: DashMap<Id, Index>,
 }
 
 impl IndexCache {
     pub fn new() -> Self {
         Self {
-            map: RwLock::new(HashMap::new()),
+            map: DashMap::new(),
         }
     }
 }
@@ -262,7 +262,7 @@ impl Creeper {
         while !found.values().all(|x| *x) {
             for (k, _) in found.clone().into_iter().filter(|(_k, v)| !v) {
                 let index = self.blocking_get_index(&k)?;
-                let new = index.into_values().flat_map(|node| node.neighbours());
+                let new = index.values().flat_map(|node| node.clone().neighbours());
 
                 for id in new {
                     found.entry(id).or_insert(false);
@@ -287,7 +287,7 @@ impl Creeper {
         while !found.values().all(|x| *x) {
             for (k, _) in found.clone().into_iter().filter(|(_k, v)| !v) {
                 let index = self.get_index(&k).await?;
-                let new = index.into_values().flat_map(|node| node.neighbours());
+                let new = index.values().flat_map(|node| node.clone().neighbours());
 
                 for id in new {
                     found.entry(id).or_insert(false);
@@ -300,9 +300,9 @@ impl Creeper {
         Ok(found.into_keys().collect())
     }
 
-    pub async fn get_index(&self, package: &Id) -> anyhow::Result<Index> {
-        if let Some(index) = self.index_cache.map.read().unwrap().get(package) {
-            return Ok(index.clone());
+    pub async fn get_index(&self, package: &Id) -> anyhow::Result<Ref<'_, Id, Index>> {
+        if let Some(index) = self.index_cache.map.get(package) {
+            return Ok(index);
         }
 
         let index = if is_builtin(package) {
@@ -311,11 +311,12 @@ impl Creeper {
             self.registry.get_index(package).await?
         };
 
-        self.index_cache
+        let index = self
+            .index_cache
             .map
-            .write()
-            .unwrap()
-            .insert(package.clone(), index.clone());
+            .entry(package.clone())
+            .insert(index)
+            .downgrade();
 
         Ok(index)
     }
@@ -333,9 +334,9 @@ impl Creeper {
         Ok(node.clone())
     }
 
-    pub fn blocking_get_index(&self, package: &Id) -> anyhow::Result<Index> {
-        if let Some(index) = self.index_cache.map.read().unwrap().get(package) {
-            return Ok(index.clone());
+    pub fn blocking_get_index(&self, package: &Id) -> anyhow::Result<Ref<'_, Id, Index>> {
+        if let Some(index) = self.index_cache.map.get(package) {
+            return Ok(index);
         }
 
         let index = if is_builtin(package) {
@@ -344,11 +345,12 @@ impl Creeper {
             self.registry.blocking_get_index(package)?
         };
 
-        self.index_cache
+        let index = self
+            .index_cache
             .map
-            .write()
-            .unwrap()
-            .insert(package.clone(), index.clone());
+            .entry(package.clone())
+            .insert(index)
+            .downgrade();
 
         Ok(index)
     }

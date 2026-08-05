@@ -51,11 +51,10 @@ impl Resolve {
         for id in reachable {
             let index = self.lib.get_index(&id).await?;
 
-            clause.extend(
-                index
-                    .into_iter()
-                    .filter_map(|(version, node)| node.conflict_clause(id.clone(), version.into())),
-            );
+            clause.extend(index.iter().filter_map(|(version, node)| {
+                node.clone()
+                    .conflict_clause(id.clone(), version.version.clone())
+            }));
         }
 
         debug!("prepared {} conflict clauses", clause.len());
@@ -117,13 +116,21 @@ impl DependencyProvider for Resolve {
 
         trace!("determining priority for {package}");
 
-        let index = self.lib.blocking_get_index(package).unwrap_or_else(|e| {
-            error!("failed to prioritize package {package}: {e}");
-            error!("package resolution will continue with no available versions for this package");
-            BTreeMap::new()
-        });
+        let index = self
+            .lib
+            .blocking_get_index(package)
+            .inspect_err(|e| {
+                error!("failed to prioritize package {package}: {e}");
+                error!(
+                    "package resolution will continue with no available versions for this package"
+                );
+            })
+            .ok();
 
-        let available = index.keys().filter(|v| range.contains(v)).count();
+        let available = match index {
+            Some(index) => index.keys().filter(|v| range.contains(v)).count(),
+            None => 0,
+        };
 
         trace!("priority for {package} is {available} (smaller is higher)");
         Reverse(available)
@@ -138,8 +145,9 @@ impl DependencyProvider for Resolve {
             Package::Normal(id) => self
                 .lib
                 .blocking_get_index(id)?
-                .into_keys()
+                .keys()
                 .filter(|v| range.contains(v))
+                .cloned()
                 .collect::<BTreeSet<_>>(),
             Package::Root => return Ok(Some(Version::new(0, 0, 0).into())),
             Package::Either(clause) => clause
@@ -191,26 +199,21 @@ impl DependencyProvider for Resolve {
             }
         };
 
-        let index = self.lib.blocking_get_index(package)?;
-
-        let node = &index[version];
+        let node = self
+            .lib
+            .blocking_get_node(package, &version.version, version.rev)?;
 
         let either = node
             .either_dep
-            .clone()
             .into_iter()
             .map(|x| (Package::Either(Either(x)), VersionReq::STAR));
 
         let dep = node
             .dep
-            .iter()
-            .map(|(k, v)| (Package::Normal(k.clone()), SemverPubgrub::from(v)))
-            .chain(
-                // conflict
-                //     .into_iter()
-                // .chain(either)
-                either.map(|(k, v)| (k, SemverPubgrub::from(&v))),
-            )
+            .into_iter()
+            .map(|(k, v)| (Package::Normal(k), v))
+            .chain(either)
+            .map(|(k, v)| (k, SemverPubgrub::from(&v)))
             .collect();
 
         Ok(Dependencies::Available(dep))

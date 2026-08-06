@@ -195,12 +195,6 @@ impl VersionRev {
     }
 }
 
-impl From<VersionRev> for Version {
-    fn from(value: VersionRev) -> Self {
-        value.version
-    }
-}
-
 impl From<Version> for VersionRev {
     fn from(value: Version) -> Self {
         Self::new(value)

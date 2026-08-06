@@ -94,7 +94,8 @@ impl DependencyProvider for Resolve {
 
     type VS = SemverPubgrub<VersionRev>;
 
-    type Priority = Reverse<usize>;
+    // compare by number of conflicts, and then number of available versions
+    type Priority = (usize, Reverse<usize>);
 
     type M = String;
 
@@ -110,30 +111,35 @@ impl DependencyProvider for Resolve {
     ) -> Self::Priority {
         let package = match package {
             Package::Normal(id) => id,
-            Package::Root => return Reverse(usize::MAX),
-            Package::Either(btree_map) => return Reverse(btree_map.len()),
+            // only one version for the virtual root package, determine it first of all
+            Package::Root => return (usize::MAX, Reverse(0)),
+            Package::Either(btree_map) => return (0, Reverse(btree_map.len())),
         };
 
         trace!("determining priority for {package}");
 
-        let index = self
-            .lib
-            .blocking_get_index(package)
-            .inspect_err(|e| {
+        let index = match self.lib.blocking_get_index(package) {
+            Ok(x) => x,
+            Err(e) => {
                 error!("failed to prioritize package {package}: {e}");
-                error!(
-                    "package resolution will continue with no available versions for this package"
-                );
-            })
-            .ok();
-
-        let available = match index {
-            Some(index) => index.keys().filter(|v| range.contains(v)).count(),
-            None => 0,
+                error!("continue resolution with no available versions for {package} in {range}");
+                return (0, Reverse(0));
+            }
         };
 
-        trace!("priority for {package} is {available} (smaller is higher)");
-        Reverse(available)
+        let available = index.keys().filter(|v| range.contains(v)).count();
+
+        let conflict = index
+            .iter()
+            .filter_map(|(k, v)| range.contains(k).then_some(v))
+            .map(|node| node.conflict.keys())
+            .flatten()
+            .unique()
+            .count();
+
+        trace!("{available} versions of {package} available in {range} with {conflict} conflicts");
+
+        (conflict, Reverse(available))
     }
 
     fn choose_version(

@@ -1,6 +1,6 @@
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     fmt::{Debug, Display},
     iter::once,
     sync::RwLock,
@@ -141,31 +141,23 @@ impl DependencyProvider for Resolve {
         package: &Self::P,
         range: &Self::VS,
     ) -> Result<Option<Self::V>, Self::Err> {
-        let available = match package {
+        let select = match package {
             Package::Normal(id) => self
                 .lib
                 .blocking_get_index(id)?
                 .keys()
                 .filter(|v| range.contains(v))
-                .cloned()
-                .collect::<BTreeSet<_>>(),
-            Package::Root => return Ok(Some(Version::new(0, 0, 0).into())),
+                .max()
+                .cloned(),
+            Package::Root => Some(Version::new(0, 0, 0).into()),
             Package::Either(clause) => clause
                 .versions()
                 .map(VersionRev::new)
                 .filter(|v| range.contains(v))
-                .collect::<BTreeSet<_>>(),
+                .max(),
         };
 
-        let highest = available.last();
-
-        if let Some(version) = highest {
-            trace!("selected {package} {version}",);
-        } else {
-            trace!("no available version for {package} in {range}");
-        };
-
-        Ok(highest.cloned())
+        Ok(select)
     }
 
     fn get_dependencies(

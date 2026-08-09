@@ -243,12 +243,6 @@ impl ArtifactManager {
 
         let mut writer = BufWriter::new(File::create(&cache).await?);
 
-        let span = Span::current();
-
-        span.pb_set_message(&art.name);
-        span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
-        span.pb_set_length(art.len);
-
         let mut res = self
             .http
             .get()
@@ -257,6 +251,12 @@ impl ArtifactManager {
             .send()
             .await?
             .error_for_status()?;
+
+        let span = Span::current();
+
+        span.pb_set_message(&art.name);
+        span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
+        span.pb_set_length(art.len);
 
         while let Some(chunk) = res.chunk().await? {
             writer.write_all(&chunk).await?;

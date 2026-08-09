@@ -18,6 +18,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
+use crate::single::SingleFlight;
 use crate::util::{mv, set_readonly, summarize};
 use crate::{
     Checksum, Creeper,
@@ -142,6 +143,8 @@ pub struct ArtifactManager {
     http: Throttle<Client>,
 
     index: SqlitePool,
+
+    single_flight: SingleFlight,
 }
 
 impl ArtifactManager {
@@ -157,6 +160,7 @@ impl ArtifactManager {
             index,
             http,
             offline,
+            single_flight: SingleFlight::new(),
         };
         Ok(val)
     }
@@ -213,6 +217,23 @@ impl ArtifactManager {
             Some(x) => x,
             None => bail!("missing download source"),
         };
+
+        let mut queue = self.single_flight.queue(src.clone());
+
+        let src = loop {
+            let advance = queue.advance().await;
+
+            if self.has_storage(&art.blake3).await? {
+                self.add_or_update(art.clone()).await?;
+                return Ok(path);
+            }
+
+            if let Some(x) = advance {
+                break x;
+            }
+        };
+
+        let src = &*src;
 
         debug!("downloading from {}", src);
 

@@ -17,28 +17,18 @@ use crate::{
 };
 
 impl ArtifactManager {
-    /// See [`Creeper::download`].
-    #[instrument(skip(self, name, len, checksum))]
-    pub(super) async fn download(
-        &self,
-        name: String,
-        src: String,
-        len: Option<u64>,
-        checksum: impl IntoIterator<Item = Checksum> + Send,
-    ) -> anyhow::Result<Artifact> {
-        let checksums = checksum.into_iter().collect::<Vec<_>>();
-
-        // if any of the specified checksums already exists in the database,
-        // skip downloading and verify the file with remaining checksums
-        for checksum in &checksums {
-            if let Some(mut art) = self.get_checksum(checksum).await? {
+    /// If the fingerprint is found in the artifact database,
+    /// verify its checksum and return the artifact without download.
+    async fn skip_download(&self, checksum: Vec<Checksum>) -> anyhow::Result<Option<Artifact>> {
+        for sum in &checksum {
+            if let Some(mut art) = self.get_checksum(sum).await? {
                 debug!("fingerprint found in local storage");
 
                 let path = self.retrieve(&art).await?;
 
-                let func = checksum.function;
+                let func = sum.function;
 
-                for checksum in checksums {
+                for checksum in checksum {
                     // because the `retrieve` method already checks blake3,
                     // no need to calculate again
                     if checksum.function == HashFunc::Blake3 {
@@ -58,9 +48,43 @@ impl ArtifactManager {
 
                 self.add_or_update(art.clone()).await?;
 
-                return Ok(art);
+                return Ok(Some(art));
             }
         }
+
+        Ok(None)
+    }
+
+    /// See [`Creeper::download`].
+    #[instrument(skip(self, name, len, checksum))]
+    pub(super) async fn download(
+        &self,
+        name: String,
+        src: String,
+        len: Option<u64>,
+        checksum: impl IntoIterator<Item = Checksum> + Send,
+    ) -> anyhow::Result<Artifact> {
+        let checksums = checksum.into_iter().collect::<Vec<_>>();
+
+        if let Some(art) = self.skip_download(checksums.clone()).await? {
+            return Ok(art);
+        }
+
+        let mut queue = self.single_flight.queue(src);
+
+        let src = loop {
+            let advance = queue.advance().await;
+
+            if let Some(art) = self.skip_download(checksums.clone()).await? {
+                return Ok(art);
+            }
+
+            if let Some(x) = advance {
+                break x;
+            }
+        };
+
+        let src = &*src;
 
         if self.offline {
             bail!("offline mode enabled, cannot download {src}");
@@ -88,7 +112,7 @@ impl ArtifactManager {
             .http
             .get()
             .await
-            .get(&src)
+            .get(src)
             .send()
             .await?
             .error_for_status()?;
@@ -122,7 +146,7 @@ impl ArtifactManager {
             None => download_len,
         };
 
-        let mut art = Artifact::new(b3, name, Some(src), len);
+        let mut art = Artifact::new(b3, name, Some(src.clone()), len);
 
         for checksum in checksums {
             if checksum.function == HashFunc::Blake3 {

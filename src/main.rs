@@ -22,6 +22,7 @@ mod pbar;
 mod prelude;
 mod pubgrub;
 mod registry;
+mod single;
 mod tool;
 mod user;
 mod util;

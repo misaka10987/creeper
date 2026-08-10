@@ -1,6 +1,11 @@
-use std::{fmt::Write, sync::LazyLock};
+use std::{
+    fmt::Write,
+    sync::{LazyLock, Mutex, MutexGuard},
+};
 
 use indicatif::{FormattedDuration, ProgressState, ProgressStyle};
+
+use crate::Creeper;
 
 fn pb_eta(state: &ProgressState, w: &mut dyn Write) {
     write!(w, "{}", FormattedDuration(state.eta())).unwrap()
@@ -19,3 +24,40 @@ pub static PROGRESS_STYLE_DEFAULT: LazyLock<ProgressStyle> = LazyLock::new(|| {
         .with_key("eta", pb_eta)
         .progress_chars("=> ")
 });
+
+pub struct StdioWriter {
+    stdout: Mutex<Box<dyn std::io::Write + Send>>,
+    stderr: Mutex<Box<dyn std::io::Write + Send>>,
+}
+
+impl Default for StdioWriter {
+    fn default() -> Self {
+        Self {
+            stdout: Mutex::new(Box::new(std::io::stdout())),
+            stderr: Mutex::new(Box::new(std::io::stderr())),
+        }
+    }
+}
+
+impl Creeper {
+    pub fn set_stdout(&self, stdout: impl std::io::Write + Send + 'static) {
+        *self.stdio.stdout.lock().unwrap() = Box::new(stdout);
+    }
+
+    pub fn set_stderr(&self, stderr: impl std::io::Write + Send + 'static) {
+        *self.stdio.stderr.lock().unwrap() = Box::new(stderr);
+    }
+
+    pub fn reset_stdio(&self) {
+        self.set_stdout(std::io::stdout());
+        self.set_stderr(std::io::stderr());
+    }
+
+    pub fn get_stdout(&self) -> MutexGuard<'_, Box<dyn std::io::Write + Send>> {
+        self.stdio.stdout.lock().unwrap()
+    }
+
+    pub fn get_stderr(&self) -> MutexGuard<'_, Box<dyn std::io::Write + Send>> {
+        self.stdio.stderr.lock().unwrap()
+    }
+}

@@ -5,7 +5,14 @@ use tracing::{error, info};
 use url::Url;
 
 use crate::{
-    Id, Install, Package, builtin::fabric_id, cmd::Execute, fabric::FabricMod, pack::{PackMeta, PackNode}, path::creeper_cache_dir, util::{parse_or_prompt, prompt_correct_license, prompt_save}, zip::{extract_zip, extract_zip_to},
+    Id, Install, Package,
+    builtin::fabric_id,
+    cmd::Execute,
+    fabric::FabricMod,
+    pack::{PackMeta, PackNode},
+    path::creeper_cache_dir,
+    util::{parse_or_prompt, prompt_correct_license, prompt_save},
+    zip::{extract_zip, extract_zip_to},
 };
 
 #[derive(Clone, Debug, Parser)]
@@ -120,9 +127,16 @@ impl Execute for PackageFabricMod {
 
         let toml = toml::to_string(&pack)?;
 
-        eprintln!("{} {}@{}", "Packaged".bold().green(), pack.id, pack.version);
+        writeln!(
+            lib.get_stderr(),
+            "{} {}@{}",
+            "Packaged".bold().green(),
+            pack.id,
+            pack.version
+        )
+        .unwrap();
 
-        println!("{toml}");
+        writeln!(lib.get_stdout(), "{toml}").unwrap();
 
         let path = pack
             .id

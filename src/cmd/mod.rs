@@ -20,7 +20,7 @@ pub trait Execute {
 }
 
 /// Minecraft Package Manager.
-#[derive(Clone, Debug, Parser)]
+#[derive(Clone, Parser)]
 #[command(version)]
 pub struct Command {
     #[clap(flatten)]
@@ -79,7 +79,7 @@ impl Execute for SubCommand {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         match self {
             SubCommand::Tool(tool) => lib.execute(tool).await,
-            SubCommand::AwwMan => Ok(println!("{CREEPER_TEXT_ART}")),
+            SubCommand::AwwMan => Ok(writeln!(lib.get_stdout(), "{CREEPER_TEXT_ART}").unwrap()),
             SubCommand::Install(install) => lib.execute(install).await,
             SubCommand::Launch(launch) => lib.execute(launch).await,
             SubCommand::Nuke(nuke) => lib.execute(nuke).await,

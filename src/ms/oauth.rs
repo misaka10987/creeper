@@ -113,6 +113,7 @@ impl MicrosoftClient {
 
         let redirect = local_redirect_uri::Server::new(5555, csrf.into_secret());
 
+        // TODO: use indicatif stderr writer
         eprintln!("{} {url}", "Open".bold().cyan());
 
         open::that_detached(url.as_str())?;

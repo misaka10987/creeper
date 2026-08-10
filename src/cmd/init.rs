@@ -16,7 +16,7 @@ pub struct Init {
 }
 
 impl Execute for Init {
-    async fn execute(self, _lib: &crate::Creeper) -> anyhow::Result<()> {
+    async fn execute(self, lib: &crate::Creeper) -> anyhow::Result<()> {
         create_dir_all(&self.path).await?;
 
         let path = self.path.canonicalize()?;
@@ -66,11 +66,13 @@ impl Execute for Init {
 
         write(&toml, toml::to_string_pretty(&package)?).await?;
 
-        eprintln!(
+        writeln!(
+            lib.get_stderr(),
             "{} creeper package {}",
             "Initialized".bold().green(),
             path.display()
-        );
+        )
+        .unwrap();
 
         Ok(())
     }

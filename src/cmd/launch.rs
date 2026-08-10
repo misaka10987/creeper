@@ -15,7 +15,8 @@ impl Execute for Launch {
         let mut cmd = lib.launch().await?;
 
         if self.preview {
-            println!("{:?}", cmd.as_std());
+            writeln!(lib.get_stdout(), "{:?}", cmd.as_std()).unwrap();
+
             return Ok(());
         }
 

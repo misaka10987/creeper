@@ -61,6 +61,7 @@ use crate::{
     mc::{ClientManager, ManifestClient, MinecraftManager, ServerManager},
     neoforge::{NeoforgeClientManager, NeoforgeManager, NeoforgeServerManager},
     path::{creeper_config_dir, init_creeper_dirs},
+    pbar::StdioWriter,
     registry::Registry,
     user::UserManager,
     vanilla::{VanillaManager, VanillaServerManager},
@@ -73,6 +74,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct CreeperInner {
     pub args: Args,
     pub config: Config,
+
+    stdio: StdioWriter,
 
     http: Throttle<Client>,
     // manifest: ManifestClient,
@@ -176,6 +179,9 @@ impl Creeper {
         let val = CreeperInner {
             args,
             config,
+
+            stdio: StdioWriter::default(),
+
             artifact,
             http,
             fabric_meta,
@@ -219,7 +225,7 @@ impl Creeper {
     }
 }
 
-#[derive(Clone, Debug, Parser)]
+#[derive(Clone, Parser)]
 pub struct Args {
     /// Path to the config file.
     ///
@@ -311,6 +317,8 @@ fn main() {
 
     let layer = IndicatifLayer::new();
 
+    let (stdout, stderr) = (layer.get_stdout_writer(), layer.get_stderr_writer());
+
     tracing_subscriber::registry()
         .with(EnvFilter::new(log))
         .with(LevelFilter::from_level(log_level))
@@ -324,6 +332,9 @@ fn main() {
         .unwrap_or_else(fatal!());
 
     let creeper = run.block_on(Creeper::new(args)).unwrap_or_else(fatal!());
+
+    creeper.set_stdout(stdout);
+    creeper.set_stderr(stderr);
 
     run.block_on(creeper.execute(cmd)).unwrap_or_else(fatal!());
 }

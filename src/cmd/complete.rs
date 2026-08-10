@@ -38,7 +38,7 @@ pub enum Shell {
 }
 
 impl Execute for Complete {
-    async fn execute(self, _lib: &crate::Creeper) -> anyhow::Result<()> {
+    async fn execute(self, lib: &crate::Creeper) -> anyhow::Result<()> {
         let mut cmd = Command::command();
 
         let mut buf = vec![];
@@ -54,7 +54,7 @@ impl Execute for Complete {
 
         let script = String::from_utf8(buf)?;
 
-        println!("{script}");
+        writeln!(lib.get_stdout(), "{script}").unwrap();
 
         Ok(())
     }

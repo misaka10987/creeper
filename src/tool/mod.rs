@@ -78,7 +78,7 @@ impl Execute for LoadInst {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
         let inst = lib.game.pack().await?;
         let toml = toml::to_string_pretty(&inst)?;
-        println!("{toml}");
+        writeln!(lib.get_stdout(), "{toml}").unwrap();
         Ok(())
     }
 }
@@ -115,24 +115,38 @@ impl Execute for Resolve {
                 fatal!("dependency resolution failed: {}", e);
             }
         };
-        eprintln!("{} {} packages", "Resolved".bold().green(), sol.len());
+
+        writeln!(
+            lib.get_stderr(),
+            "{} {} packages",
+            "Resolved".bold().green(),
+            sol.len()
+        )
+        .unwrap();
 
         if self.sort {
             let sorted = lib.sort_dependency(sol).await?;
             let mut map = IndexMap::new();
+
             for (k, v) in sorted {
                 map.insert(k, v);
             }
-            eprintln!(
+
+            writeln!(
+                lib.get_stderr(),
                 "{} {} packages (from dependencies to dependents)",
                 "Sorted".bold().green(),
                 map.len()
-            );
-            println!("{}", toml::to_string_pretty(&map)?);
+            )
+            .unwrap();
+
+            writeln!(lib.get_stdout(), "{}", toml::to_string_pretty(&map)?).unwrap();
+
             return Ok(());
         };
 
-        println!("{}", toml::to_string_pretty(&sol)?);
+        writeln!(lib.get_stdout(), "{}", toml::to_string_pretty(&sol)?).unwrap();
+
         Ok(())
     }
 }
@@ -155,7 +169,7 @@ impl Execute for GetPackage {
             .query_registry(&self.package.id, &self.package.version, self.rev)
             .await?;
         let toml = toml::to_string_pretty(&package)?;
-        println!("{toml}");
+        writeln!(lib.get_stdout(), "{toml}").unwrap();
         Ok(())
     }
 }
@@ -189,7 +203,9 @@ impl Execute for GetInstall {
         };
 
         let json = serde_json::to_string(&install)?;
-        println!("{json}");
+
+        writeln!(lib.get_stdout(), "{json}").unwrap();
+
         Ok(())
     }
 }
@@ -214,7 +230,9 @@ impl Execute for ListVersion {
             .collect::<BTreeSet<_>>();
 
         let json = serde_json::to_string(&versions)?;
-        println!("{json}");
+
+        writeln!(lib.get_stdout(), "{json}").unwrap();
+
         Ok(())
     }
 }
@@ -233,7 +251,7 @@ impl Execute for DiscoverYggdrasil {
 
         let url = client.api().await?;
 
-        println!("{url}");
+        writeln!(lib.get_stdout(), "{url}").unwrap();
 
         Ok(())
     }
@@ -251,15 +269,19 @@ pub struct NeoForgeVersion {
 }
 
 impl Execute for NeoForgeVersion {
-    async fn execute(self, _lib: &crate::Creeper) -> anyhow::Result<()> {
+    async fn execute(self, lib: &crate::Creeper) -> anyhow::Result<()> {
         if self.encode {
             let encoded = self.version.parse::<NfVersion>()?.encode()?;
-            println!("{encoded}");
+
+            writeln!(lib.get_stdout(), "{encoded}").unwrap();
+
             return Ok(());
         }
 
         let decoded = NfVersion::decode(self.version.parse()?);
-        println!("{decoded}");
+
+        writeln!(lib.get_stdout(), "{decoded}").unwrap();
+
         Ok(())
     }
 }

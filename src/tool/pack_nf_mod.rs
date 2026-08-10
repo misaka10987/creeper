@@ -166,9 +166,16 @@ impl Execute for PackageNeoforgeMod {
 
         let toml = toml::to_string(&pack)?;
 
-        eprintln!("{} {}@{}", "Packaged".bold().green(), pack.id, pack.version);
+        writeln!(
+            lib.get_stderr(),
+            "{} {}@{}",
+            "Packaged".bold().green(),
+            pack.id,
+            pack.version
+        )
+        .unwrap();
 
-        println!("{toml}");
+        writeln!(lib.get_stdout(), "{toml}").unwrap();
 
         let path = pack
             .id

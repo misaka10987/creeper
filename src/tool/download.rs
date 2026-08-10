@@ -26,7 +26,7 @@ impl Execute for Download {
 
         let toml = toml::to_string_pretty(&art)?;
 
-        println!("{toml}");
+        writeln!(lib.get_stdout(), "{toml}").unwrap();
 
         Ok(())
     }

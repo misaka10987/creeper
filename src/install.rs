@@ -286,7 +286,6 @@ impl Creeper {
         let packages = packages.into_iter().collect::<Vec<_>>();
 
         let span = Span::current();
-        span.pb_set_message("packages");
         span.pb_set_style(&PROGRESS_STYLE_DEFAULT);
         span.pb_set_length(packages.len() as u64);
 

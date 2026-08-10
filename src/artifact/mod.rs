@@ -220,7 +220,7 @@ impl ArtifactManager {
 
         let mut queue = self.single_flight.queue(src.clone());
 
-        let src = loop {
+        let single_flight = loop {
             let advance = queue.advance().await;
 
             if self.has_storage(&art.blake3).await? {
@@ -233,7 +233,7 @@ impl ArtifactManager {
             }
         };
 
-        let src = &*src;
+        let src = &*single_flight;
 
         debug!("downloading from {}", src);
 
@@ -276,6 +276,8 @@ impl ArtifactManager {
         self.add_or_update(art.clone()).await?;
 
         mv(&cache, &path).await?;
+
+        drop(single_flight);
 
         Ok(path)
     }

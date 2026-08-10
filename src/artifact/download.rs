@@ -72,7 +72,7 @@ impl ArtifactManager {
 
         let mut queue = self.single_flight.queue(src);
 
-        let src = loop {
+        let single_flight = loop {
             let advance = queue.advance().await;
 
             if let Some(art) = self.skip_download(checksums.clone()).await? {
@@ -84,7 +84,7 @@ impl ArtifactManager {
             }
         };
 
-        let src = &*src;
+        let src = &*single_flight;
 
         if self.offline {
             bail!("offline mode enabled, cannot download {src}");
@@ -165,6 +165,8 @@ impl ArtifactManager {
         if !self.has_storage(&art.blake3).await? {
             mv(&cache, &path).await?;
         }
+
+        drop(single_flight);
 
         Ok(art)
     }

@@ -5,15 +5,17 @@ use std::{
 };
 
 use futures::{StreamExt, TryStreamExt, stream};
-use tracing::debug;
+use tracing::{Span, debug, instrument};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::{Artifact, Checksum, Creeper};
+use crate::{Artifact, Checksum, Creeper, pbar::PROGRESS_STYLE_DEFAULT};
 
 impl Creeper {
     /// Parallel retrieve artifacts and create soft links.
     /// Each artifact is keyed by its relative path under the base path.
     ///
     /// See [`Self::retrieve_artifact_to`] for details and caveats.
+    #[instrument(skip(self, map, base))]
     pub async fn batch_retrieve_artifact_to(
         &self,
         map: HashMap<PathBuf, Artifact>,
@@ -21,10 +23,19 @@ impl Creeper {
     ) -> anyhow::Result<()> {
         let base = base.as_ref();
 
+        let span = Span::current();
+
+        span.pb_set_style(&PROGRESS_STYLE_DEFAULT);
+        span.pb_set_length(map.len() as u64);
+
         let count = stream::iter(map)
-            .map(
-                |(path, art)| async move { self.retrieve_artifact_to(&art, base.join(path)).await },
-            )
+            .map(|(path, art)| async move {
+                let res = self.retrieve_artifact_to(&art, base.join(path)).await;
+
+                Span::current().pb_inc(1);
+
+                res
+            })
             .buffer_unordered(self.config.parallel_download)
             .try_collect::<Vec<_>>()
             .await?
@@ -38,6 +49,7 @@ impl Creeper {
     /// Parallel download a batch of files keyed by `K` and store them in the artifact storage.
     /// Each file is described by a 4-tuple of `(name, src, len, checksum)`,
     /// as specified in [`Self::download`].
+    #[instrument(skip(self, download))]
     pub async fn batch_download<K>(
         &self,
         download: HashMap<
@@ -53,11 +65,21 @@ impl Creeper {
     where
         K: Eq + Hash,
     {
+        let span = Span::current();
+
+        span.pb_set_style(&PROGRESS_STYLE_DEFAULT);
+        span.pb_set_length(download.len() as u64);
+
         let map = stream::iter(download)
             .map(|(k, (name, src, len, checksum))| async move {
-                self.download(name, src, len, checksum)
+                let res = self
+                    .download(name, src, len, checksum)
                     .await
-                    .map(|a| (k, a))
+                    .map(|a| (k, a));
+
+                Span::current().pb_inc(1);
+
+                res
             })
             .buffer_unordered(self.config.parallel_download)
             .try_collect::<HashMap<_, _>>()

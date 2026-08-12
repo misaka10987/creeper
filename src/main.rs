@@ -8,6 +8,7 @@ mod fabric;
 mod game;
 mod id;
 mod index;
+mod inquire;
 mod install;
 mod jar;
 mod java;
@@ -48,7 +49,9 @@ use tokio::{
 use tokio_throttle::{IntoThrottle, Throttle};
 use tracing::{Level, info, level_filters::LevelFilter};
 use tracing_indicatif::IndicatifLayer;
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{
+    EnvFilter, Layer, fmt, layer::SubscriberExt, reload, util::SubscriberInitExt,
+};
 use url::Url;
 
 use crate::{
@@ -57,6 +60,7 @@ use crate::{
     fabric::{FabricManager, IntermediaryManager},
     game::GameManager,
     index::IndexCache,
+    inquire::{InquireManager, make_filter},
     java::JavaManager,
     mc::{ClientManager, ManifestClient, MinecraftManager, ServerManager},
     neoforge::{NeoforgeClientManager, NeoforgeManager, NeoforgeServerManager},
@@ -76,6 +80,7 @@ pub struct CreeperInner {
     pub config: Config,
 
     stdio: StdioWriter,
+    inquire: InquireManager,
 
     http: Throttle<Client>,
     // manifest: ManifestClient,
@@ -181,6 +186,7 @@ impl Creeper {
             config,
 
             stdio: StdioWriter::default(),
+            inquire: InquireManager::new(),
 
             artifact,
             http,
@@ -319,10 +325,16 @@ fn main() {
 
     let (stdout, stderr) = (layer.get_stdout_writer(), layer.get_stderr_writer());
 
+    let (filter, handle) = reload::Layer::new(make_filter(|_| true));
+
     tracing_subscriber::registry()
         .with(EnvFilter::new(log))
         .with(LevelFilter::from_level(log_level))
-        .with(fmt::layer().with_writer(layer.get_stderr_writer()))
+        .with(
+            fmt::layer()
+                .with_writer(layer.get_stderr_writer())
+                .with_filter(filter),
+        )
         .with(layer)
         .init();
 
@@ -335,6 +347,7 @@ fn main() {
 
     creeper.set_stdout(stdout);
     creeper.set_stderr(stderr);
+    creeper.blocking_inquire_filter(handle);
 
     run.block_on(creeper.execute(cmd)).unwrap_or_else(fatal!());
 }

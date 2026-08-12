@@ -1,3 +1,5 @@
+// TODO: use the inquire RAII output guard
+
 use std::{
     collections::BTreeSet,
     fmt::Display,

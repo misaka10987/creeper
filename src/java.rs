@@ -8,7 +8,7 @@ use inquire::Select;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_with::{NoneAsEmptyString, serde_as};
-use tokio::{process::Command, task::spawn_blocking};
+use tokio::process::Command;
 use tracing::debug;
 
 use crate::{Creeper, path::creeper_config_dir, util::TomlFile};
@@ -51,12 +51,15 @@ impl Creeper {
             return Ok(all.into_iter().next().unwrap());
         }
 
-        let select = spawn_blocking(|| {
-            Select::new("Select a Java runtime:", all)
-                .with_starting_cursor(0)
-                .prompt()
-        })
-        .await??;
+        let select = self
+            .inquire()
+            .await
+            .run(|| {
+                Select::new("Select a Java runtime:", all)
+                    .with_starting_cursor(0)
+                    .prompt()
+            })
+            .await??;
 
         Ok(select)
     }

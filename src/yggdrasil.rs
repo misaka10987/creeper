@@ -177,6 +177,7 @@ impl YggdrasilClient {
         Ok(profile)
     }
 
+    // TODO: use the inquire RAII output guard
     pub async fn load_or_prompt_login(&self) -> anyhow::Result<()> {
         match self.load().await {
             Ok(_) => {

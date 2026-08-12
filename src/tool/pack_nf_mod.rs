@@ -12,7 +12,6 @@ use neoforge::{
     meta::{DependencyType, Ordering},
 };
 use semver::VersionReq;
-use tokio::task::spawn_blocking;
 use tracing::{error, warn};
 use url::Url;
 
@@ -58,14 +57,17 @@ impl Execute for PackageNeoforgeMod {
                 bail!("duplicate mod IDs in neoforge.mods.toml")
             }
 
-            let select = spawn_blocking(move || {
-                Select::new(
-                    "The JAR file contains multiple mods, select one:",
-                    ids.into_iter().collect(),
-                )
-                .prompt()
-            })
-            .await??;
+            let select = lib
+                .inquire()
+                .await
+                .run(|| {
+                    Select::new(
+                        "The JAR file contains multiple mods, select one:",
+                        ids.into_iter().collect(),
+                    )
+                    .prompt()
+                })
+                .await??;
 
             select.clone()
         };
@@ -86,7 +88,10 @@ impl Execute for PackageNeoforgeMod {
         let name = if let Some(name) = &select_mod.display_name {
             name.clone()
         } else {
-            spawn_blocking(|| Text::new("Name of the package:").prompt()).await??
+            lib.inquire()
+                .await
+                .run(|| Text::new("Name of the package:").prompt())
+                .await??
         };
 
         let authors = select_mod

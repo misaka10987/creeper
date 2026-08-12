@@ -81,11 +81,17 @@ impl UserManager {
 
 impl Creeper {
     pub async fn prompt_new_user(&self) -> anyhow::Result<User> {
-        let select = Select::new(
-            "Type of the new user:",
-            vec!["Offline", "Microsoft", "authlib-injector"],
-        )
-        .prompt()?;
+        let select = self
+            .inquire()
+            .await
+            .run(|| {
+                Select::new(
+                    "Type of the new user:",
+                    vec!["Offline", "Microsoft", "authlib-injector"],
+                )
+                .prompt()
+            })
+            .await??;
 
         match select {
             "Offline" => self.prompt_new_offline_user().await,
@@ -116,7 +122,11 @@ impl Creeper {
     }
 
     pub async fn prompt_new_offline_user(&self) -> anyhow::Result<User> {
-        let name = Text::new("Player name:").prompt()?;
+        let name = self
+            .inquire()
+            .await
+            .run(|| Text::new("Player name:").prompt())
+            .await??;
 
         let user = User::Offline { name };
 
@@ -126,10 +136,19 @@ impl Creeper {
     }
 
     pub async fn prompt_new_authlib_injector_user(&self) -> anyhow::Result<User> {
-        let server = Text::new("Yggdrasil server:").prompt()?;
+        let server = self
+            .inquire()
+            .await
+            .run(|| Text::new("Yggdrasil server:").prompt())
+            .await??;
 
-        let account =
-            Text::new(&format!("Your account at {server} (usually an email):")).prompt()?;
+        let msg = format!("Your account at {server} (usually an email):");
+
+        let account = self
+            .inquire()
+            .await
+            .run(move || Text::new(&msg).prompt())
+            .await??;
 
         let yggdrasil = YggdrasilClient::new(server, account.clone(), self.http.clone())?;
 
@@ -153,7 +172,11 @@ impl Creeper {
             })
             .collect::<Vec<_>>();
 
-        let select = Select::new("Choose a player:", available).prompt()?;
+        let select = self
+            .inquire()
+            .await
+            .run(|| Select::new("Choose a player:", available).prompt())
+            .await??;
 
         let uuid = match &select {
             User::AuthlibInjector { uuid, .. } => uuid,
@@ -185,7 +208,11 @@ impl Creeper {
             return self.prompt_new_user().await;
         }
 
-        let select = Select::new("Select a user:", users).prompt()?;
+        let select = self
+            .inquire()
+            .await
+            .run(|| Select::new("Select a user:", users).prompt())
+            .await??;
 
         Ok(select)
     }
@@ -373,20 +400,3 @@ struct AuthlibInjectorVersion {
     pub download_url: Url,
     pub checksums: authlib_injector::Checksums,
 }
-
-// #[test]
-// fn test() {
-//     let json = r#"
-//     {
-//   "build_number": 55,
-//   "version": "1.2.7",
-//   "release_time": "2025-12-16T16:01:27Z",
-//   "download_url": "https://authlib-injector.yushi.moe/artifact/55/authlib-injector-1.2.7.jar",
-//   "checksums": {
-//     "sha256": "eaf14bc5acffc7d885bd5bd5942b99f36d6299302beae356b2fc5807fe42652b"
-//   }
-// }
-//     "#;
-
-//     let version = serde_json::from_str::<AuthlibInjectorVersion>(json).unwrap();
-// }

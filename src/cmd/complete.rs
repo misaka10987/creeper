@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use clap::{CommandFactory, Parser, ValueEnum};
 use clap_complete::{
     Shell::{Bash, Elvish, Fish, PowerShell, Zsh},

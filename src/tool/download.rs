@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use clap::Parser;
 use url::Url;
 

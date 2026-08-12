@@ -5,7 +5,10 @@ mod pack_nf_mod;
 
 mod prelude;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io::Write,
+};
 
 use crate::{
     Creeper, Id, YggdrasilClient,

@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use anyhow::{anyhow, bail};
 use clap::Parser;
 use colored::Colorize;

@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashSet},
+    io::Write,
+};
 
 use anyhow::bail;
 use clap::Parser;

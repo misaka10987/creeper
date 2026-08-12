@@ -1,6 +1,7 @@
 use std::{
     fmt::Write,
-    sync::{LazyLock, Mutex, MutexGuard},
+    io::sink,
+    sync::{LazyLock, Mutex, MutexGuard, atomic::AtomicBool},
 };
 
 use indicatif::{FormattedDuration, ProgressState, ProgressStyle};
@@ -26,6 +27,7 @@ pub static PROGRESS_STYLE_DEFAULT: LazyLock<ProgressStyle> = LazyLock::new(|| {
 });
 
 pub struct StdioWriter {
+    enabled: AtomicBool,
     stdout: Mutex<Box<dyn std::io::Write + Send>>,
     stderr: Mutex<Box<dyn std::io::Write + Send>>,
 }
@@ -33,6 +35,7 @@ pub struct StdioWriter {
 impl Default for StdioWriter {
     fn default() -> Self {
         Self {
+            enabled: AtomicBool::new(true),
             stdout: Mutex::new(Box::new(std::io::stdout())),
             stderr: Mutex::new(Box::new(std::io::stderr())),
         }
@@ -40,6 +43,22 @@ impl Default for StdioWriter {
 }
 
 impl Creeper {
+    pub fn enable_stdio(&self) {
+        self.stdio
+            .enabled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn disable_stdio(&self) {
+        self.stdio
+            .enabled
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn is_stdio_enabled(&self) -> bool {
+        self.stdio.enabled.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     pub fn set_stdout(&self, stdout: impl std::io::Write + Send + 'static) {
         *self.stdio.stdout.lock().unwrap() = Box::new(stdout);
     }
@@ -53,11 +72,68 @@ impl Creeper {
         self.set_stderr(std::io::stderr());
     }
 
-    pub fn get_stdout(&self) -> MutexGuard<'_, Box<dyn std::io::Write + Send>> {
-        self.stdio.stdout.lock().unwrap()
+    pub fn get_stdout(&self) -> impl std::io::Write {
+        if !self.is_stdio_enabled() {
+            return StdioGuard::Sink;
+        }
+
+        StdioGuard::Output(self.stdio.stdout.lock().unwrap())
     }
 
-    pub fn get_stderr(&self) -> MutexGuard<'_, Box<dyn std::io::Write + Send>> {
-        self.stdio.stderr.lock().unwrap()
+    pub fn get_stderr(&self) -> impl std::io::Write {
+        if !self.is_stdio_enabled() {
+            return StdioGuard::Sink;
+        }
+
+        StdioGuard::Output(self.stdio.stderr.lock().unwrap())
+    }
+}
+
+enum StdioGuard<'a> {
+    Output(MutexGuard<'a, Box<dyn std::io::Write + Send>>),
+    Sink,
+}
+
+impl<'a> std::io::Write for StdioGuard<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            StdioGuard::Output(mutex_guard) => mutex_guard.write(buf),
+            StdioGuard::Sink => sink().write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            StdioGuard::Output(mutex_guard) => mutex_guard.flush(),
+            StdioGuard::Sink => sink().flush(),
+        }
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        match self {
+            StdioGuard::Output(mutex_guard) => mutex_guard.write_vectored(bufs),
+            StdioGuard::Sink => sink().write_vectored(bufs),
+        }
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        match self {
+            StdioGuard::Output(mutex_guard) => mutex_guard.write_all(buf),
+            StdioGuard::Sink => sink().write_all(buf),
+        }
+    }
+
+    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        match self {
+            StdioGuard::Output(mutex_guard) => mutex_guard.write_fmt(args),
+            StdioGuard::Sink => sink().write_fmt(args),
+        }
+    }
+
+    fn by_ref(&mut self) -> &mut Self
+    where
+        Self: Sized,
+    {
+        self
     }
 }

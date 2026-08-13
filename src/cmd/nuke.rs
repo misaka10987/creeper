@@ -3,7 +3,6 @@ use clap::Parser;
 use crate::{
     cmd::Execute,
     path::{creeper_cache_dir, creeper_data_dir},
-    util::prompt_remove,
 };
 
 /// Remove all configurations, user data, and cache.
@@ -15,9 +14,9 @@ pub struct Nuke {
 }
 
 impl Execute for Nuke {
-    async fn execute(self, _lib: &crate::Creeper) -> anyhow::Result<()> {
-        prompt_remove(creeper_cache_dir()?).await?;
-        prompt_remove(creeper_data_dir()?).await?;
+    async fn execute(self, lib: &crate::Creeper) -> anyhow::Result<()> {
+        lib.prompt_remove(creeper_cache_dir()?).await?;
+        lib.prompt_remove(creeper_data_dir()?).await?;
         Ok(())
     }
 }

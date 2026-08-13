@@ -27,6 +27,8 @@ use tokio::{
 };
 use tracing::{info, trace};
 
+use crate::Creeper;
+
 pub async fn mv(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
     if let Some(parent) = dst.as_ref().parent() {
         create_dir_all(parent).await?;
@@ -59,16 +61,28 @@ pub async fn set_readonly(path: impl AsRef<Path>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Prompt the user to confirm the removal of a file or directory, and remove it if confirmed.
-pub async fn prompt_remove(path: impl AsRef<Path>) -> anyhow::Result<()> {
-    let path = path.as_ref();
-    let confirm = Confirm::new(&format!("Remove {}?", path.display())).prompt()?;
-    if !confirm {
-        bail!("aborted by user");
+impl Creeper {
+    /// Prompt the user to confirm the removal of a file or directory, and remove it if confirmed.
+    pub async fn prompt_remove(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let path = path.as_ref();
+
+        let msg = format!("Remove {}?", path.display());
+
+        let confirm = self
+            .inquire()
+            .await
+            .run(move || Confirm::new(&msg).prompt())
+            .await??;
+
+        if !confirm {
+            bail!("aborted by user")
+        }
+
+        info!("removing {}", path.display());
+        remove_dir_all(path).await?;
+
+        Ok(())
     }
-    info!("removing {}", path.display());
-    remove_dir_all(path).await?;
-    Ok(())
 }
 
 pub struct TomlFile<T>

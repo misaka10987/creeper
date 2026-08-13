@@ -13,7 +13,7 @@ use crate::{
     fabric::FabricMod,
     pack::{PackMeta, PackNode},
     path::creeper_cache_dir,
-    util::{parse_or_prompt, prompt_save},
+    util::prompt_save,
     zip::{extract_zip, extract_zip_to},
 };
 
@@ -34,7 +34,9 @@ impl Execute for PackageFabricMod {
 
         let metadata = serde_json::from_str::<FabricMod>(&json)?;
 
-        let id = parse_or_prompt::<Id>(&metadata.id, "package id").await?;
+        let id = lib
+            .parse_or_prompt::<Id>(&metadata.id, "package id")
+            .await?;
 
         let license = match &metadata.license {
             Some(x) => Some(lib.prompt_correct_license(x).await?),
@@ -46,7 +48,7 @@ impl Execute for PackageFabricMod {
         for (id, dep) in metadata.depends {
             let id = match id.parse::<Id>() {
                 Ok(id) => id,
-                Err(_) => parse_or_prompt(&id, "package id").await?,
+                Err(_) => lib.parse_or_prompt(&id, "package id").await?,
             };
 
             let id = if id.as_str() == "fabricloader" {
@@ -55,7 +57,7 @@ impl Execute for PackageFabricMod {
                 id
             };
 
-            let req = dep.prompt_normalize().await?;
+            let req = lib.prompt_normalize_fabric_dep(&dep).await?;
 
             node.dep.insert(id, req);
         }
@@ -63,10 +65,10 @@ impl Execute for PackageFabricMod {
         for (id, dep) in metadata.breaks {
             let id = match id.parse() {
                 Ok(id) => id,
-                Err(_) => parse_or_prompt(&id, "package id").await?,
+                Err(_) => lib.parse_or_prompt(&id, "package id").await?,
             };
 
-            let req = dep.prompt_normalize().await?;
+            let req = lib.prompt_normalize_fabric_dep(&dep).await?;
 
             node.conflict.insert(id, req);
         }

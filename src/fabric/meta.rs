@@ -8,7 +8,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use tracing::error;
 use url::Url;
 
-use crate::util::parse_or_prompt;
+use crate::Creeper;
 
 #[serde_as]
 #[derive(Clone, Serialize, Deserialize)]
@@ -210,16 +210,19 @@ pub enum Dependency {
     VersionList(Vec<String>),
 }
 
-impl Dependency {
-    pub async fn prompt_normalize(&self) -> anyhow::Result<VersionReq> {
-        let req = match self {
+impl Creeper {
+    pub async fn prompt_normalize_fabric_dep(
+        &self,
+        dep: &Dependency,
+    ) -> anyhow::Result<VersionReq> {
+        let req = match dep {
             crate::fabric::meta::Dependency::Req(req) => req.clone(),
             crate::fabric::meta::Dependency::List(_) => {
                 error!("does not support list of versions in fabric dependency, defaulting to *");
                 VersionReq::STAR
             }
             crate::fabric::meta::Dependency::VersionReq(req) => {
-                parse_or_prompt(&req, "version requirement").await?
+                self.parse_or_prompt(&req, "version requirement").await?
             }
             crate::fabric::meta::Dependency::VersionList(_) => {
                 error!("does not support list of versions in fabric dependency, defaulting to *");

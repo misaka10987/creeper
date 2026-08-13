@@ -19,7 +19,7 @@ use crate::{
     Id, Install, Package,
     cmd::Execute,
     pack::{PackMeta, PackNode},
-    util::{parse_or_prompt, prompt_save},
+    util::prompt_save,
     zip::extract_zip,
 };
 
@@ -78,11 +78,11 @@ impl Execute for PackageNeoforgeMod {
             .find(|m| m.mod_id == select_mod_id)
             .unwrap();
 
-        let id = parse_or_prompt(&select_mod_id, "package id").await?;
+        let id = lib.parse_or_prompt(&select_mod_id, "package id").await?;
 
         let version = match select_mod.version.parse() {
             Ok(v) => v,
-            Err(_) => parse_or_prompt(&select_mod.version, "semver").await?,
+            Err(_) => lib.parse_or_prompt(&select_mod.version, "semver").await?,
         };
 
         let name = if let Some(name) = &select_mod.display_name {

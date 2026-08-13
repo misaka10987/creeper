@@ -66,4 +66,37 @@ impl Creeper {
             }
         }
     }
+
+    pub async fn parse_or_prompt<T>(&self, s: &str, desc: &str) -> anyhow::Result<T>
+    where
+        T: FromStr + Send + 'static,
+        <T as FromStr>::Err: Display,
+    {
+        let s = s.to_owned();
+        let desc = desc.to_owned();
+
+        if let Ok(val) = s.parse() {
+            let confirm = format!("Use {s} as {desc}?");
+
+            let confirm = self
+                .inquire()
+                .await
+                .run(move || Confirm::new(&confirm).prompt())
+                .await??;
+
+            if confirm {
+                return Ok(val);
+            }
+
+            let val = self.prompt_valid(&format!("Input one instead:")).await?;
+
+            return Ok(val);
+        }
+
+        let val = self
+            .prompt_valid(&format!("{s} is not valid {desc}, input one instead:"))
+            .await?;
+
+        Ok(val)
+    }
 }

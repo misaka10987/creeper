@@ -1,20 +1,12 @@
-// TODO: use the inquire RAII output guard
-
 use std::{
     collections::BTreeSet,
-    fmt::Display,
-    marker::PhantomData,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::OnceLock,
 };
 
 use anyhow::bail;
 use base64::{Engine, prelude::BASE64_URL_SAFE};
-use inquire::{
-    Confirm, Text,
-    validator::{StringValidator, Validation},
-};
+use inquire::{Confirm, Text};
 use semver::{Version, VersionReq};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
@@ -114,118 +106,6 @@ where
 
         Ok(())
     }
-}
-
-pub async fn confirm_or_prompt<T>(
-    value: T,
-    confirm_msg: &str,
-    prompt_msg: &str,
-) -> anyhow::Result<T>
-where
-    T: FromStr + Send + 'static,
-    <T as FromStr>::Err: Display,
-{
-    let confirm_msg = confirm_msg.to_string();
-    let prompt_msg = prompt_msg.to_string();
-
-    let value =
-        spawn_blocking(move || blocking_confirm_or_prompt(value, &confirm_msg, &prompt_msg))
-            .await??;
-
-    Ok(value)
-}
-
-pub fn blocking_prompt_valid<T>(message: &str) -> anyhow::Result<T>
-where
-    T: FromStr,
-    <T as FromStr>::Err: Display,
-{
-    struct Validator<T>(PhantomData<T>);
-
-    impl<T> Clone for Validator<T> {
-        fn clone(&self) -> Self {
-            Self(self.0.clone())
-        }
-    }
-
-    impl<T> StringValidator for Validator<T>
-    where
-        T: FromStr,
-        <T as FromStr>::Err: Display,
-    {
-        fn validate(
-            &self,
-            input: &str,
-        ) -> Result<inquire::validator::Validation, inquire::CustomUserError> {
-            let valid = match input.parse::<T>() {
-                Ok(_) => Validation::Valid,
-                Err(e) => Validation::Invalid(e.to_string().into()),
-            };
-            Ok(valid)
-        }
-    }
-
-    let valid = Validator::<T>(PhantomData);
-
-    let value = Text::new(message)
-        .with_validator(valid)
-        .prompt()?
-        .parse()
-        .map_err(|_| unreachable!())
-        .unwrap();
-
-    Ok(value)
-}
-
-pub fn blocking_confirm_or_prompt<T>(
-    value: T,
-    confirm_msg: &str,
-    prompt_msg: &str,
-) -> anyhow::Result<T>
-where
-    T: FromStr,
-    <T as FromStr>::Err: Display,
-{
-    let confirm = Confirm::new(confirm_msg).prompt()?;
-
-    if confirm {
-        return Ok(value);
-    }
-
-    let value = blocking_prompt_valid(prompt_msg)?;
-
-    Ok(value)
-}
-
-pub async fn parse_or_prompt<T>(s: &str, desc: &str) -> anyhow::Result<T>
-where
-    T: FromStr + Send + 'static,
-    <T as FromStr>::Err: Display,
-{
-    let s = s.to_owned();
-    let desc = desc.to_owned();
-
-    let value = spawn_blocking(move || blocking_parse_or_prompt(&s, &desc)).await??;
-
-    Ok(value)
-}
-
-pub fn blocking_parse_or_prompt<T>(s: &str, desc: &str) -> anyhow::Result<T>
-where
-    T: FromStr,
-    <T as FromStr>::Err: Display,
-{
-    if let Ok(value) = s.parse() {
-        return blocking_confirm_or_prompt(
-            value,
-            &format!("Use {s} as {desc}?"),
-            &format!("Input a new {desc}:"),
-        );
-    }
-
-    let value = blocking_prompt_valid(&format!("{s} is not valid {desc}, input one instead:"))?;
-
-    Ok(value)
 }
 
 pub async fn prompt_save(content: impl AsRef<[u8]>, path: impl AsRef<Path>) -> anyhow::Result<()> {

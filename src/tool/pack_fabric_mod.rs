@@ -13,7 +13,7 @@ use crate::{
     fabric::FabricMod,
     pack::{PackMeta, PackNode},
     path::creeper_cache_dir,
-    util::{parse_or_prompt, prompt_correct_license, prompt_save},
+    util::{parse_or_prompt, prompt_save},
     zip::{extract_zip, extract_zip_to},
 };
 
@@ -37,7 +37,7 @@ impl Execute for PackageFabricMod {
         let id = parse_or_prompt::<Id>(&metadata.id, "package id").await?;
 
         let license = match &metadata.license {
-            Some(x) => Some(prompt_correct_license(x).await?),
+            Some(x) => Some(lib.prompt_correct_license(x).await?),
             None => None,
         };
 

@@ -83,6 +83,73 @@ impl Creeper {
 
         Ok(())
     }
+
+    pub async fn prompt_valid<T>(&self, msg: &str) -> anyhow::Result<T>
+    where
+        T: FromStr + Send + 'static,
+        <T as FromStr>::Err: Display,
+    {
+        let msg = msg.to_string();
+
+        let value = self
+            .inquire()
+            .await
+            .run(move || Text::new(&msg).with_validator(parse_valid::<T>()).prompt())
+            .await??
+            .parse()
+            .map_err(|_| unreachable!())
+            .unwrap();
+
+        Ok(value)
+    }
+
+    pub async fn prompt_correct_license(&self, exp: &str) -> anyhow::Result<spdx::Expression> {
+        match exp.parse() {
+            Ok(x) => Ok(x),
+            Err(_) if let Ok(x) = format!("LicenseRef-{exp}").parse() => Ok(x),
+            Err(_) => {
+                self.prompt_valid(&format!(
+                    "{exp} is not valid SPDX license expression, input one instead:"
+                ))
+                .await
+            }
+        }
+    }
+}
+
+pub const fn parse_valid<T>() -> impl StringValidator
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+{
+    struct Validator<T>(PhantomData<T>);
+
+    impl<T> Clone for Validator<T> {
+        fn clone(&self) -> Self {
+            Self(self.0.clone())
+        }
+    }
+
+    impl<T> StringValidator for Validator<T>
+    where
+        T: FromStr,
+        <T as FromStr>::Err: Display,
+    {
+        fn validate(
+            &self,
+            input: &str,
+        ) -> Result<inquire::validator::Validation, inquire::CustomUserError> {
+            let valid = match input.parse::<T>() {
+                Ok(_) => Validation::Valid,
+                Err(e) => Validation::Invalid(e.to_string().into()),
+            };
+            Ok(valid)
+        }
+    }
+
+    let valid = Validator::<T>(PhantomData);
+
+    valid
 }
 
 pub struct TomlFile<T>
@@ -140,16 +207,6 @@ where
 
         Ok(())
     }
-}
-
-pub async fn prompt_valid<T>(message: &str) -> anyhow::Result<T>
-where
-    T: FromStr + Send + 'static,
-    <T as FromStr>::Err: Display,
-{
-    let message = message.to_string();
-    let value = spawn_blocking(move || blocking_prompt_valid::<T>(&message)).await??;
-    Ok(value)
 }
 
 pub async fn confirm_or_prompt<T>(
@@ -370,19 +427,6 @@ pub fn rebuild_req(
     let req = format!(">={start}, <{end}").parse().unwrap();
 
     Ok(req)
-}
-
-pub async fn prompt_correct_license(exp: &str) -> anyhow::Result<spdx::Expression> {
-    match exp.parse() {
-        Ok(x) => Ok(x),
-        Err(_) if let Ok(x) = format!("LicenseRef-{exp}").parse() => Ok(x),
-        Err(_) => {
-            prompt_valid(&format!(
-                "{exp} is not valid SPDX license expression, input one instead:"
-            ))
-            .await
-        }
-    }
 }
 
 /// Like [`Iterator::filter`], but it also immediately skips the next element after a match.

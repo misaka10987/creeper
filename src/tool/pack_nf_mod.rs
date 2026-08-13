@@ -19,7 +19,7 @@ use crate::{
     Id, Install, Package,
     cmd::Execute,
     pack::{PackMeta, PackNode},
-    util::{parse_or_prompt, prompt_save, prompt_valid},
+    util::{parse_or_prompt, prompt_save},
     zip::extract_zip,
 };
 
@@ -120,7 +120,7 @@ impl Execute for PackageNeoforgeMod {
             let id = match d.mod_id.parse::<Id>() {
                 Ok(id) => id,
                 Err(_) => {
-                    prompt_valid::<Id>(&format!(
+                    lib.prompt_valid::<Id>(&format!(
                         "dependency {} is not valid package id, enter one instead:",
                         d.mod_id
                     ))

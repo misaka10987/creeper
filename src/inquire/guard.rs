@@ -1,36 +1,13 @@
 use tokio::{
-    sync::{Mutex, MutexGuard},
+    sync::MutexGuard,
     task::{JoinError, spawn_blocking},
 };
-use tracing::Metadata;
-use tracing_subscriber::{
-    filter::{FilterFn, filter_fn},
-    reload::Handle,
+use tracing_subscriber::reload::Handle;
+
+use crate::{
+    Creeper,
+    inquire::{Filter, InquireManagerInner, make_filter},
 };
-
-use crate::Creeper;
-
-struct InquireManagerInner {
-    start_hooks: Vec<Box<dyn FnMut() + Send>>,
-    end_hooks: Vec<Box<dyn FnMut() + Send>>,
-}
-
-pub struct InquireManager {
-    inner: Mutex<InquireManagerInner>,
-}
-
-impl InquireManager {
-    pub fn new() -> Self {
-        let inner = InquireManagerInner {
-            start_hooks: vec![],
-            end_hooks: vec![],
-        };
-
-        Self {
-            inner: Mutex::new(inner),
-        }
-    }
-}
 
 impl Creeper {
     pub async fn before_inquire(&self, hook: impl FnMut() + Send + 'static) {
@@ -130,10 +107,4 @@ impl<'a> InquireGuard<'a> {
     {
         spawn_blocking(f).await
     }
-}
-
-pub type Filter = FilterFn<fn(&Metadata<'_>) -> bool>;
-
-pub fn make_filter(f: fn(&Metadata<'_>) -> bool) -> Filter {
-    filter_fn(f)
 }

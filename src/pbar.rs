@@ -2,6 +2,7 @@ use std::{
     fmt::Write,
     io::sink,
     sync::{LazyLock, Mutex, MutexGuard, atomic::AtomicBool},
+    time::Duration,
 };
 
 use indicatif::{FormattedDuration, ProgressState, ProgressStyle};
@@ -9,7 +10,13 @@ use indicatif::{FormattedDuration, ProgressState, ProgressStyle};
 use crate::Creeper;
 
 fn pb_eta(state: &ProgressState, w: &mut dyn Write) {
-    write!(w, "{}", FormattedDuration(state.eta())).unwrap()
+    let eta = state.eta();
+
+    if eta >= Duration::from_hours(72) {
+        return write!(w, "N/A").unwrap();
+    }
+
+    write!(w, "{}", FormattedDuration(eta)).unwrap()
 }
 
 pub static PROGRESS_STYLE_DOWNLOAD: LazyLock<ProgressStyle> = LazyLock::new(|| {

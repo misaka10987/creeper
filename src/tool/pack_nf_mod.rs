@@ -19,7 +19,6 @@ use crate::{
     Id, Install, Package,
     cmd::Execute,
     pack::{PackMeta, PackNode},
-    util::prompt_save,
     zip::extract_zip,
 };
 
@@ -192,7 +191,7 @@ impl Execute for PackageNeoforgeMod {
             .join(pack.version.to_string())
             .join("0.toml");
 
-        prompt_save(toml, path).await?;
+        lib.prompt_save(toml, path).await?;
 
         Ok(())
     }

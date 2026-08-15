@@ -1,8 +1,12 @@
-use std::{fmt::Display, path::Path, str::FromStr};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use anyhow::bail;
 use inquire::{Confirm, Text};
-use tokio::fs::remove_dir_all;
+use tokio::fs::{create_dir_all, remove_dir_all, write};
 use tracing::info;
 
 use crate::{Creeper, inquire::parse_validator};
@@ -98,5 +102,48 @@ impl Creeper {
             .await?;
 
         Ok(val)
+    }
+
+    pub async fn prompt_save(
+        &self,
+        content: impl AsRef<[u8]>,
+        path: impl AsRef<Path>,
+    ) -> anyhow::Result<()> {
+        let content = content.as_ref();
+        let path = path.as_ref();
+
+        let message = format!("Save {} bytes to file?", content.len());
+
+        let confirm = self
+            .inquire()
+            .await
+            .run(move || Confirm::new(&message).with_default(false).prompt())
+            .await??;
+
+        if !confirm {
+            return Ok(());
+        }
+
+        let default = path.display().to_string();
+
+        let path = self
+            .inquire()
+            .await
+            .run(move || {
+                Text::new("Enter the path to save to")
+                    .with_default(&default)
+                    .prompt()
+            })
+            .await??;
+
+        let path = PathBuf::from(path);
+
+        if let Some(parent) = path.parent() {
+            create_dir_all(parent).await?;
+        }
+
+        write(&path, content).await?;
+
+        Ok(())
     }
 }

@@ -13,7 +13,6 @@ use crate::{
     fabric::FabricMod,
     pack::{PackMeta, PackNode},
     path::creeper_cache_dir,
-    util::prompt_save,
     zip::{extract_zip, extract_zip_to},
 };
 
@@ -149,7 +148,7 @@ impl Execute for PackageFabricMod {
             .join(pack.version.to_string())
             .join("0.toml");
 
-        prompt_save(toml, path).await?;
+        lib.prompt_save(toml, path).await?;
 
         Ok(())
     }

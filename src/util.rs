@@ -1,12 +1,7 @@
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-    sync::OnceLock,
-};
+use std::{collections::BTreeSet, path::Path, sync::OnceLock};
 
 use anyhow::bail;
 use base64::{Engine, prelude::BASE64_URL_SAFE};
-use inquire::{Confirm, Text};
 use semver::{Version, VersionReq};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
@@ -15,7 +10,6 @@ use tokio::{
         try_exists, write,
     },
     sync::RwLock,
-    task::spawn_blocking,
 };
 use tracing::trace;
 
@@ -106,39 +100,6 @@ where
 
         Ok(())
     }
-}
-
-pub async fn prompt_save(content: impl AsRef<[u8]>, path: impl AsRef<Path>) -> anyhow::Result<()> {
-    let content = content.as_ref();
-    let path = path.as_ref();
-
-    let message = format!("Save {} bytes to file?", content.len());
-
-    let confirm =
-        spawn_blocking(move || Confirm::new(&message).with_default(false).prompt()).await??;
-
-    if !confirm {
-        return Ok(());
-    }
-
-    let default = path.display().to_string();
-
-    let path = spawn_blocking(move || {
-        Text::new("Enter the path to save to")
-            .with_default(&default)
-            .prompt()
-    })
-    .await??;
-
-    let path = PathBuf::from(path);
-
-    if let Some(parent) = path.parent() {
-        create_dir_all(parent).await?;
-    }
-
-    write(&path, content).await?;
-
-    Ok(())
 }
 
 pub async fn symlink_auto(

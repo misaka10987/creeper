@@ -35,7 +35,6 @@ pub static PROGRESS_STYLE_DEFAULT: LazyLock<ProgressStyle> = LazyLock::new(|| {
 
 pub struct StdioWriter {
     enabled: AtomicBool,
-    inquire_disabled: AtomicBool,
     stdout: Mutex<Box<dyn std::io::Write + Send>>,
     stderr: Mutex<Box<dyn std::io::Write + Send>>,
 }
@@ -44,22 +43,9 @@ impl Default for StdioWriter {
     fn default() -> Self {
         Self {
             enabled: AtomicBool::new(true),
-            inquire_disabled: AtomicBool::new(false),
             stdout: Mutex::new(Box::new(std::io::stdout())),
             stderr: Mutex::new(Box::new(std::io::stderr())),
         }
-    }
-}
-
-impl StdioWriter {
-    pub(crate) fn disable_by_inquire(&self) {
-        self.inquire_disabled
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-
-    pub(crate) fn reenable_by_inquire(&self) {
-        self.inquire_disabled
-            .store(false, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -77,11 +63,7 @@ impl Creeper {
     }
 
     pub fn is_stdio_enabled(&self) -> bool {
-        if self
-            .stdio
-            .inquire_disabled
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
+        if self.is_inquire_active() {
             return false;
         }
 

@@ -1,32 +1,48 @@
 mod guard;
 mod prompt;
 
-use std::{fmt::Display, marker::PhantomData, str::FromStr};
+use std::{fmt::Display, marker::PhantomData, str::FromStr, sync::atomic::AtomicBool};
 
 use inquire::validator::{StringValidator, Validation};
 use tokio::sync::Mutex;
 use tracing::Metadata;
 use tracing_subscriber::filter::{FilterFn, filter_fn};
 
-struct InquireManagerInner {
-    start_hooks: Vec<Box<dyn FnMut() + Send>>,
-    end_hooks: Vec<Box<dyn FnMut() + Send>>,
+use crate::Creeper;
+
+struct Hooks {
+    start: Vec<Box<dyn FnMut() + Send>>,
+    end: Vec<Box<dyn FnMut() + Send>>,
+}
+
+impl Hooks {
+    pub fn new() -> Self {
+        Self {
+            start: vec![],
+            end: vec![],
+        }
+    }
 }
 
 pub struct InquireManager {
-    inner: Mutex<InquireManagerInner>,
+    active: AtomicBool,
+    hooks: Mutex<Hooks>,
 }
 
 impl InquireManager {
     pub fn new() -> Self {
-        let inner = InquireManagerInner {
-            start_hooks: vec![],
-            end_hooks: vec![],
-        };
-
         Self {
-            inner: Mutex::new(inner),
+            active: AtomicBool::new(false),
+            hooks: Mutex::new(Hooks::new()),
         }
+    }
+}
+
+impl Creeper {
+    pub fn is_inquire_active(&self) -> bool {
+        self.inquire
+            .active
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 }
 

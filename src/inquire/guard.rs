@@ -6,79 +6,67 @@ use tracing_subscriber::reload::Handle;
 
 use crate::{
     Creeper,
-    inquire::{Filter, InquireManagerInner, make_filter},
+    inquire::{Filter, Hooks, make_filter},
 };
 
 impl Creeper {
     pub async fn before_inquire(&self, hook: impl FnMut() + Send + 'static) {
-        self.inquire
-            .inner
-            .lock()
-            .await
-            .start_hooks
-            .push(Box::new(hook));
+        self.inquire.hooks.lock().await.start.push(Box::new(hook));
     }
 
     pub fn blocking_before_inquire(&self, hook: impl FnMut() + Send + 'static) {
         self.inquire
-            .inner
+            .hooks
             .blocking_lock()
-            .start_hooks
+            .start
             .push(Box::new(hook));
     }
 
     pub async fn after_inquire(&self, hook: impl FnMut() + Send + 'static) {
-        self.inquire
-            .inner
-            .lock()
-            .await
-            .end_hooks
-            .push(Box::new(hook));
+        self.inquire.hooks.lock().await.end.push(Box::new(hook));
     }
 
     pub fn blocking_after_inquire(&self, hook: impl FnMut() + Send + 'static) {
-        self.inquire
-            .inner
-            .blocking_lock()
-            .end_hooks
-            .push(Box::new(hook));
+        self.inquire.hooks.blocking_lock().end.push(Box::new(hook));
     }
 
     pub async fn inquire(&self) -> InquireGuard<'_> {
-        let inner = self.inquire.inner.lock().await;
+        self.inquire
+            .active
+            .store(true, std::sync::atomic::Ordering::SeqCst);
 
-        self.stdio.disable_by_inquire();
+        let hooks = self.inquire.hooks.lock().await;
 
         InquireGuard {
             lib: self.clone(),
-            inner,
+            hooks,
         }
     }
 
     pub async fn inquire_filter<S: 'static>(&self, handle: Handle<Filter, S>) {
-        let mut inner = self.inquire.inner.lock().await;
+        let mut hooks = self.inquire.hooks.lock().await;
 
         let h = handle.clone();
-        inner.start_hooks.push(Box::new(move || {
+        hooks.start.push(Box::new(move || {
             let _ = h.reload(make_filter(|_| false));
         }));
 
         let h = handle.clone();
-        inner.end_hooks.push(Box::new(move || {
+        hooks.end.push(Box::new(move || {
             let _ = h.reload(make_filter(|_| true));
         }));
     }
 
     pub fn blocking_inquire_filter<S: 'static>(&self, handle: Handle<Filter, S>) {
-        let mut inner = self.inquire.inner.blocking_lock();
+        let mut hooks = self.inquire.hooks.blocking_lock();
 
         let h = handle.clone();
-        inner.start_hooks.push(Box::new(move || {
+        hooks.start.push(Box::new(move || {
             let _ = h.reload(make_filter(|_| false));
         }));
 
         let h = handle.clone();
-        inner.end_hooks.push(Box::new(move || {
+        hooks.end.push(Box::new(move || {
             let _ = h.reload(make_filter(|_| true));
         }));
     }
@@ -87,16 +75,19 @@ impl Creeper {
 #[must_use = "The RAII guard must be held during inquire operation."]
 pub struct InquireGuard<'a> {
     lib: Creeper,
-    inner: MutexGuard<'a, InquireManagerInner>,
+    hooks: MutexGuard<'a, Hooks>,
 }
 
 impl<'a> Drop for InquireGuard<'a> {
     fn drop(&mut self) {
-        for hook in self.inner.end_hooks.iter_mut() {
+        self.lib
+            .inquire
+            .active
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+
+        for hook in self.hooks.end.iter_mut() {
             hook();
         }
-
-        self.lib.stdio.reenable_by_inquire();
     }
 }
 

@@ -185,7 +185,7 @@ impl Creeper {
                     p => todo!("update index builtin package {p}"),
                 }
             })
-            .buffer_unordered(self.config.parallel_download)
+            .buffer_unordered(self.config.parallel_job)
             .try_collect::<()>()
             .await?;
 

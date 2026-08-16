@@ -36,7 +36,7 @@ impl Creeper {
 
                 res
             })
-            .buffer_unordered(self.config.parallel_download)
+            .buffer_unordered(self.config.parallel_job)
             .try_collect::<Vec<_>>()
             .await?
             .len();
@@ -81,7 +81,7 @@ impl Creeper {
 
                 res
             })
-            .buffer_unordered(self.config.parallel_download)
+            .buffer_unordered(self.config.parallel_job)
             .try_collect::<HashMap<_, _>>()
             .await?;
 

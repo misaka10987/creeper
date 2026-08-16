@@ -155,7 +155,7 @@ impl Creeper {
 
         let config = Self::load_config(path).await?;
 
-        let http = Client::default().into_throttle(config.parallel_download);
+        let http = Client::default().into_throttle(config.parallel_http);
 
         let manifest = ManifestClient::new(http.clone());
         let fabric_meta = FabricMetaClient::new(http.clone());
@@ -174,7 +174,7 @@ impl Creeper {
         let neoforge_client = NeoforgeClientManager::new(http.clone());
         let neoforge_server = NeoforgeServerManager::new(http.clone());
 
-        let fabric = FabricManager::new(fabric_meta.clone(), config.parallel_download);
+        let fabric = FabricManager::new(fabric_meta.clone(), config.parallel_job);
         let intermediary = IntermediaryManager::new(fabric_meta.clone());
 
         let artifact = ArtifactManager::new(http.clone(), args.offline).await?;
@@ -275,10 +275,15 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_default_registry")]
     pub registry: Url,
 
-    /// Limit number of parallel downloads.
+    /// Maximum number of parallel jobs.
     #[serde_inline_default(4)]
-    #[serde(skip_serializing_if = "is_default_parallel_download")]
-    pub parallel_download: usize,
+    #[serde(skip_serializing_if = "is_4")]
+    pub parallel_job: usize,
+
+    /// Maximum number of parallel HTTP requests.
+    #[serde_inline_default(8)]
+    #[serde(skip_serializing_if = "is_8")]
+    pub parallel_http: usize,
 
     #[serde_inline_default(false)]
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -289,15 +294,20 @@ fn is_default_registry(registry: &Url) -> bool {
     registry == &"https://creeper-registry.pages.dev/".parse().unwrap()
 }
 
-fn is_default_parallel_download(parallel_download: &usize) -> bool {
-    *parallel_download == 4
+fn is_4(x: &usize) -> bool {
+    *x == 4
+}
+
+fn is_8(x: &usize) -> bool {
+    *x == 8
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             registry: "https://creeper-registry.pages.dev/".parse().unwrap(),
-            parallel_download: 4,
+            parallel_job: 4,
+            parallel_http: 8,
             use_bmclapi: false,
         }
     }

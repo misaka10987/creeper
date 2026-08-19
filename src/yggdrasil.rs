@@ -210,6 +210,7 @@ impl YggdrasilClient {
             .get(self.api().await?.clone())
             .send()
             .await?
+            .error_for_status()?
             .json()
             .await?;
         Ok(res)
@@ -226,7 +227,8 @@ impl YggdrasilClient {
             .await
             .get(self.server.clone())
             .send()
-            .await?;
+            .await?
+            .error_for_status()?;
 
         let mut api = if let Some(ali) = res.headers().get("X-Authlib-Injector-API-Location") {
             let new = self.server.join(ali.to_str()?)?;
@@ -338,6 +340,7 @@ impl YggdrasilClient {
             .json(&req)
             .send()
             .await?
+            .error_for_status()?
             .json::<RefreshResponse>()
             .await?;
 
@@ -437,6 +440,7 @@ impl YggdrasilClient {
             .json(&req)
             .send()
             .await?
+            .error_for_status()?
             .json::<AuthResponse>()
             .await?;
 

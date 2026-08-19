@@ -1,16 +1,15 @@
 use std::{
-    collections::HashMap,
     ops::Deref,
     sync::{Arc, OnceLock},
 };
 
 use anyhow::anyhow;
+use dashmap::{DashMap, mapref::one::Ref};
 use mc_launchermeta::{
     VERSION_MANIFEST_URL, version::Version as McVersion, version_manifest::Manifest,
 };
 use reqwest::Client;
 use semver::Version;
-use tokio::sync::RwLock;
 use tokio_throttle::Throttle;
 use tracing::{info, trace};
 
@@ -21,7 +20,7 @@ pub struct ManifestClientInner {
 
     version_list: OnceLock<Vec<Version>>,
 
-    version: RwLock<HashMap<Version, McVersion>>,
+    version: DashMap<Version, McVersion>,
 }
 
 #[derive(Clone)]
@@ -41,7 +40,7 @@ impl ManifestClient {
             http,
             manifest: OnceLock::new(),
             version_list: OnceLock::new(),
-            version: RwLock::new(HashMap::new()),
+            version: DashMap::new(),
         };
 
         Self(Arc::new(inner))
@@ -89,10 +88,13 @@ impl ManifestClient {
         Ok(self.version_list.get_or_init(|| list))
     }
 
-    pub async fn get_version(&self, version: &Version) -> anyhow::Result<McVersion> {
-        if let Some(mc_version) = self.version.read().await.get(version) {
+    pub async fn get_version(
+        &self,
+        version: &Version,
+    ) -> anyhow::Result<Ref<'_, Version, McVersion>> {
+        if let Some(mc_version) = self.version.get(version) {
             trace!("using cached minecraft `version.json` for {version}");
-            return Ok(mc_version.clone());
+            return Ok(mc_version);
         }
 
         info!("synchronizing minecraft `version.json` for {version}");
@@ -116,10 +118,11 @@ impl ManifestClient {
             .json::<McVersion>()
             .await?;
 
-        self.version
-            .write()
-            .await
-            .insert(version.clone(), mc_version.clone());
+        let mc_version = self
+            .version
+            .entry(version.clone())
+            .insert(mc_version)
+            .downgrade();
 
         Ok(mc_version)
     }

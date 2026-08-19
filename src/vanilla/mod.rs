@@ -112,7 +112,7 @@ impl Creeper {
     pub(crate) async fn vanilla_install(&self, version: &Version) -> anyhow::Result<Install> {
         let mc_version = self.vanilla.manifest.get_version(version).await?;
 
-        let install = self.mc_version_install(mc_version.into()).await?;
+        let install = self.mc_version_install(mc_version.clone().into()).await?;
 
         let install = Install {
             user: true,

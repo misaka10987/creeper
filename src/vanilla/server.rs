@@ -66,6 +66,7 @@ impl Creeper {
         let server = mc_version
             .downloads
             .server
+            .clone()
             .ok_or(anyhow!("missing server in vanilla manifest {version}"))?;
 
         let server = self

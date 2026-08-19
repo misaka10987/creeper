@@ -53,6 +53,10 @@ impl SyncBuiltinIndex for NeoforgeManager {
                 let grp = [
                     (neoforge_client_id(), format!("={v}").parse().unwrap()),
                     (neoforge_server_id(), format!("={v}").parse().unwrap()),
+                    (
+                        "neoforge-provider".parse().unwrap(),
+                        format!("={v}").parse().unwrap(),
+                    ),
                 ];
 
                 let conflict = [(fabric_id(), VersionReq::STAR)].into();

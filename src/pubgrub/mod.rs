@@ -85,21 +85,21 @@ impl Creeper {
     /// Topologically sort the dependencies. Dependencies goes before dependents in the output.
     ///
     /// The behavior is undefined unless the input is a valid solution, i.e. dependencies of each package in the input are also present in the input.
-    pub async fn sort_dependency(
+    pub async fn sort_dependency<'a>(
         &self,
-        dep: HashMap<Id, VersionRev>,
-    ) -> anyhow::Result<Vec<(Id, VersionRev)>> {
+        dep: &'a HashMap<Id, VersionRev>,
+    ) -> anyhow::Result<Vec<(&'a Id, &'a VersionRev)>> {
         let mut graph = DiGraph::<&Id, ()>::new();
         let mut id_to_node = HashMap::new();
         let mut node_to_id = HashMap::new();
 
-        for (package, _) in &dep {
+        for (package, _) in dep {
             let node = graph.add_node(package);
             id_to_node.insert(package, node);
             node_to_id.insert(node, package);
         }
 
-        for (package, version) in &dep {
+        for (package, version) in dep {
             let node = self
                 .get_node(package, &version.version, version.rev)
                 .await?;
@@ -129,12 +129,12 @@ impl Creeper {
             anyhow!("cycle in dependency DAG")
         })?;
 
-        let order = order
+        let sorted = order
             .into_iter()
             .rev()
-            .map(|node| (node_to_id[&node].clone(), dep[node_to_id[&node]].clone()))
+            .map(|node| (node_to_id[&node], &dep[node_to_id[&node]]))
             .collect();
 
-        Ok(order)
+        Ok(sorted)
     }
 }

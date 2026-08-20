@@ -313,7 +313,11 @@ impl Creeper {
     /// Recursively retrieve the installation data for the provided package and its dependencies.
     pub async fn recursive_install(&self, package: Package) -> anyhow::Result<Install> {
         let dep = self.resolve(package.node.dep).await?;
-        let sorted = self.sort_dependency(dep).await?;
+        let sorted = self
+            .sort_dependency(&dep)
+            .await?
+            .into_iter()
+            .map(|(k, v)| (k.clone(), v.clone()));
 
         let install = [self.install_all(sorted).await?, package.install]
             .into_iter()

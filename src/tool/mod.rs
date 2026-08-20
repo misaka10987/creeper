@@ -128,7 +128,7 @@ impl Execute for Resolve {
         .unwrap();
 
         if self.sort {
-            let sorted = lib.sort_dependency(sol).await?;
+            let sorted = lib.sort_dependency(&sol).await?;
             let mut map = IndexMap::new();
 
             for (k, v) in sorted {

@@ -279,10 +279,7 @@ impl Creeper {
     /// Install all specified packages in the input.
     /// Automatically merging them with the latter overriding the former.
     #[instrument(skip(self, packages))]
-    pub async fn install_all(
-        &self,
-        packages: impl IntoIterator<Item = (Id, VersionRev)>,
-    ) -> anyhow::Result<Install> {
+    pub async fn install_all(&self, packages: Vec<(&Id, &VersionRev)>) -> anyhow::Result<Install> {
         let packages = packages.into_iter().collect::<Vec<_>>();
 
         let span = Span::current();
@@ -313,11 +310,7 @@ impl Creeper {
     /// Recursively retrieve the installation data for the provided package and its dependencies.
     pub async fn recursive_install(&self, package: Package) -> anyhow::Result<Install> {
         let dep = self.resolve(package.node.dep).await?;
-        let sorted = self
-            .sort_dependency(&dep)
-            .await?
-            .into_iter()
-            .map(|(k, v)| (k.clone(), v.clone()));
+        let sorted = self.sort_dependency(&dep).await?;
 
         let install = [self.install_all(sorted).await?, package.install]
             .into_iter()

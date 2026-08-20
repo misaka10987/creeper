@@ -17,8 +17,7 @@ mod prelude;
 pub use prelude::*;
 
 pub trait Execute {
-    fn execute(self, lib: &Creeper)
-    -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
+    fn execute(self, lib: &Creeper) -> impl std::future::Future<Output = anyhow::Result<()>>;
 }
 
 /// Minecraft Package Manager.

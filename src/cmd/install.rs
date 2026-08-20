@@ -46,11 +46,7 @@ impl Execute for Install {
             }
         };
 
-        let sorted = lib
-            .sort_dependency(&dep)
-            .await?
-            .into_iter()
-            .map(|(k, v)| (k.clone(), v.clone()));
+        let sorted = lib.sort_dependency(&dep).await?;
 
         let mut install = lib.install_all(sorted).await?;
         install.extend(once(package.install.clone()));

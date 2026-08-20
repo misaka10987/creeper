@@ -1,6 +1,6 @@
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     fmt::{Debug, Display},
     iter::once,
     sync::RwLock,
@@ -14,7 +14,7 @@ use semver::{Version, VersionReq};
 use tracing::{debug, error, trace};
 
 use crate::{
-    Creeper, Id,
+    Creeper, Lock,
     index::VersionRev,
     pack::PackNode,
     pubgrub::pack::{ConflictManager, Either, Package},
@@ -23,23 +23,26 @@ use crate::{
 pub struct Resolve {
     lib: Creeper,
     root: PackNode,
+    prev_lock: Option<Lock>,
     conflict: RwLock<ConflictManager>,
 }
 
-impl Resolve {
-    pub fn new(lib: Creeper, req: BTreeMap<Id, VersionReq>) -> Self {
-        let root = PackNode {
-            dep: req,
-            ..Default::default()
-        };
+impl Creeper {
+    pub(crate) fn new_resolve(&self, root: PackNode, prev_lock: Option<Lock>) -> Resolve {
+        if prev_lock.is_some() {
+            error!("TODO: support using previous lockfile during package resolution");
+        }
 
-        Self {
-            lib,
+        Resolve {
+            lib: self.clone(),
             root,
+            prev_lock,
             conflict: RwLock::new(ConflictManager::new()),
         }
     }
+}
 
+impl Resolve {
     pub async fn prepare(&self) -> anyhow::Result<()> {
         let reachable = self
             .lib

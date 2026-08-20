@@ -38,6 +38,16 @@ pub struct PackNode {
     pub either_dep: Vec<BTreeMap<Id, VersionReq>>,
 }
 
+impl From<BTreeMap<Id, VersionReq>> for PackNode {
+    fn from(value: BTreeMap<Id, VersionReq>) -> Self {
+        Self {
+            dep: value,
+            conflict: BTreeMap::new(),
+            either_dep: vec![],
+        }
+    }
+}
+
 impl PackNode {
     pub fn neighbours(self) -> HashSet<Id> {
         self.dep
@@ -59,6 +69,17 @@ impl PackNode {
             .collect();
 
         Some(Conflict(map))
+    }
+
+    pub fn degree(&self) -> usize {
+        let ids = self
+            .dep
+            .keys()
+            .chain(self.conflict.keys())
+            .chain(self.either_dep.iter().flat_map(|grp| grp.keys()))
+            .collect::<HashSet<_>>();
+
+        ids.len()
     }
 }
 

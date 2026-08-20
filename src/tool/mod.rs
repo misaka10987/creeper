@@ -112,7 +112,7 @@ impl Execute for Resolve {
 
         lib.update().await?;
 
-        let sol = match lib.resolve(req).await {
+        let sol = match lib.resolve(req.into()).await {
             Ok(x) => x,
             Err(e) => {
                 fatal!("dependency resolution failed: {}", e);

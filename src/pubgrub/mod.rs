@@ -2,30 +2,23 @@ mod pack;
 mod prelude;
 mod resolve;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use anyhow::anyhow;
 use creeper_pubgrub::{DefaultStringReporter, Reporter};
 use petgraph::{algo::toposort, graph::DiGraph};
-use semver::{Version, VersionReq};
+use semver::Version;
 use tokio::task::spawn_blocking;
 use tracing::{error, info, instrument};
 
-use crate::{
-    Creeper, Id,
-    index::VersionRev,
-    pubgrub::{pack::Package, resolve::Resolve},
-};
+use crate::{Creeper, Id, index::VersionRev, pack::PackNode, pubgrub::pack::Package};
 
 pub use prelude::*;
 
 impl Creeper {
-    #[instrument(skip(self, req), fields(req = req.len()))]
-    pub async fn resolve(
-        &self,
-        req: BTreeMap<Id, VersionReq>,
-    ) -> anyhow::Result<HashMap<Id, VersionRev>> {
-        let resolve = Resolve::new(self.clone(), req);
+    #[instrument(skip(self, root), fields(req = root.degree()))]
+    pub async fn resolve(&self, root: PackNode) -> anyhow::Result<HashMap<Id, VersionRev>> {
+        let resolve = self.new_resolve(root, None);
 
         resolve.prepare().await?;
 

@@ -34,7 +34,7 @@ impl Execute for Install {
                 info!("ignoring package lock file");
 
                 lib.update().await?;
-                let sol = lib.resolve(package.node.dep.clone()).await?;
+                let sol = lib.resolve(package.node.clone()).await?;
 
                 let lock = Lock {
                     registry: lib.config.registry.clone(),

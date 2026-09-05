@@ -206,11 +206,11 @@ pub fn skip_two<T>(skip: impl Fn(&T) -> bool, it: impl IntoIterator<Item = T>) -
 /// # Format
 ///
 /// 8 characters of hexadecimal blake3 hash of string followed by first 64 characters of base64-url-safe encoded string,
-/// separated by a dash `-`.
+/// separated by a dot `.`.
 pub fn summarize(name: &str) -> String {
     let hash = blake3::hash(name.as_bytes()).to_hex();
 
     let base64 = BASE64_URL_SAFE.encode(name);
 
-    format!("{}-{}", &hash[..8], &base64[..64.min(base64.len())])
+    format!("{}.{}", &hash[..8], &base64[..64.min(base64.len())])
 }

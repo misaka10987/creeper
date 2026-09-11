@@ -10,14 +10,11 @@ use anyhow::{anyhow, bail};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, SqlitePool, prelude::FromRow, sqlite::SqliteConnectOptions};
-use tokio::fs::{File, copy, create_dir_all, metadata, try_exists};
-use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::fs::{copy, create_dir_all, metadata, try_exists};
 use tokio_throttle::Throttle;
-use tracing::{Span, debug, info, instrument, trace};
-use tracing_indicatif::span_ext::IndicatifSpanExt;
+use tracing::{debug, info, instrument, trace};
 
 use crate::path::{creeper_cache_dir, creeper_data_dir};
-use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
 use crate::singleflight::SingleFlight;
 use crate::util::{mv, set_readonly, summarize};
 use crate::{
@@ -241,29 +238,8 @@ impl ArtifactManager {
         trace!("download caching to {cache:?}");
         create_dir_all(cache.parent().unwrap()).await?;
 
-        let mut writer = BufWriter::new(File::create(&cache).await?);
-
-        let mut res = self
-            .http
-            .get()
-            .await
-            .get(src)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        let span = Span::current();
-
-        span.pb_set_message(&art.name);
-        span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
-        span.pb_set_length(art.len);
-
-        while let Some(chunk) = res.chunk().await? {
-            writer.write_all(&chunk).await?;
-            span.pb_inc(chunk.len() as u64);
-        }
-
-        writer.shutdown().await?;
+        self.download_file(&art.name, Some(art.len), src, &cache)
+            .await?;
 
         info!("download finished");
 

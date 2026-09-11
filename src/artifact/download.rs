@@ -1,4 +1,7 @@
+use std::path::Path;
+
 use anyhow::{bail, ensure};
+use reqwest::IntoUrl;
 use tokio::{
     fs::{File, create_dir_all, metadata, remove_file, try_exists},
     io::{AsyncWriteExt, BufWriter},
@@ -55,6 +58,51 @@ impl ArtifactManager {
         Ok(None)
     }
 
+    /// Download a file from the supplied URL and save it to the specified path.
+    ///
+    /// Low-level function. No single-flight, checksum verification, resumable download or any artifact database operation.
+    pub(super) async fn download_file(
+        &self,
+        name: &str,
+        len: Option<u64>,
+        src: impl IntoUrl,
+        dst: impl AsRef<Path>,
+    ) -> anyhow::Result<()> {
+        let dst = dst.as_ref();
+
+        if let Some(parent) = dst.parent() {
+            create_dir_all(parent).await?;
+        }
+
+        let file = File::create(dst).await?;
+
+        let mut writer = BufWriter::new(file);
+
+        let mut res = self
+            .http
+            .get()
+            .await
+            .get(src)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let span = Span::current();
+
+        span.pb_set_message(name);
+        span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
+        span.pb_set_length(len.or(res.content_length()).unwrap_or(0));
+
+        while let Some(chunk) = res.chunk().await? {
+            writer.write_all(&chunk).await?;
+            span.pb_inc(chunk.len() as u64);
+        }
+
+        writer.shutdown().await?;
+
+        Ok(())
+    }
+
     /// See [`Creeper::download`].
     #[instrument(skip(self, name, len, checksum))]
     pub(super) async fn download(
@@ -100,29 +148,7 @@ impl ArtifactManager {
             remove_file(&cache).await?;
         }
 
-        let mut writer = BufWriter::new(File::create(&cache).await?);
-
-        let mut res = self
-            .http
-            .get()
-            .await
-            .get(src)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        let span = Span::current();
-
-        span.pb_set_message(&name);
-        span.pb_set_style(&PROGRESS_STYLE_DOWNLOAD);
-        span.pb_set_length(len.or(res.content_length()).unwrap_or(0));
-
-        while let Some(chunk) = res.chunk().await? {
-            writer.write_all(&chunk).await?;
-            span.pb_inc(chunk.len() as u64);
-        }
-
-        writer.shutdown().await?;
+        self.download_file(&name, len, src, &cache).await?;
 
         info!("download finished");
 

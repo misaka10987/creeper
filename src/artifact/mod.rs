@@ -18,7 +18,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::path::{creeper_cache_dir, creeper_data_dir};
 use crate::pbar::PROGRESS_STYLE_DOWNLOAD;
-use crate::single::SingleFlight;
+use crate::singleflight::SingleFlight;
 use crate::util::{mv, set_readonly, summarize};
 use crate::{
     Checksum, Creeper,

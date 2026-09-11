@@ -3,7 +3,7 @@ use tokio::{
     fs::{File, create_dir_all, metadata, remove_file, try_exists},
     io::{AsyncWriteExt, BufWriter},
 };
-use tracing::{Span, debug, info, instrument, trace};
+use tracing::{Span, debug, info, instrument, trace, warn};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
@@ -164,6 +164,9 @@ impl ArtifactManager {
 
         if !self.has_storage(&art.blake3).await? {
             mv(&cache, &path).await?;
+        } else {
+            warn!("unnessary download detected");
+            remove_file(&cache).await?;
         }
 
         drop(single_flight);

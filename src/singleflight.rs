@@ -55,17 +55,27 @@ impl SingleFlight {
         }
     }
 
+    // #[cfg_attr(debug_assertions, instrument(skip(self)))]
     pub fn queue(&self, key: String) -> SingleFlightQueue<'_> {
-        let entry = self
-            .map
-            .entry(key)
-            .or_insert_with(SingleFlightLock::new)
-            .downgrade();
+        let entry = self.map.entry(key.clone());
 
-        let (ticket, recv) = entry.value().queue();
+        let (ticket, recv) = match entry {
+            dashmap::Entry::Occupied(entry) => entry.get().queue(),
+            dashmap::Entry::Vacant(entry) => {
+                let lock = SingleFlightLock::new();
+
+                let queue = lock.queue();
+
+                lock.next();
+
+                entry.insert(lock);
+
+                queue
+            }
+        };
 
         SingleFlightQueue {
-            key: entry.key().clone(),
+            key,
             ticket,
             recv,
             target: self,
@@ -104,6 +114,7 @@ impl<'a> SingleFlightQueue<'a> {
     /// # Panics
     /// Panic if a guard has already been returned in a previous call,
     /// since no possible future call will return a guard and this method may deadlock.
+    // #[cfg_attr(debug_assertions, instrument(skip(self), fields(ticket = self.ticket)))]
     pub async fn advance(&mut self) -> Option<SingleFlightGuard<'a>> {
         if let Some(guard) = self.check() {
             return Some(guard);

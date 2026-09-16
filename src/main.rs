@@ -288,6 +288,10 @@ pub struct Config {
     #[serde_inline_default(false)]
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub use_bmclapi: bool,
+
+    #[serde_inline_default(false)]
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub minecraft_eula: bool,
 }
 
 fn is_default_registry(registry: &Url) -> bool {
@@ -309,6 +313,7 @@ impl Default for Config {
             parallel_job: 4,
             parallel_http: 8,
             use_bmclapi: false,
+            minecraft_eula: false,
         }
     }
 }

@@ -6,11 +6,14 @@ use std::{
 use anyhow::{anyhow, bail, ensure};
 use semver::VersionReq;
 use tokio::{
-    fs::{create_dir_all, read_link, read_to_string, remove_dir_all, try_exists, write},
+    fs::{
+        create_dir_all, read_link, read_to_string, remove_dir_all, remove_file, try_exists, write,
+    },
     process::Command,
 };
+use tracing::info;
 
-use crate::{Artifact, AssetIndex, Creeper, Install, java::Java, symlink_auto};
+use crate::{Artifact, AssetIndex, Creeper, Install, java::Java, symlink_auto, util::set_readonly};
 
 impl Creeper {
     async fn decide_java(&self, req: &VersionReq) -> anyhow::Result<Java> {
@@ -202,7 +205,43 @@ impl Creeper {
         )
         .await?;
 
+        self.prepare_eula().await?;
+
         Ok(cmd)
+    }
+
+    async fn prepare_eula(&self) -> anyhow::Result<()> {
+        if !self.config.minecraft_eula {
+            return Ok(());
+        }
+
+        info!("accepted Minecraft EULA in configuration");
+
+        const TEXT: &str = "eula=true";
+
+        let eula_file = self.game_env_dir().await?.join("minecraft-eula");
+
+        if try_exists(&eula_file).await? {
+            let content = read_to_string(&eula_file).await?;
+
+            if content.trim() != TEXT {
+                remove_file(&eula_file).await?;
+
+                write(&eula_file, TEXT).await?;
+            }
+        } else {
+            write(&eula_file, TEXT).await?;
+        }
+
+        set_readonly(&eula_file).await?;
+
+        try_symlink(
+            PathBuf::from(".").join(".creeper").join("minecraft-eula"),
+            self.game_dir().await?.join("eula.txt"),
+        )
+        .await?;
+
+        Ok(())
     }
 
     async fn retrieve_ordered(
@@ -251,6 +290,8 @@ async fn try_symlink(original: impl AsRef<Path>, link: impl AsRef<Path>) -> anyh
                 link.display()
             );
         }
+
+        return Ok(());
     } else {
         symlink_auto(original, link).await?;
     }

@@ -87,7 +87,7 @@ impl Execute for SubCommand {
             SubCommand::Login(login) => lib.execute(login).await,
             SubCommand::Init(init) => lib.execute(init).await,
             SubCommand::Add(add) => lib.execute(add).await,
-            SubCommand::Dev(_dev) => todo!(),
+            SubCommand::Dev(dev) => lib.execute(dev).await,
             SubCommand::Complete(complete) => lib.execute(complete).await,
         }
     }

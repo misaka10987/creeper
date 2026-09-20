@@ -196,13 +196,20 @@ impl ArtifactManager {
         }
     }
 
+    async fn skip_retrieval(&self, art: &Artifact) -> anyhow::Result<Option<PathBuf>> {
+        if self.has_storage(&art.blake3).await? {
+            self.add_or_update(art.clone()).await?;
+
+            return Ok(Some(art.path()?));
+        }
+
+        Ok(None)
+    }
+
     /// See [`Creeper::retrieve_artifact`].
     #[instrument(skip(self, art), fields(artifact = &art.name))]
     async fn retrieve(&self, art: &Artifact) -> anyhow::Result<PathBuf> {
-        let path = art.path()?;
-
-        if self.has_storage(&art.blake3).await? {
-            self.add_or_update(art.clone()).await?;
+        if let Some(path) = self.skip_retrieval(art).await? {
             return Ok(path);
         }
 
@@ -220,8 +227,7 @@ impl ArtifactManager {
         let single_flight = loop {
             let advance = queue.advance().await;
 
-            if self.has_storage(&art.blake3).await? {
-                self.add_or_update(art.clone()).await?;
+            if let Some(path) = self.skip_retrieval(art).await? {
                 return Ok(path);
             }
 
@@ -250,6 +256,8 @@ impl ArtifactManager {
         }
 
         self.add_or_update(art.clone()).await?;
+
+        let path = art.path()?;
 
         mv(&cache, &path).await?;
 

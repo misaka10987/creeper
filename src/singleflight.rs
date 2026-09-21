@@ -146,6 +146,12 @@ pub struct SingleFlightGuard<'a> {
     target: &'a SingleFlight,
 }
 
+impl<'a> SingleFlightGuard<'a> {
+    pub fn release(self) {
+        trace!("lock for {} released", self.key);
+    }
+}
+
 impl<'a> Deref for SingleFlightGuard<'a> {
     type Target = String;
 

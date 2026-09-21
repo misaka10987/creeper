@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{bail, ensure};
+use bytesize::ByteSize;
 use reqwest::IntoUrl;
 use tokio::{
     fs::{File, create_dir_all, metadata, remove_file, try_exists},
@@ -68,7 +69,16 @@ impl ArtifactManager {
         src: impl IntoUrl,
         dst: impl AsRef<Path>,
     ) -> anyhow::Result<()> {
+        let src = src.into_url()?;
         let dst = dst.as_ref();
+
+        let size = if let Some(size) = len {
+            ByteSize::b(size).to_string()
+        } else {
+            "(unknown size)".into()
+        };
+
+        debug!("downloading {} from {src} to {}", size, dst.display());
 
         if let Some(parent) = dst.parent() {
             create_dir_all(parent).await?;
@@ -121,6 +131,8 @@ impl ArtifactManager {
         let mut queue = self.single_flight.queue(src);
 
         let single_flight = loop {
+            trace!("waiting for single-flight lock");
+
             let advance = queue.advance().await;
 
             if let Some(art) = self.skip_download(checksums.clone()).await? {
@@ -144,7 +156,7 @@ impl ArtifactManager {
         create_dir_all(cache.parent().unwrap()).await?;
 
         if try_exists(&cache).await? {
-            // TODO: continue download if the file is incomplete
+            warn!("TODO: continue download if incomplete instead of removing partial content");
             remove_file(&cache).await?;
         }
 
@@ -195,7 +207,7 @@ impl ArtifactManager {
             remove_file(&cache).await?;
         }
 
-        drop(single_flight);
+        single_flight.release();
 
         Ok(art)
     }

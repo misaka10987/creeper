@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use anyhow::anyhow;
-use async_zip::base::read::seek::ZipFileReader;
+
+use async_zip::tokio::read::seek::ZipFileReader;
 use tokio::{
     fs::{File, create_dir_all},
     io::{BufReader, copy},

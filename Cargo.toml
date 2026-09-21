@@ -27,7 +27,7 @@ tokio = { version = "1.52.3", features = [
     "process",
 ] }
 mc-launchermeta = "0.1.1"
-dirs = "6.0.0"
+dirs = "7.0.0"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 serde_json = "1.0.150"
@@ -48,7 +48,7 @@ inquire = { version = "0.9.4", features = ["editor"] }
 base64 = "0.22.1"
 petgraph = "0.8.3"
 indexmap = { version = "2.14.0", features = ["serde"] }
-async_zip = { version = "0.0.18", features = ["full"] }
+async_zip = { version = "0.0.19", features = ["full"] }
 strfmt = "0.2.5"
 tokio-util = { version = "0.7.18", features = ["compat"] }
 futures = "0.3.32"

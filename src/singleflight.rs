@@ -2,6 +2,7 @@ use std::{ops::Deref, sync::atomic::AtomicU64};
 
 use dashmap::DashMap;
 use tokio::sync::watch;
+use tracing::{debug, trace};
 
 struct SingleFlightLock {
     curr: AtomicU64,
@@ -13,12 +14,16 @@ impl SingleFlightLock {
     pub fn next(&self) {
         let prev = self.curr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
+        let new = prev + 1;
+
         self.send.send_modify(|x| {
             if *x != prev {
-                panic!("single-flight internal inconsistency: current number is {} but previously sent number is {}", prev + 1, *x);
+                panic!("single-flight internal inconsistency: current number is {} but previously sent number is {}", new, *x);
             }
 
-            *x = prev + 1
+            trace!("single-flight queue advancing to {new}");
+
+            *x = new
         });
     }
 
@@ -62,6 +67,8 @@ impl SingleFlight {
         let (ticket, recv) = match entry {
             dashmap::Entry::Occupied(entry) => entry.get().queue(),
             dashmap::Entry::Vacant(entry) => {
+                debug!("begin queue for {key}");
+
                 let lock = SingleFlightLock::new();
 
                 let queue = lock.queue();
@@ -79,6 +86,7 @@ impl SingleFlight {
             ticket,
             recv,
             target: self,
+            completed: false,
         }
     }
 }
@@ -88,6 +96,7 @@ pub struct SingleFlightQueue<'a> {
     ticket: u64,
     recv: watch::Receiver<u64>,
     target: &'a SingleFlight,
+    completed: bool,
 }
 
 impl<'a> SingleFlightQueue<'a> {
@@ -96,12 +105,14 @@ impl<'a> SingleFlightQueue<'a> {
 
         if curr > self.ticket {
             panic!(
-                "single-flight missed queue position {} and advanced to {curr}",
+                "missed position {} and queue advanced to {curr}",
                 self.ticket
             )
         }
 
         if curr == self.ticket {
+            self.completed = true;
+
             return Some(SingleFlightGuard {
                 key: self.key.clone(),
                 target: self.target,
@@ -116,6 +127,10 @@ impl<'a> SingleFlightQueue<'a> {
     /// since no possible future call will return a guard and this method may deadlock.
     // #[cfg_attr(debug_assertions, instrument(skip(self), fields(ticket = self.ticket)))]
     pub async fn advance(&mut self) -> Option<SingleFlightGuard<'a>> {
+        if self.completed {
+            panic!("advance() called after waiting completed");
+        }
+
         if let Some(guard) = self.check() {
             return Some(guard);
         }
@@ -147,6 +162,8 @@ impl<'a> Drop for SingleFlightGuard<'a> {
             .remove_if(&self.key, |_k, v| v.is_done())
             .is_some()
         {
+            debug!("queue for {} completed and cleaned up", self.key);
+
             return;
         }
 

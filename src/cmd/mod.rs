@@ -38,6 +38,14 @@ pub struct Command {
     #[clap(flatten)]
     pub log_level: LogLevel,
 
+    /// Enable the tokio-console debugger support.
+    ///
+    /// Note that logging behavior is undefined when this option is enabled.
+    ///
+    /// See https://github.com/tokio-rs/console for usage instructions.
+    #[arg(long, default_value_t = false)]
+    pub tokio_console: bool,
+
     #[command(subcommand)]
     pub cmd: SubCommand,
 }

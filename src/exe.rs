@@ -14,6 +14,7 @@ pub fn execute() -> anyhow::Result<()> {
         cmd,
         log,
         log_level,
+        tokio_console,
     } = Command::parse();
 
     let log_level = log_level.determine()?;
@@ -24,24 +25,32 @@ pub fn execute() -> anyhow::Result<()> {
 
     let (filter, handle) = reload::Layer::new(make_filter(|_| true));
 
-    tracing_subscriber::registry()
-        .with(EnvFilter::new(log))
-        .with(LevelFilter::from_level(log_level))
-        .with(
-            fmt::layer()
-                .with_writer(layer.get_stderr_writer())
-                .with_filter(filter),
-        )
-        .with(layer)
-        .init();
+    if tokio_console {
+        eprintln!("tokio-console enabled.");
+
+        console_subscriber::init();
+    } else {
+        tracing_subscriber::registry()
+            .with(EnvFilter::new(log))
+            .with(LevelFilter::from_level(log_level))
+            .with(
+                fmt::layer()
+                    .with_writer(layer.get_stderr_writer())
+                    .with_filter(filter),
+            )
+            .with(layer)
+            .init();
+    }
 
     let run = runtime::Builder::new_multi_thread().enable_all().build()?;
 
     let creeper = run.block_on(Creeper::new(args))?;
 
-    creeper.set_stdout(stdout);
-    creeper.set_stderr(stderr);
-    creeper.blocking_inquire_filter(handle);
+    if !tokio_console {
+        creeper.set_stdout(stdout);
+        creeper.set_stderr(stderr);
+        creeper.blocking_inquire_filter(handle);
+    }
 
     run.block_on(creeper.execute(cmd))?;
 

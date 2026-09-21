@@ -261,7 +261,7 @@ impl ArtifactManager {
 
         mv(&cache, &path).await?;
 
-        drop(single_flight);
+        single_flight.release();
 
         Ok(path)
     }

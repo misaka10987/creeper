@@ -2,7 +2,7 @@ use std::path::Path;
 
 use anyhow::{bail, ensure};
 use bytesize::ByteSize;
-use reqwest::IntoUrl;
+use reqwest::{IntoUrl, header::CONTENT_TYPE};
 use tokio::{
     fs::{File, create_dir_all, metadata, remove_file, try_exists},
     io::{AsyncWriteExt, BufWriter},
@@ -26,9 +26,11 @@ impl ArtifactManager {
     async fn skip_download(&self, checksum: Vec<Checksum>) -> anyhow::Result<Option<Artifact>> {
         for sum in &checksum {
             if let Some(mut art) = self.get_checksum(sum).await? {
-                debug!("fingerprint found in local storage");
+                debug!("fingerprint {sum} found in local storage");
 
                 let path = self.retrieve(&art).await?;
+
+                trace!("checking retrieved artifact at {}", path.display());
 
                 let func = sum.function;
 
@@ -51,6 +53,8 @@ impl ArtifactManager {
                 }
 
                 self.add_or_update(art.clone()).await?;
+
+                trace!("download can be skipped");
 
                 return Ok(Some(art));
             }
@@ -88,14 +92,19 @@ impl ArtifactManager {
 
         let mut writer = BufWriter::new(file);
 
-        let mut res = self
-            .http
-            .get()
-            .await
-            .get(src)
-            .send()
-            .await?
-            .error_for_status()?;
+        let http = self.http.get().await;
+
+        trace!("sending HTTP request");
+
+        let mut res = http.get(src).send().await?.error_for_status()?;
+
+        let content_type = if let Some(header) = res.headers().get(CONTENT_TYPE) {
+            format!("Content-Type: {}", header.to_str()?)
+        } else {
+            "unknown Content-Type".into()
+        };
+
+        trace!("received HTTP response with {content_type}");
 
         let span = Span::current();
 
@@ -125,10 +134,12 @@ impl ArtifactManager {
         let checksums = checksum.into_iter().collect::<Vec<_>>();
 
         if let Some(art) = self.skip_download(checksums.clone()).await? {
+            debug!("skipping download from {src}");
+
             return Ok(art);
         }
 
-        let mut queue = self.single_flight.queue(src);
+        let mut queue = self.single_flight.queue(src.clone());
 
         let single_flight = loop {
             trace!("waiting for single-flight lock");
@@ -136,6 +147,8 @@ impl ArtifactManager {
             let advance = queue.advance().await;
 
             if let Some(art) = self.skip_download(checksums.clone()).await? {
+                debug!("skipping download from {src}");
+
                 return Ok(art);
             }
 

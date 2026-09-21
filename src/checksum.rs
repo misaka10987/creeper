@@ -10,7 +10,7 @@ use anyhow::anyhow;
 use const_hex::ToHexExt;
 use ring::digest::{Algorithm, Context, SHA1_FOR_LEGACY_USE_ONLY, SHA256};
 use tokio::task::spawn_blocking;
-use tracing::debug;
+use tracing::{debug, trace};
 
 pub async fn blake3(file: impl AsRef<Path>) -> anyhow::Result<String> {
     fn calc(file: impl AsRef<Path>) -> anyhow::Result<String> {
@@ -21,16 +21,25 @@ pub async fn blake3(file: impl AsRef<Path>) -> anyhow::Result<String> {
         Ok(hash)
     }
     let file = file.as_ref().to_owned();
+
+    trace!("calculating blake3 for {}", file.display());
+
     spawn_blocking(|| calc(file)).await?
 }
 
 pub async fn sha1(file: impl AsRef<Path>) -> anyhow::Result<String> {
     let file = file.as_ref().to_owned();
+
+    trace!("calculating sha1 for {}", file.display());
+
     spawn_blocking(|| ring(file, &SHA1_FOR_LEGACY_USE_ONLY)).await?
 }
 
 pub async fn sha256(file: impl AsRef<Path>) -> anyhow::Result<String> {
     let file = file.as_ref().to_owned();
+
+    trace!("calculating sha256 for {}", file.display());
+
     spawn_blocking(|| ring(file, &SHA256)).await?
 }
 
@@ -78,6 +87,10 @@ impl Checksum {
     }
 
     pub async fn check(&self, file: impl AsRef<Path>) -> anyhow::Result<bool> {
+        let file = file.as_ref();
+
+        trace!("checking {self} for {}", file.display());
+
         let hash = self.function.calc(file).await?;
         Ok(self.hex_hash == hash)
     }

@@ -62,6 +62,8 @@ impl SingleFlight {
 
     // #[cfg_attr(debug_assertions, instrument(skip(self)))]
     pub fn queue(&self, key: String) -> SingleFlightQueue<'_> {
+        trace!("lock requested for {key}");
+
         let entry = self.map.entry(key.clone());
 
         let (ticket, recv) = match entry {
@@ -113,6 +115,8 @@ impl<'a> SingleFlightQueue<'a> {
         if curr == self.ticket {
             self.completed = true;
 
+            debug!("received ticket {} for {}", self.ticket, self.key);
+
             return Some(SingleFlightGuard {
                 key: self.key.clone(),
                 target: self.target,
@@ -134,6 +138,8 @@ impl<'a> SingleFlightQueue<'a> {
         if let Some(guard) = self.check() {
             return Some(guard);
         }
+
+        trace!("waiting for queue update");
 
         self.recv.changed().await.unwrap();
 

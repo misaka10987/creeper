@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use anyhow::bail;
 use clap::Parser;
 use tracing::Level;
 
@@ -34,20 +35,60 @@ pub struct Command {
     #[arg(long, default_value = "trace,creeper_pubgrub=warn")]
     pub log: String,
 
-    /// Set the log filtering level.
-    #[arg(name = "loglevel", long, default_value_t = Level::INFO)]
-    pub log_level: Level,
-
-    /// Use verbose output, equivalent to overriding log level to DEBUG.
-    #[arg(short, long)]
-    pub verbose: bool,
-
-    /// Use noisy output, equivalent to overriding log level to TRACE.
-    #[arg(short, long)]
-    pub noisy: bool,
+    #[clap(flatten)]
+    pub log_level: LogLevel,
 
     #[command(subcommand)]
     pub cmd: SubCommand,
+}
+
+#[derive(Clone, Parser)]
+pub struct LogLevel {
+    /// Set the log filtering level.
+    #[arg(name = "loglevel", long, default_value_t = Level::INFO)]
+    log_level: Level,
+
+    /// Use verbose output, equivalent to overriding log level to DEBUG.
+    #[arg(short, long)]
+    verbose: bool,
+
+    /// Use noisy output, equivalent to overriding log level to TRACE.
+    #[arg(short, long)]
+    noisy: bool,
+
+    /// Use quiet output, equivalent to overriding log level to ERROR.
+    #[arg(short, long)]
+    quiet: bool,
+}
+
+impl LogLevel {
+    pub fn determine(self) -> anyhow::Result<Level> {
+        if [
+            self.log_level != Level::INFO,
+            self.verbose,
+            self.noisy,
+            self.quiet,
+        ]
+        .into_iter()
+        .filter(|x| *x)
+        .count()
+            > 1
+        {
+            bail!("paradoxical log level arguments")
+        }
+
+        let level = if self.noisy {
+            Level::TRACE
+        } else if self.verbose {
+            Level::DEBUG
+        } else if self.quiet {
+            Level::ERROR
+        } else {
+            self.log_level
+        };
+
+        Ok(level)
+    }
 }
 
 #[derive(Clone, Debug, Parser)]
@@ -90,6 +131,12 @@ impl Execute for SubCommand {
             SubCommand::Dev(dev) => lib.execute(dev).await,
             SubCommand::Complete(complete) => lib.execute(complete).await,
         }
+    }
+}
+
+impl Creeper {
+    pub async fn execute(&self, cmd: impl Execute) -> anyhow::Result<()> {
+        cmd.execute(self).await
     }
 }
 

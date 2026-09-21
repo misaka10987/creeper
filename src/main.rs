@@ -40,7 +40,7 @@ use std::{ops::Deref, sync::Arc};
 use stop::fatal;
 use tokio::runtime;
 use tokio_throttle::Throttle;
-use tracing::{Level, info, level_filters::LevelFilter};
+use tracing::{info, level_filters::LevelFilter};
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{
     EnvFilter, Layer, fmt, layer::SubscriberExt, reload, util::SubscriberInitExt,
@@ -48,7 +48,6 @@ use tracing_subscriber::{
 
 use crate::{
     artifact::ArtifactManager,
-    cmd::Execute,
     fabric::{FabricManager, IntermediaryManager},
     game::GameManager,
     index::IndexCache,
@@ -65,6 +64,17 @@ use crate::{
 pub use prelude::*;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Clone)]
+pub struct Creeper(Arc<CreeperInner>);
+
+impl Deref for Creeper {
+    type Target = CreeperInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 pub struct CreeperInner {
     pub args: Args,
@@ -102,22 +112,7 @@ pub struct CreeperInner {
     intermediary: IntermediaryManager,
 }
 
-#[derive(Clone)]
-pub struct Creeper(Arc<CreeperInner>);
-
-impl Deref for Creeper {
-    type Target = CreeperInner;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 impl Creeper {
-    pub async fn execute(&self, cmd: impl Execute) -> anyhow::Result<()> {
-        cmd.execute(self).await
-    }
-
     pub async fn update(&self) -> anyhow::Result<()> {
         if self.args.offline {
             info!("skipping update because offline mode enabled");
@@ -137,17 +132,9 @@ fn main() {
         cmd,
         log,
         log_level,
-        verbose,
-        noisy,
     } = Command::parse();
 
-    let log_level = if noisy {
-        Level::TRACE
-    } else if verbose {
-        Level::DEBUG
-    } else {
-        log_level
-    };
+    let log_level = log_level.determine().unwrap_or_else(fatal!());
 
     let layer = IndicatifLayer::new();
 

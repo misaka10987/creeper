@@ -8,6 +8,7 @@ use crate::cmd::Execute;
 #[derive(Clone, Debug, Parser)]
 pub enum Dev {
     LogTest,
+    NOP,
 }
 
 impl Execute for Dev {
@@ -17,6 +18,7 @@ impl Execute for Dev {
                 log_test();
                 Ok(())
             }
+            Dev::NOP => Ok(()),
         }
     }
 }

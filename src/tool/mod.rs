@@ -16,11 +16,10 @@ use crate::{
     id::{IdVersion, IdVersionReq},
     neoforge::NfVersion,
 };
-use anyhow::bail;
+use anyhow::{Context, bail};
 use clap::Parser;
 use colored::Colorize;
 use indexmap::IndexMap;
-use stop::fatal;
 
 pub use prelude::*;
 
@@ -112,12 +111,10 @@ impl Execute for Resolve {
 
         lib.update().await?;
 
-        let sol = match lib.resolve(req.into()).await {
-            Ok(x) => x,
-            Err(e) => {
-                fatal!("dependency resolution failed: {}", e);
-            }
-        };
+        let sol = lib
+            .resolve(req.into())
+            .await
+            .context("dependency resolution failed")?;
 
         writeln!(
             lib.get_stderr(),

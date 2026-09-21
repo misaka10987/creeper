@@ -5,6 +5,7 @@ mod checksum;
 mod cmd;
 mod config;
 mod dev;
+mod exe;
 mod fabric;
 mod game;
 mod id;
@@ -33,25 +34,20 @@ mod vanilla;
 mod yggdrasil;
 mod zip;
 
-use clap::Parser;
+use colored::Colorize;
 use fabric_meta_api::FabricMetaClient;
 use reqwest::Client;
-use std::{ops::Deref, sync::Arc};
-use stop::fatal;
-use tokio::runtime;
+use std::{ops::Deref, process::exit, sync::Arc};
 use tokio_throttle::Throttle;
-use tracing::{info, level_filters::LevelFilter};
-use tracing_indicatif::IndicatifLayer;
-use tracing_subscriber::{
-    EnvFilter, Layer, fmt, layer::SubscriberExt, reload, util::SubscriberInitExt,
-};
+use tracing::info;
 
 use crate::{
     artifact::ArtifactManager,
+    exe::execute,
     fabric::{FabricManager, IntermediaryManager},
     game::GameManager,
     index::IndexCache,
-    inquire::{InquireManager, make_filter},
+    inquire::InquireManager,
     java::JavaManager,
     mc::{ClientManager, MinecraftManager, ServerManager},
     neoforge::{NeoforgeClientManager, NeoforgeManager, NeoforgeServerManager},
@@ -127,42 +123,11 @@ impl Creeper {
 }
 
 fn main() {
-    let Command {
-        args,
-        cmd,
-        log,
-        log_level,
-    } = Command::parse();
-
-    let log_level = log_level.determine().unwrap_or_else(fatal!());
-
-    let layer = IndicatifLayer::new();
-
-    let (stdout, stderr) = (layer.get_stdout_writer(), layer.get_stderr_writer());
-
-    let (filter, handle) = reload::Layer::new(make_filter(|_| true));
-
-    tracing_subscriber::registry()
-        .with(EnvFilter::new(log))
-        .with(LevelFilter::from_level(log_level))
-        .with(
-            fmt::layer()
-                .with_writer(layer.get_stderr_writer())
-                .with_filter(filter),
-        )
-        .with(layer)
-        .init();
-
-    let run = runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap_or_else(fatal!());
-
-    let creeper = run.block_on(Creeper::new(args)).unwrap_or_else(fatal!());
-
-    creeper.set_stdout(stdout);
-    creeper.set_stderr(stderr);
-    creeper.blocking_inquire_filter(handle);
-
-    run.block_on(creeper.execute(cmd)).unwrap_or_else(fatal!());
+    match execute() {
+        Ok(_) => exit(0),
+        Err(e) => {
+            eprintln!("{} {e}", "fatal:".bold().red());
+            exit(-1)
+        }
+    }
 }

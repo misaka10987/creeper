@@ -148,13 +148,13 @@ impl Creeper {
     }
 }
 
-const CREEPER_TEXT_ART: &str = r#"
-🟩🟩🟩⬜⬜🟩🟩🟩
-🟩🟩🟩🟩🟩🟩🟩⬜
-🟩⬛⬛🟩🟩⬛⬛⬜
-🟩⬛⬛🟩🟩⬛⬛🟩
-🟩🟩🟩⬛⬛⬜🟩🟩
-🟩🟩⬛⬛⬛⬛🟩⬜
-⬜🟩⬛⬛⬛⬛🟩🟩
-🟩🟩⬛🟩🟩⬛🟩🟩
-"#;
+const CREEPER_TEXT_ART: &str = "
+\x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[0m
+\x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[0m
+\x1b[42m  \x1b[40m  \x1b[40m  \x1b[42m  \x1b[42m  \x1b[40m  \x1b[40m  \x1b[42m  \x1b[0m
+\x1b[42m  \x1b[40m  \x1b[40m  \x1b[42m  \x1b[42m  \x1b[40m  \x1b[40m  \x1b[42m  \x1b[0m
+\x1b[42m  \x1b[42m  \x1b[42m  \x1b[40m  \x1b[40m  \x1b[42m  \x1b[42m  \x1b[42m  \x1b[0m
+\x1b[42m  \x1b[42m  \x1b[40m  \x1b[40m  \x1b[40m  \x1b[40m  \x1b[42m  \x1b[42m  \x1b[0m
+\x1b[42m  \x1b[42m  \x1b[40m  \x1b[40m  \x1b[40m  \x1b[40m  \x1b[42m  \x1b[42m  \x1b[0m
+\x1b[42m  \x1b[42m  \x1b[40m  \x1b[42m  \x1b[42m  \x1b[40m  \x1b[42m  \x1b[42m  \x1b[0m
+";

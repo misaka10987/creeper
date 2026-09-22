@@ -1,4 +1,5 @@
 use std::{
+    io::Write,
     iter::{once, repeat_n},
     path::PathBuf,
 };
@@ -204,7 +205,12 @@ impl Creeper {
             .collect::<Vec<_>>();
 
         if users.is_empty() {
-            eprintln!("No user found in config, please create a new user.");
+            writeln!(
+                self.get_stderr(),
+                "No user found in config, please create a new user."
+            )
+            .unwrap();
+
             return self.prompt_new_user().await;
         }
 

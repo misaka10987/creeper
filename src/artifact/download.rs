@@ -17,6 +17,7 @@ use crate::{
     mv,
     path::creeper_cache_dir,
     pbar::PROGRESS_STYLE_DOWNLOAD,
+    singleflight::SingleFlightGuard,
     util::{set_readonly, summarize},
 };
 
@@ -122,6 +123,38 @@ impl ArtifactManager {
         Ok(())
     }
 
+    async fn try_skip_download(
+        &self,
+        src: String,
+        checksum: Vec<Checksum>,
+    ) -> anyhow::Result<Result<Artifact, SingleFlightGuard<'_>>> {
+        if let Some(art) = self.skip_download(checksum.clone()).await? {
+            trace!("found {art} matching fingerprint");
+
+            return Ok(Ok(art));
+        }
+
+        let mut queue = self.single_flight.queue(src);
+
+        let single_flight = loop {
+            let advance = queue.advance().await;
+
+            if let Some(art) = self.skip_download(checksum.clone()).await? {
+                trace!("found {art} matching fingerprint");
+
+                return Ok(Ok(art));
+            }
+
+            if let Some(x) = advance {
+                break x;
+            }
+        };
+
+        trace!("single-flight lock acquired for download");
+
+        Ok(Err(single_flight))
+    }
+
     /// See [`Creeper::download`].
     #[instrument(skip(self, name, len, checksum))]
     pub(super) async fn download(
@@ -133,28 +166,12 @@ impl ArtifactManager {
     ) -> anyhow::Result<Artifact> {
         let checksums = checksum.into_iter().collect::<Vec<_>>();
 
-        if let Some(art) = self.skip_download(checksums.clone()).await? {
-            debug!("skipping download from {src}");
-
-            return Ok(art);
-        }
-
-        let mut queue = self.single_flight.queue(src.clone());
-
-        let single_flight = loop {
-            trace!("waiting for single-flight lock");
-
-            let advance = queue.advance().await;
-
-            if let Some(art) = self.skip_download(checksums.clone()).await? {
-                debug!("skipping download from {src}");
-
+        let single_flight = match self.try_skip_download(src, checksums.clone()).await? {
+            Ok(art) => {
+                debug!("skipped download");
                 return Ok(art);
             }
-
-            if let Some(x) = advance {
-                break x;
-            }
+            Err(x) => x,
         };
 
         let src = &*single_flight;
@@ -179,42 +196,12 @@ impl ArtifactManager {
 
         set_readonly(&cache).await?;
 
-        let b3 = blake3(&cache).await?;
-        let path = Artifact::storage_path(&b3)?;
-
-        let download_len = metadata(&cache).await?.len();
-
-        let len = match len {
-            Some(len) if len != download_len => bail!(
-                "download {} length mismatch, expected {len}",
-                cache.display()
-            ),
-            Some(len) => len,
-            None => download_len,
-        };
-
-        let mut art = Artifact::new(b3, name, Some(src.clone()), len);
-
-        for checksum in checksums {
-            if checksum.function == HashFunc::Blake3 {
-                ensure!(
-                    art.blake3 == checksum.hex_hash,
-                    "blake3 mismatch for downloaded file"
-                );
-                continue;
-            }
-
-            if !checksum.check(&cache).await? {
-                bail!("broken download {}, expected {checksum}", cache.display());
-            }
-
-            art.affix_checksum(checksum);
-        }
+        let art = check_download_file(&cache, name, src.clone(), len, checksums).await?;
 
         self.add_or_update(art.clone()).await?;
 
         if !self.has_storage(&art.blake3).await? {
-            mv(&cache, &path).await?;
+            mv(&cache, art.path()?).await?;
         } else {
             warn!("unnessary download detected");
             remove_file(&cache).await?;
@@ -224,4 +211,47 @@ impl ArtifactManager {
 
         Ok(art)
     }
+}
+
+async fn check_download_file(
+    file: impl AsRef<Path>,
+    name: String,
+    src: String,
+    len: Option<u64>,
+    checksum: Vec<Checksum>,
+) -> anyhow::Result<Artifact> {
+    let file = file.as_ref();
+
+    let b3 = blake3(file).await?;
+
+    let download_len = metadata(file).await?.len();
+
+    let len = match len {
+        Some(len) if len != download_len => bail!(
+            "download {} length mismatch: expected {len}, found {download_len}",
+            file.display()
+        ),
+        Some(len) => len,
+        None => download_len,
+    };
+
+    let mut art = Artifact::new(b3, name, Some(src), len);
+
+    for c in checksum {
+        if c.function == HashFunc::Blake3 {
+            ensure!(
+                art.blake3 == c.hex_hash,
+                "blake3 mismatch for downloaded file"
+            );
+            continue;
+        }
+
+        if !c.check(file).await? {
+            bail!("broken download {}, expected {c}", file.display());
+        }
+
+        art.affix_checksum(c);
+    }
+
+    Ok(art)
 }

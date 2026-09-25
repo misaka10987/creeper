@@ -28,10 +28,6 @@ pub struct Resolve {
 
 impl Creeper {
     pub(crate) fn new_resolve(&self, root: PackNode, prev_lock: Option<Lock>) -> Resolve {
-        if prev_lock.is_some() {
-            error!("TODO: support using previous lockfile during package resolution");
-        }
-
         Resolve {
             lib: self.clone(),
             root,
@@ -150,13 +146,21 @@ impl DependencyProvider for Resolve {
         range: &Self::VS,
     ) -> Result<Option<Self::V>, Self::Err> {
         let select = match package {
-            Package::Normal(id) => self
-                .lib
-                .blocking_get_index(id)?
-                .keys()
-                .filter(|v| range.contains(v))
-                .max()
-                .cloned(),
+            Package::Normal(id) => {
+                if let Some(lock) = &self.prev_lock
+                    && let Some(version) = lock.package.get(id)
+                    && range.contains(version)
+                {
+                    return Ok(Some(version.clone()));
+                }
+
+                self.lib
+                    .blocking_get_index(id)?
+                    .keys()
+                    .filter(|v| range.contains(v))
+                    .max()
+                    .cloned()
+            }
             Package::Root => Some(Version::new(0, 0, 0).into()),
             Package::Either(clause) => clause
                 .versions()

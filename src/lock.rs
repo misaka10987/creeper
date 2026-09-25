@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
-use crate::{Id, index::VersionRev};
+use crate::{Id, VersionRev};
 
 #[serde_as]
 #[derive(Clone, Serialize, Deserialize)]

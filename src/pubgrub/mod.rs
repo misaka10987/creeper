@@ -11,7 +11,7 @@ use semver::Version;
 use tokio::task::spawn_blocking;
 use tracing::{error, info, instrument};
 
-use crate::{Creeper, Id, index::VersionRev, pack::PackNode, pubgrub::pack::Package};
+use crate::{Creeper, Id, VersionRev, pack::PackNode, pubgrub::pack::Package};
 
 pub use prelude::*;
 

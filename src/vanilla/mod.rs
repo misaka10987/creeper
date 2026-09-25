@@ -12,9 +12,9 @@ use std::{
 };
 
 use crate::{
-    Artifact, Checksum, Creeper, Id, Install,
+    Artifact, Checksum, Creeper, Id, Install, VersionRev,
     builtin::{SyncBuiltinIndex, neoforge_server_id, vanilla_id, vanilla_server_id},
-    index::{Index, VersionRev},
+    index::Index,
     mc::ManifestClient,
     pack::PackNode,
 };

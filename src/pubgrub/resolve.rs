@@ -14,8 +14,7 @@ use semver::{Version, VersionReq};
 use tracing::{debug, error, trace};
 
 use crate::{
-    Creeper, Lock,
-    index::VersionRev,
+    Creeper, Lock, VersionRev,
     pack::PackNode,
     pubgrub::pack::{ConflictManager, Either, Package},
 };

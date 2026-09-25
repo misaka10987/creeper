@@ -14,12 +14,12 @@ use tokio_throttle::Throttle;
 use tracing::debug;
 
 use crate::{
-    Artifact, Checksum, Creeper,
+    Artifact, Checksum, Creeper, VersionRev,
     builtin::{
         SyncBuiltinIndex, fabric_id, neoforge_client_id, neoforge_id, neoforge_server_id,
         vanilla_id,
     },
-    index::{Index, VersionRev},
+    index::Index,
     pack::PackNode,
 };
 

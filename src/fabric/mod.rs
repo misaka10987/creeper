@@ -17,9 +17,8 @@ use tracing::{Span, instrument};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
-    Checksum, Creeper, Id, Install,
+    Checksum, Creeper, Id, Install, VersionRev,
     builtin::{SyncBuiltinIndex, fabric_id, intermediary_id, neoforge_id, vanilla_id},
-    index::VersionRev,
     pack::PackNode,
     pbar::PROGRESS_STYLE_DEFAULT,
     util::rebuild_req,

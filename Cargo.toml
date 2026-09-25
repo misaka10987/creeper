@@ -1,6 +1,6 @@
 [package]
 name = "creeper"
-version = "1.0.0-alpha.12"
+version = "1.0.0-alpha.13"
 edition = "2024"
 authors = ["misaka10987 <misaka10987@outlook.com>"]
 description = "Minecraft Package Manager"
@@ -45,7 +45,7 @@ url = { version = "2.5.8", features = ["serde"] }
 creeper-pubgrub = { version = "0.1.0", features = ["experimental-conflict"] }
 creeper-semver-pubgrub = "0.5.0"
 inquire = { version = "0.9.4", features = ["editor"] }
-base64 = "0.22.1"
+base64 = "0.23.1"
 petgraph = "0.8.3"
 indexmap = { version = "2.14.0", features = ["serde"] }
 async_zip = { version = "0.0.19", features = ["full"] }

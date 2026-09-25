@@ -19,10 +19,11 @@ use tokio::{
     fs::{create_dir_all, read_to_string, try_exists, write},
     sync::RwLock,
 };
+use tokio_throttle::Throttle;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::path::creeper_data_dir;
+use crate::{Creeper, path::creeper_data_dir};
 
 const AUTH_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize";
 
@@ -61,9 +62,26 @@ struct Data {
 }
 
 pub struct MicrosoftClient {
+    lib: Creeper,
     http: Client,
     oauth: OauthClient,
     data: RwLock<Data>,
+}
+
+impl Creeper {
+    pub fn new_microsoft_client(&self) -> Throttle<MicrosoftClient> {
+        let oauth = BasicClient::new(ClientId::new(CLIENT_ID.into()))
+            .set_auth_uri(AuthUrl::new(AUTH_URL.into()).unwrap())
+            .set_token_uri(TokenUrl::new(TOKEN_URL.into()).unwrap())
+            .set_redirect_uri(RedirectUrl::new("http://localhost:5555".into()).unwrap());
+
+        self.http.derive(|http| MicrosoftClient {
+            lib: self.clone(),
+            http: http.clone(),
+            oauth,
+            data: RwLock::new(Default::default()),
+        })
+    }
 }
 
 impl MicrosoftClient {
@@ -132,19 +150,6 @@ impl MicrosoftClient {
     //         ..Default::default()
     //     };
     // }
-
-    pub fn new(http: Client) -> Self {
-        let oauth = BasicClient::new(ClientId::new(CLIENT_ID.into()))
-            .set_auth_uri(AuthUrl::new(AUTH_URL.into()).unwrap())
-            .set_token_uri(TokenUrl::new(TOKEN_URL.into()).unwrap())
-            .set_redirect_uri(RedirectUrl::new("http://localhost:5555".into()).unwrap());
-
-        Self {
-            http,
-            oauth,
-            data: RwLock::new(Default::default()),
-        }
-    }
 }
 
 fn calc_expiry(expires_in: u64) -> u64 {

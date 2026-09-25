@@ -1,4 +1,7 @@
-use std::time::{Duration, SystemTime};
+use std::{
+    io::Write,
+    time::{Duration, SystemTime},
+};
 
 use colored::Colorize;
 use oauth2::{
@@ -113,8 +116,7 @@ impl MicrosoftClient {
 
         let redirect = local_redirect_uri::Server::new(5555, csrf.into_secret());
 
-        // TODO: use indicatif stderr writer
-        eprintln!("{} {url}", "Open".bold().cyan());
+        writeln!(self.lib.get_stderr(), "{} {url}", "Open".bold().cyan()).unwrap();
 
         open::that_detached(url.as_str())?;
 

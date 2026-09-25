@@ -15,7 +15,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    Artifact, Checksum, Creeper, Install, YggdrasilClient, install::JavaAgent, ms::MicrosoftClient,
+    Artifact, Checksum, Creeper, Install, YggdrasilClient, install::JavaAgent,
     path::creeper_config_dir, util::TomlFile,
 };
 
@@ -103,7 +103,7 @@ impl Creeper {
     }
 
     pub async fn prompt_new_microsoft_user(&self) -> anyhow::Result<User> {
-        let client = self.http.derive(|http| MicrosoftClient::new(http.clone()));
+        let client = self.new_microsoft_client();
 
         client.get().await.prompt_login().await?;
 
@@ -263,7 +263,8 @@ impl Creeper {
     }
 
     async fn user_install_microsoft(&self, uuid: Uuid) -> anyhow::Result<Install> {
-        let client = self.http.derive(|http| MicrosoftClient::new(http.clone()));
+        let client = self.new_microsoft_client();
+
         client.unwrap().set_uuid(uuid).await;
         client.unwrap().load().await?;
 

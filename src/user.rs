@@ -15,8 +15,8 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    Artifact, Checksum, Creeper, Install, YggdrasilClient, install::JavaAgent,
-    path::creeper_config_dir, util::TomlFile,
+    Artifact, Checksum, Creeper, Install, install::JavaAgent, path::creeper_config_dir,
+    util::TomlFile,
 };
 
 #[derive(Clone, PartialEq, Eq, Display, Serialize, Deserialize)]
@@ -151,7 +151,7 @@ impl Creeper {
             .run(move || Text::new(&msg).prompt())
             .await??;
 
-        let yggdrasil = YggdrasilClient::new(server, account.clone(), self.http.clone())?;
+        let yggdrasil = self.new_yggdrasil_client(server, account.clone())?;
 
         yggdrasil.load_or_prompt_login().await?;
 
@@ -295,7 +295,7 @@ impl Creeper {
         account: String,
         uuid: Uuid,
     ) -> anyhow::Result<Install> {
-        let yggdrasil = YggdrasilClient::new(server.to_string(), account, self.http.clone())?;
+        let yggdrasil = self.new_yggdrasil_client(server.to_string(), account)?;
 
         yggdrasil.load_or_prompt_login().await?;
 

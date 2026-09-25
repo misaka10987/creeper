@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    Creeper, Id, YggdrasilClient,
+    Creeper, Id,
     cmd::Execute,
     id::{IdVersion, IdVersionReq},
     neoforge::NfVersion,
@@ -247,7 +247,7 @@ pub struct DiscoverYggdrasil {
 
 impl Execute for DiscoverYggdrasil {
     async fn execute(self, lib: &Creeper) -> anyhow::Result<()> {
-        let client = YggdrasilClient::new(self.server, "".into(), lib.http.clone())?;
+        let client = lib.new_yggdrasil_client(self.server, "".into())?;
 
         let url = client.api().await?;
 

@@ -1,7 +1,6 @@
 use std::{path::PathBuf, sync::OnceLock};
 
 use anyhow::{anyhow, bail, ensure};
-use inquire::Password;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
@@ -14,17 +13,27 @@ use tracing::{debug, info, warn};
 use url::Url;
 use uuid::Uuid;
 
-use crate::path::creeper_data_dir;
+use crate::{Creeper, path::creeper_data_dir};
 
 pub struct YggdrasilClient {
     pub server: Url,
+
     pub username: String,
+
+    lib: Creeper,
+
     http: Throttle<Client>,
+
     api: OnceLock<Url>,
+
     access_token: RwLock<Option<String>>,
+
     client_token: RwLock<Option<String>>,
+
     selected_profile: RwLock<Option<Profile>>,
+
     available_profiles: RwLock<Vec<Profile>>,
+
     /// Whether the current access token is valid.
     ///
     /// We assume the validity status does not change during the lifetime of the client, unless explicitly refreshed.
@@ -41,6 +50,37 @@ struct Storage {
     pub user: Option<Account>,
 }
 
+impl Creeper {
+    pub fn new_yggdrasil_client(
+        &self,
+        server: String,
+        username: String,
+    ) -> anyhow::Result<YggdrasilClient> {
+        let server = if !server.contains(":") {
+            format!("https://{server}")
+        } else {
+            server
+        };
+
+        let server = server.parse()?;
+
+        let value = YggdrasilClient {
+            server,
+            username,
+            lib: self.clone(),
+            http: self.http.clone(),
+            api: OnceLock::new(),
+            access_token: RwLock::new(None),
+            client_token: RwLock::new(None),
+            selected_profile: RwLock::new(None),
+            available_profiles: RwLock::new(vec![]),
+            valid: RwLock::new(OnceLock::new()),
+        };
+
+        Ok(value)
+    }
+}
+
 impl YggdrasilClient {
     fn storage_path(&self) -> anyhow::Result<PathBuf> {
         let hash =
@@ -52,30 +92,6 @@ impl YggdrasilClient {
             .with_added_extension("json");
 
         Ok(path)
-    }
-
-    pub fn new(server: String, username: String, http: Throttle<Client>) -> anyhow::Result<Self> {
-        let server = if !server.contains(":") {
-            format!("https://{server}")
-        } else {
-            server
-        };
-
-        let server = server.parse()?;
-
-        let value = Self {
-            server,
-            username,
-            http,
-            api: OnceLock::new(),
-            access_token: RwLock::new(None),
-            client_token: RwLock::new(None),
-            selected_profile: RwLock::new(None),
-            available_profiles: RwLock::new(vec![]),
-            valid: RwLock::new(OnceLock::new()),
-        };
-
-        Ok(value)
     }
 
     pub async fn load(&self) -> anyhow::Result<()> {
@@ -177,7 +193,6 @@ impl YggdrasilClient {
         Ok(profile)
     }
 
-    // TODO: use the inquire RAII output guard
     pub async fn load_or_prompt_login(&self) -> anyhow::Result<()> {
         match self.load().await {
             Ok(_) => {
@@ -190,12 +205,10 @@ impl YggdrasilClient {
             Err(e) => debug!("failed to load Yggdrasil client state: {e}, prompting for login"),
         };
 
-        let password = Password::new(&format!(
-            "Log in to {} at {} (no password echo):",
-            self.username, self.server
-        ))
-        .without_confirmation()
-        .prompt()?;
+        let password = self
+            .lib
+            .prompt_password(&format!("Log in to {} at {}:", self.username, self.server))
+            .await?;
 
         self.login(&password).await?;
 

@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::bail;
-use inquire::{Confirm, Text};
+use inquire::{Confirm, Password, Text};
 use tokio::fs::{create_dir_all, remove_dir_all, write};
 use tracing::info;
 
@@ -145,5 +145,17 @@ impl Creeper {
         write(&path, content).await?;
 
         Ok(())
+    }
+
+    pub async fn prompt_password(&self, msg: &str) -> anyhow::Result<String> {
+        let message = format!("{msg}\n(no password echo)");
+
+        let password = self
+            .inquire()
+            .await
+            .run(move || Password::new(&message).without_confirmation().prompt())
+            .await??;
+
+        Ok(password)
     }
 }
